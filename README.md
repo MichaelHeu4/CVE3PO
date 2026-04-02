@@ -6,8 +6,6 @@
 
 **CVE3PO** is modern simplistic Vulnerability Management platform designed to be easy understandable and easy to maintain. 
 
-![Vigilant Architect Design](stitch/screen.png)
-
 ## 🚀 Core Features
 
 ### 📡 Multi-Scanner Intelligence
