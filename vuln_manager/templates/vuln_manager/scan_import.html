@@ -1,0 +1,97 @@
+{% extends 'vuln_manager/base.html' %}
+
+{% block title %}Import Scan{% endblock %}
+
+{% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <section class="mb-12">
+        <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight mb-2">Import <span class="text-primary">Scan</span></h1>
+        <p class="text-on-surface-variant text-sm">Import a new scan to CVE3PO</p>
+    </section>
+
+    <div class="bg-surface-container rounded-3xl p-10 shadow-2xl shadow-black/40">
+        <form action="{% url 'scan_import' %}" method="POST" enctype="multipart/form-data">
+            {% csrf_token %}
+            
+            <div class="space-y-8">
+                <!-- Software Association -->
+                <div>
+                    <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline mb-3">Scan Scope</label>
+                    <div class="relative group">
+                        <select name="software_id" class="w-full bg-surface-container-lowest border-none rounded-xl px-5 py-4 text-on-surface text-sm focus:ring-2 focus:ring-primary/30 transition-all appearance-none cursor-pointer">
+                            <option value="">Global Scan</option>
+                            {% for sw in software_list %}
+                            <option value="{{ sw.id }}" {% if pre_sw.id == sw.id %}selected{% endif %}>Artifact: {{ sw.name }} ({{ sw.version|default:"-" }})</option>
+                            {% endfor %}
+                        </select>
+                        <div class="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-outline group-hover:text-primary transition-colors">
+                            <span class="material-symbols-outlined text-sm">expand_more</span>
+                        </div>
+                    </div>
+                    {% if pre_sw %}
+                    <p class="text-[10px] text-primary font-bold uppercase tracking-widest mt-3 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-xs">verified</span> Context Locked: {{ pre_sw.name }}
+                    </p>
+                    {% endif %}
+                </div>
+
+                <!-- Scan Type -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                        <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline mb-3">Scan Type</label>
+                        <div class="relative group">
+                            <select name="scan_type" class="w-full bg-surface-container-lowest border-none rounded-xl px-5 py-4 text-on-surface text-sm focus:ring-2 focus:ring-primary/30 transition-all appearance-none cursor-pointer" required>
+                                <option value="NMAP">NMAP Network Discovery</option>
+                                <option value="NUCLEI">NUCLEI Template Engine</option>
+                                <option value="OPENVAS">OPENVAS Security Report</option>
+                                <option value="SEMGREP">SEMGREP SAST Analysis</option>
+                                <option value="OSV">OSV Scan Report</option>
+                            </select>
+                            <div class="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-outline">
+                                <span class="material-symbols-outlined text-sm">expand_more</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline mb-3">File</label>
+                        <input type="file" name="raw_file" class="w-full bg-surface-container-lowest border-none rounded-xl px-5 py-3 text-on-surface text-xs focus:ring-2 focus:ring-primary/30 file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-[10px] file:font-black file:uppercase file:tracking-widest file:bg-primary/10 file:text-primary file:cursor-pointer" required>
+                    </div>
+                </div>
+
+                <div class="pt-8 flex flex-col gap-4">
+                    <button type="submit" class="w-full bg-gradient-to-r from-primary to-primary-container text-surface py-4 rounded-2xl font-headline font-black uppercase tracking-[0.25em] text-xs shadow-lg shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all">
+                        Import
+                    </button>
+                    <a href="{% url 'dashboard' %}" class="text-center text-[10px] font-black text-outline uppercase tracking-widest hover:text-on-surface transition-colors py-2">Abort Operation</a>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Supported Scanners -->
+    <div class="mt-12 grid grid-cols-2 md:grid-cols-4 gap-4 opacity-60 hover:opacity-100 transition-opacity">
+        <div class="p-4 bg-surface-container-low rounded-2xl text-center">
+            <p class="text-[9px] font-black text-primary uppercase tracking-widest">Nmap</p>
+            <p class="text-[8px] text-outline uppercase mt-1">Network XML</p>
+        </div>
+        <div class="p-4 bg-surface-container-low rounded-2xl text-center">
+            <p class="text-[9px] font-black text-primary uppercase tracking-widest">Nuclei</p>
+            <p class="text-[8px] text-outline uppercase mt-1">JSONL Stream</p>
+        </div>
+        <div class="p-4 bg-surface-container-low rounded-2xl text-center">
+            <p class="text-[9px] font-black text-primary uppercase tracking-widest">OpenVAS</p>
+            <p class="text-[8px] text-outline uppercase mt-1">Report XML</p>
+        </div>
+        <div class="p-4 bg-surface-container-low rounded-2xl text-center">
+            <p class="text-[9px] font-black text-primary uppercase tracking-widest">Semgrep</p>
+            <p class="text-[8px] text-outline uppercase mt-1">SAST JSON</p>
+        </div>
+        <div class="p-4 bg-surface-container-low rounded-2xl text-center">
+            <p class="text-[9px] font-black text-primary uppercase tracking-widest">OSV Scanner</p>
+            <p class="text-[8px] text-outline uppercase mt-1">Report JSON</p>
+    </div>
+</div>
+{% endblock %}

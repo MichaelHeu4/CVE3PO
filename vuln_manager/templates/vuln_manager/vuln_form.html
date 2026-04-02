@@ -1,0 +1,91 @@
+{% extends 'vuln_manager/base.html' %}
+
+{% block title %}Strategic Finding{% endblock %}
+
+{% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <section class="mb-12">
+        <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight mb-2">New Manual <span class="text-primary">Finding</span></h1>
+        <p class="text-on-surface-variant text-sm">Create a new manual finding to add to CVE3PO</p>
+    </section>
+
+    <div class="bg-surface-container rounded-3xl p-10 shadow-2xl shadow-black/40">
+        <form action="{% url 'vuln_add' %}" method="POST">
+            {% csrf_token %}
+            
+            <div class="space-y-10">
+                <!-- Target Mapping -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                        <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline mb-3">IP / Hostname</label>
+                        <input type="text" name="ip_address" class="w-full bg-surface-container-lowest border-none rounded-xl px-5 py-4 text-on-surface text-sm focus:ring-2 focus:ring-primary/30 transition-all" placeholder="e.g. 10.0.4.12">
+                        <p class="text-[9px] text-outline-variant mt-2 uppercase tracking-tighter italic">Leave blank for global software vulnerabilities</p>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline mb-3">Vulnerability Identifier (CVE)</label>
+                        <input type="text" name="cve_id" class="w-full bg-surface-container-lowest border-none rounded-xl px-5 py-4 text-on-surface text-sm focus:ring-2 focus:ring-primary/30 transition-all" placeholder="e.g. CVE-2024-5678" required>
+                    </div>
+                </div>
+
+                <!-- Intelligence Specs -->
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-8">
+                    <div class="md:col-span-6">
+                        <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline mb-3">Vulnerability Name</label>
+                        <input type="text" name="name" class="w-full bg-surface-container-lowest border-none rounded-xl px-5 py-4 text-on-surface text-sm focus:ring-2 focus:ring-primary/30 transition-all" placeholder="e.g. Remote Code Execution in API" required>
+                    </div>
+                    
+                    <div class="md:col-span-3">
+                        <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline mb-3">Severity</label>
+                        <div class="relative group">
+                            <select name="severity" class="w-full bg-surface-container-lowest border-none rounded-xl px-5 py-4 text-on-surface text-sm focus:ring-2 focus:ring-primary/30 transition-all appearance-none cursor-pointer" required>
+                                {% for val, label in severity_choices %}
+                                <option value="{{ val }}">{{ label|upper }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-outline">
+                                <span class="material-symbols-outlined text-sm">expand_more</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="md:col-span-3">
+                        <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline mb-3">Software</label>
+                        <div class="relative group">
+                            <select name="software" class="w-full bg-surface-container-lowest border-none rounded-xl px-5 py-4 text-on-surface text-sm focus:ring-2 focus:ring-primary/30 transition-all appearance-none cursor-pointer">
+                                <option value="">None / General</option>
+                                {% for sw in software_list %}
+                                <option value="{{ sw.id }}">{{ sw.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-outline">
+                                <span class="material-symbols-outlined text-sm">expand_more</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Descriptive Intelligence -->
+                <div>
+                    <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline mb-3">Threat Description</label>
+                    <textarea name="description" rows="4" class="w-full bg-surface-container-lowest border-none rounded-2xl px-5 py-4 text-on-surface text-sm focus:ring-2 focus:ring-primary/30 transition-all" placeholder="Provide detailed technical analysis..."></textarea>
+                </div>
+
+                <!-- Tactical POC -->
+                <div>
+                    <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline mb-3 text-error">Tactical Payload / Notes (POC)</label>
+                    <textarea name="poc" rows="3" class="w-full bg-surface-container-lowest border-none rounded-2xl px-5 py-4 text-primary-container font-mono text-xs focus:ring-2 focus:ring-primary/30 transition-all" placeholder="e.g. curl -X POST https://target/api..."></textarea>
+                </div>
+
+                <div class="pt-6 flex items-center justify-end gap-6">
+                    <a href="{% url 'dashboard' %}" class="text-[10px] font-black text-outline uppercase tracking-widest hover:text-on-surface transition-colors">Abort</a>
+                    <button type="submit" class="bg-gradient-to-r from-primary to-primary-container text-surface px-10 py-4 rounded-2xl font-headline font-black uppercase tracking-[0.2em] text-xs shadow-lg shadow-primary/20 hover:brightness-110 active:scale-95 transition-all">
+                        Add Finding
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

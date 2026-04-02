@@ -1,0 +1,88 @@
+{% extends 'vuln_manager/base.html' %}
+
+{% block title %}Software Inventory{% endblock %}
+
+{% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
+
+{% block content %}
+<section class="mb-8 flex justify-between items-end">
+    <div>
+        <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight">Software <span class="text-primary">Overview</span></h1>
+        <p class="text-on-surface-variant text-sm mt-1">Managed catalog of software components and versions</p>
+    </div>
+    <a href="{% url 'software_add' %}" class="bg-gradient-to-r from-primary to-primary-container text-surface px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg shadow-primary/20 hover:brightness-110 transition-all flex items-center gap-2">
+        <span class="material-symbols-outlined text-sm">package_2</span> Create new Software
+    </a>
+</section>
+
+<div class="bg-surface-container rounded-3xl p-8 overflow-hidden">
+    <div class="space-y-4">
+        <!-- Header -->
+        <div class="grid grid-cols-12 px-6 py-2 text-[10px] font-bold text-outline uppercase tracking-[0.2em]">
+            <div class="col-span-4">Software Name</div>
+            <div class="col-span-3">Criticality</div>
+            <div class="col-span-2">Version</div>
+            <div class="col-span-1 text-center">Number of Servers</div>
+            <div class="col-span-2 text-right">Operations</div>
+        </div>
+
+        {% for item in software %}
+        <div class="grid grid-cols-12 items-center p-6 bg-surface-container-low rounded-2xl hover:bg-surface-container-high transition-all group">
+            <!-- Name -->
+            <div class="col-span-4 flex items-center gap-4">
+                <div class="w-12 h-12 rounded-2xl bg-surface-container-highest flex items-center justify-center text-primary">
+                    <span class="material-symbols-outlined">deployed_code</span>
+                </div>
+                <div>
+                    <a href="{% url 'software_detail' item.id %}" class="font-bold text-on-surface hover:text-primary transition-colors block text-sm">{{ item.name }}</a>
+                    <p class="text-[9px] text-outline uppercase tracking-widest mt-0.5">Software</p>
+                </div>
+            </div>
+
+            <div class="col-span-3 text-left">
+                {% if item.criticality %}
+                <span class="px-3 py-1 rounded-lg text-[9px] font-black tracking-widest {% if item.criticality == 'Critical' %}bg-error/10 text-error border border-error/20{% elif item.criticality == 'High' %}bg-tertiary/10 text-tertiary border border-tertiary/20{% else %}bg-primary/10 text-primary border border-primary/20{% endif %}">
+                    {{ item.criticality|upper }}
+                </span>
+                {% else %}
+                <span class="text-outline-variant text-[9px] font-bold uppercase tracking-widest opacity-30">Undefined</span>
+                {% endif %}
+            </div>
+
+            <!-- Version -->
+            <div class="col-span-2">
+                <span class="px-3 py-1 rounded-lg bg-surface-container-highest text-on-surface text-[10px] font-bold border border-outline-variant/10">
+                    {{ item.version|default:"v. unknown" }}
+                </span>
+            </div>
+
+            <!-- Nodes -->
+            <div class="col-span-1 text-center">
+                <span class="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-black mx-auto">
+                    {{ item.num_hosts }}
+                </span>
+            </div>
+
+            <!-- Actions -->
+            <div class="col-span-2 text-right flex items-center justify-end gap-2">
+                <a href="{% url 'software_detail' item.id %}" class="w-9 h-9 rounded-xl bg-surface-container-highest flex items-center justify-center text-outline hover:text-primary hover:bg-primary/10 transition-all">
+                    <span class="material-symbols-outlined text-sm">visibility</span>
+                </a>
+                <form action="{% url 'delete_software' item.id %}" method="POST" onsubmit="return confirm('Expunge software artifact from registry?')">
+                    {% csrf_token %}
+                    <button type="submit" class="w-9 h-9 rounded-xl bg-surface-container-highest flex items-center justify-center text-error/50 hover:text-error hover:bg-error/10 transition-all">
+                        <span class="material-symbols-outlined text-sm">delete</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% empty %}
+        <div class="text-center py-20 bg-surface-container-low rounded-3xl">
+            <span class="material-symbols-outlined text-outline-variant text-6xl mb-4">inventory_2</span>
+            <p class="text-on-surface-variant font-headline font-bold">No Software Artifacts Registered</p>
+            <p class="text-outline text-xs mt-2 uppercase tracking-widest">Awaiting architectural discovery</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

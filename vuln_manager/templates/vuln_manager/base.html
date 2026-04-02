@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>CVE3PO | {% block title %}Dashboard{% endblock %}</title>
+    
+    <!-- Favicon (Inline SVG Robot) -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🤖</text></svg>">
+
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+    
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "error-container": "#9f0519",
+                        "on-secondary-fixed-variant": "#46556b",
+                        "outline": "#6d758c",
+                        "surface-container": "#0f1930",
+                        "on-tertiary-fixed-variant": "#780021",
+                        "on-tertiary-container": "#100001",
+                        "on-surface-variant": "#a3aac4",
+                        "secondary": "#c8d8f3",
+                        "error": "#ff716c",
+                        "secondary-fixed": "#c8d8f3",
+                        "secondary-fixed-dim": "#bacae4",
+                        "on-secondary-fixed": "#29394e",
+                        "primary-container": "#22b1ec",
+                        "on-background": "#dee5ff",
+                        "error-dim": "#d7383b",
+                        "tertiary-fixed": "#ff9099",
+                        "tertiary": "#ff6f7e",
+                        "secondary-dim": "#bacae4",
+                        "surface-container-lowest": "#000000",
+                        "on-error-container": "#ffa8a3",
+                        "surface-bright": "#1f2b49",
+                        "surface-dim": "#060e20",
+                        "inverse-primary": "#00668b",
+                        "on-secondary-container": "#c1d1eb",
+                        "primary": "#3bbffa",
+                        "inverse-on-surface": "#4d556b",
+                        "on-primary-fixed-variant": "#003a50",
+                        "surface-container-highest": "#192540",
+                        "tertiary-dim": "#ff6f7e",
+                        "primary-dim": "#05a9e3",
+                        "primary-fixed": "#2db7f2",
+                        "on-primary-fixed": "#00121d",
+                        "on-secondary": "#3c4c61",
+                        "tertiary-container": "#fc4563",
+                        "outline-variant": "#40485d",
+                        "background": "#060e20",
+                        "tertiary-fixed-dim": "#ff7986",
+                        "on-primary-container": "#002b3d",
+                        "surface-tint": "#3bbffa",
+                        "on-primary": "#00374d",
+                        "on-tertiary": "#490010",
+                        "surface-variant": "#192540",
+                        "on-error": "#490006",
+                        "surface": "#060e20",
+                        "on-surface": "#dee5ff",
+                        "surface-container-high": "#141f38",
+                        "secondary-container": "#38485d",
+                        "on-tertiary-fixed": "#39000b",
+                        "inverse-surface": "#faf8ff",
+                        "primary-fixed-dim": "#05a9e3",
+                        "surface-container-low": "#091328"
+                    },
+                    fontFamily: {
+                        "headline": ["Manrope"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #060e20;
+            color: #dee5ff;
+            font-family: 'Inter', sans-serif;
+        }
+        /* Custom scrollbar for deep tonal aesthetic */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #060e20; }
+        ::-webkit-scrollbar-thumb { background: #192540; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3bbffa; }
+
+        .severity-critical { background-color: #9f0519 !important; color: #ffa8a3 !important; }
+        .severity-high { background-color: #fc4563 !important; color: #490010 !important; }
+        .severity-medium { background-color: #8950fc !important; color: white !important; }
+        .severity-low { background-color: #1bc5bd !important; color: white !important; }
+        .severity-info { background-color: #3699ff !important; color: white !important; }
+        
+        .glass-panel {
+            background: rgba(25, 37, 64, 0.6);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+    </style>
+</head>
+<body class="antialiased overflow-x-hidden">
+    <!-- SideNavBar -->
+    <aside class="fixed left-0 top-0 h-full w-72 bg-surface-container-low flex flex-col py-6 gap-2 z-40 hidden md:flex">
+        <div class="text-primary font-black text-2xl px-6 py-8 font-headline tracking-tighter flex items-center gap-2">
+            <span class="material-symbols-outlined text-3xl">robot_2</span> CVE3PO
+        </div>
+        
+        <nav class="flex-grow flex flex-col gap-1 px-4">
+            <a href="{% url 'dashboard' %}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all {% if request.resolver_match.url_name == 'dashboard' %}bg-gradient-to-r from-primary to-primary-container text-surface shadow-lg shadow-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant hover:text-on-surface{% endif %}">
+                <span class="material-symbols-outlined" style="{% if request.resolver_match.url_name == 'dashboard' %}font-variation-settings: 'FILL' 1;{% endif %}">dashboard</span>
+                <span class="font-semibold text-sm uppercase tracking-widest">Dashboard</span>
+            </a>
+            
+            <a href="{% url 'host_list' %}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all {% if request.resolver_match.url_name == 'host_list' %}bg-gradient-to-r from-primary to-primary-container text-surface shadow-lg shadow-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant hover:text-on-surface{% endif %}">
+                <span class="material-symbols-outlined" style="{% if request.resolver_match.url_name == 'host_list' %}font-variation-settings: 'FILL' 1;{% endif %}">inventory_2</span>
+                <span class="font-semibold text-sm uppercase tracking-widest">Assets</span>
+            </a>
+
+            <a href="{% url 'software_list' %}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all {% if request.resolver_match.url_name == 'software_list' %}bg-gradient-to-r from-primary to-primary-container text-surface shadow-lg shadow-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant hover:text-on-surface{% endif %}">
+                <span class="material-symbols-outlined">package_2</span>
+                <span class="font-semibold text-sm uppercase tracking-widest">Software</span>
+            </a>
+
+            <a href="{% url 'port_list' %}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all {% if request.resolver_match.url_name == 'port_list' %}bg-gradient-to-r from-primary to-primary-container text-surface shadow-lg shadow-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant hover:text-on-surface{% endif %}">
+                <span class="material-symbols-outlined">settings_input_component</span>
+                <span class="font-semibold text-sm uppercase tracking-widest">Ports</span>
+            </a>
+
+            <a href="{% url 'vuln_list' %}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all {% if request.resolver_match.url_name == 'vuln_list' %}bg-gradient-to-r from-primary to-primary-container text-surface shadow-lg shadow-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant hover:text-on-surface{% endif %}">
+                <span class="material-symbols-outlined">security</span>
+                <span class="font-semibold text-sm uppercase tracking-widest">Vulnerabilities</span>
+            </a>
+
+            <a href="{% url 'kanban_board' %}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all {% if request.resolver_match.url_name == 'kanban_board' %}bg-gradient-to-r from-primary to-primary-container text-surface shadow-lg shadow-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant hover:text-on-surface{% endif %}">
+                <span class="material-symbols-outlined">view_kanban</span>
+                <span class="font-semibold text-sm uppercase tracking-widest">Board</span>
+            </a>
+
+            <a href="{% url 'scan_list' %}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all {% if request.resolver_match.url_name == 'scan_list' %}bg-gradient-to-r from-primary to-primary-container text-surface shadow-lg shadow-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant hover:text-on-surface{% endif %}">
+                <span class="material-symbols-outlined">history</span>
+                <span class="font-semibold text-sm uppercase tracking-widest">History</span>
+            </a>
+
+            <div class="mt-8 mb-2 px-4 text-outline font-bold text-[10px] uppercase tracking-[0.2em]">Actions</div>
+            
+            <a href="{% url 'scan_import' %}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-on-surface-variant hover:bg-surface-variant hover:text-on-surface">
+                <span class="material-symbols-outlined">upload_file</span>
+                <span class="font-semibold text-sm uppercase tracking-widest">Import Scan</span>
+            </a>
+
+            <a href="{% url 'vuln_add' %}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-on-surface-variant hover:bg-surface-variant hover:text-on-surface">
+                <span class="material-symbols-outlined">add_circle</span>
+                <span class="font-semibold text-sm uppercase tracking-widest">Manual Entry</span>
+            </a>
+        </nav>
+
+        <div class="px-6 mt-auto">
+            <div class="p-4 bg-surface-container rounded-2xl flex items-center justify-between shadow-xl">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+                        <span class="material-symbols-outlined text-primary text-sm">person</span>
+                    </div>
+                    <div class="overflow-hidden">
+                        <p class="text-xs font-bold text-on-surface truncate">Admin</p>
+                        <p class="text-[9px] text-outline uppercase tracking-tighter">Security Lead</p>
+                    </div>
+                </div>
+                <button class="text-outline hover:text-error transition-colors">
+                    <span class="material-symbols-outlined text-lg">logout</span>
+                </button>
+            </div>
+        </div>
+    </aside>
+
+    <!-- TopHeader -->
+    <header class="fixed top-0 w-full z-30 bg-background/80 backdrop-blur-xl flex justify-between items-center px-8 h-20 md:pl-80">
+        <div class="font-headline font-extrabold text-xl tracking-tight text-on-surface">
+            {% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
+        </div>
+        
+        <div class="flex items-center gap-6">
+            <div class="text-right hidden sm:block">
+                <p class="text-on-surface-variant text-[10px] uppercase tracking-widest">System Time</p>
+                <p class="text-on-surface font-bold text-xs">{% now "D, d. M Y | H:i" %}</p>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="pt-28 pb-12 md:pl-80 px-8 min-h-screen">
+        {% block content %}{% endblock %}
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

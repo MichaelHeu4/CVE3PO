@@ -1,0 +1,55 @@
+{% extends 'vuln_manager/base.html' %}
+
+{% block title %}Port Explorer{% endblock %}
+
+{% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
+
+{% block content %}
+<section class="mb-12 flex justify-between items-end">
+    <div>
+        <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight">Active <span class="text-primary">Services</span></h1>
+        <p class="text-on-surface-variant text-sm mt-1">Open ports and listening services.</p>
+    </div>
+</section>
+
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
+    {% for key, hosts in port_groups %}
+    <div class="bg-surface-container rounded-3xl p-6 hover:bg-surface-container-high transition-all group">
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-4">
+                <div class="w-14 h-14 rounded-2xl bg-primary/5 flex flex-col items-center justify-center text-primary group-hover:scale-110 transition-transform">
+                    <span class="text-lg font-black font-headline leading-none">{{ key.0 }}</span>
+                    <span class="text-[8px] font-black tracking-widest mt-1 opacity-50 uppercase">PORT</span>
+                </div>
+                <div>
+                    <h4 class="font-headline font-black text-on-surface text-lg uppercase tracking-tight">{{ key.1 }}</h4>
+                    <p class="text-[10px] text-outline uppercase tracking-widest">Service</p>
+                </div>
+            </div>
+            <div class="text-right">
+                <p class="text-xl font-headline font-black text-primary mb-0">{{ hosts|length }}</p>
+                <p class="text-[9px] text-outline uppercase tracking-tighter">Endpoints</p>
+            </div>
+        </div>
+
+        <div class="space-y-2">
+            {% for host in hosts %}
+            <a href="{% url 'host_detail' host.id %}" class="flex items-center justify-between p-3 bg-surface-container-low rounded-xl hover:bg-surface-container-highest transition-all group/item">
+                <div class="flex items-center gap-3">
+                    <span class="material-symbols-outlined text-xs text-outline group-hover/item:text-primary transition-colors">hub</span>
+                    <span class="text-xs font-bold text-on-surface-variant group-hover/item:text-on-surface transition-colors">{{ host.ip_address }}</span>
+                </div>
+                <span class="material-symbols-outlined text-sm text-outline-variant group-hover/item:text-primary transition-all translate-x-0 group-hover/item:translate-x-1">chevron_right</span>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% empty %}
+    <div class="col-span-full text-center py-20 bg-surface-container rounded-3xl">
+        <span class="material-symbols-outlined text-outline-variant text-6xl mb-4">settings_input_component</span>
+        <p class="text-on-surface-variant font-headline font-bold">No Active Services Mapping</p>
+        <p class="text-outline text-xs mt-2 uppercase tracking-widest">Awaiting system reconnaissance data</p>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

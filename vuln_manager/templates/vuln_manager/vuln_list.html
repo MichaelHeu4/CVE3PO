@@ -1,0 +1,125 @@
+{% extends 'vuln_manager/base.html' %}
+{% load vuln_filters %}
+
+{% block title %}Strategic Risk Ledger{% endblock %}
+
+{% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
+
+{% block content %}
+<!-- Header Section -->
+<section class="mb-12">
+    <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-6">
+        <div>
+            <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight">Threat <span class="text-primary">Intelligence</span></h1>
+            <p class="text-on-surface-variant font-body max-w-xl text-sm">Overview of detected security flaws across the network.</p>
+        </div>
+        <div class="flex items-center gap-4 bg-surface-container-low p-1.5 rounded-xl">
+            <a href="{% url 'vuln_list' %}?status=active" class="px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all {% if status_filter == 'active' %}bg-surface-variant text-on-surface{% else %}text-outline hover:text-on-surface{% endif %}">Active</a>
+            <a href="{% url 'vuln_list' %}?status=resolved" class="px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all {% if status_filter == 'resolved' %}bg-surface-variant text-on-surface{% else %}text-outline hover:text-on-surface{% endif %}">Resolved</a>
+            <a href="{% url 'vuln_list' %}?status=ignored" class="px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all {% if status_filter == 'ignored' %}bg-surface-variant text-on-surface{% else %}text-outline hover:text-on-surface{% endif %}">Accepted</a>
+            <div class="w-px h-4 bg-outline-variant/20 mx-2"></div>
+            <button class="flex items-center gap-2 px-4 py-2 rounded-lg bg-surface-container-highest text-primary text-[10px] font-black uppercase tracking-widest hover:brightness-110">
+                <span class="material-symbols-outlined text-sm">filter_list</span> Filters
+            </button>
+        </div>
+    </div>
+
+    <!-- Quick Metrics Row -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div class="bg-surface-container rounded-2xl p-6 border-l-4 border-error">
+            <p class="text-outline font-label text-[9px] uppercase tracking-[0.2em] mb-2">Critical Severity</p>
+            <h2 class="text-3xl font-headline font-black text-on-surface mb-2">{{ metrics.critical }}</h2>
+            {% if metrics.critical > 0 %}
+            <p class="text-[9px] text-error font-bold flex items-center gap-1 uppercase tracking-tighter">
+                <span class="material-symbols-outlined text-xs">trending_up</span> Fix as soon as possible! 
+            </p>
+            {% endif %}
+            {% if metrics.critical == 0 %}
+            <p class="text-[9px] text-primary-container font-bold flex items-center gap-1 uppercase tracking-tighter">
+                <span class="material-symbols-outlined text-xs">check_circle</span> Good job! 
+            </p>
+            {% endif %}
+        </div>
+        <div class="bg-surface-container rounded-2xl p-6 border-l-4 border-tertiary">
+            <p class="text-outline font-label text-[9px] uppercase tracking-[0.2em] mb-2">High Risk</p>
+            <h2 class="text-3xl font-headline font-black text-on-surface mb-2">{{ metrics.high }}</h2>
+            {% if metrics.high > 0 %}<p class="text-[9px] text-tertiary font-bold uppercase tracking-tighter">Please also fix me :(</p>{% endif %}
+            {% if metrics.high == 0 %}<p class="text-[9px] text-primary-container font-bold uppercase tracking-tighter">Good job!</p>{% endif %}
+        </div>
+        <div class="bg-surface-container rounded-2xl p-6 border-l-4 border-surface-tint">
+            <p class="text-outline font-label text-[9px] uppercase tracking-[0.2em] mb-2">Impacted Assets</p>
+            <h2 class="text-3xl font-headline font-black text-on-surface mb-2">{{ metrics.impacted_assets }}</h2>
+            <span class="material-symbols-outlined text-xs">prompt_suggestion</span> out of {{metrics.assets_total}} Assets 
+        </div>
+            <div class="bg-surface-container rounded-2xl p-6 border-l-4 border-surface-tint">
+            <p class="text-outline font-label text-[9px] uppercase tracking-[0.2em] mb-2">Impacted Software</p>
+            <h2 class="text-3xl font-headline font-black text-on-surface mb-2">{{ metrics.impacted_software }}</h2>
+            <span class="material-symbols-outlined text-xs">prompt_suggestion</span> out of {{metrics.software_total}} Software 
+        </div>
+
+    </div>
+</section>
+
+<!-- Main Ledger -->
+<div class="bg-surface-container rounded-3xl p-8 mb-12">
+    <div class="space-y-2">
+        <!-- Header -->
+        <div class="grid grid-cols-12 px-6 py-4 text-[10px] font-bold text-outline uppercase tracking-[0.2em]">
+            <div class="col-span-2">CVE / Name</div>
+            <div class="col-span-1">Severity</div>
+            <div class="col-span-4">Vulnerability Name</div>
+            <div class="col-span-2">Affected Assets</div>
+            <div class="col-span-2 text-center">Status</div>
+            <div class="col-span-1 text-right">Action</div>
+        </div>
+
+        {% for vuln in vulns %}
+        <div class="grid grid-cols-12 items-center p-6 bg-surface-container-low rounded-2xl hover:bg-surface-container-high transition-all group">
+            <div class="col-span-2">
+                <a href="{% url 'vuln_detail' vuln.id %}" class="font-headline font-black text-primary hover:underline text-sm uppercase tracking-tight">{{ vuln.cve_id }}</a>
+            </div>
+            <div class="col-span-1">
+                <span class="badge severity-{{ vuln.severity|lower }} rounded-lg px-3 py-1 text-[8px] font-black uppercase tracking-tighter">{{ vuln.severity|upper }}</span>
+            </div>
+            <div class="col-span-4 pr-10">
+                <p class="font-bold text-on-surface text-sm mb-0.5">{{ vuln.name|truncatewords:8 }}</p>
+                <p class="text-[10px] text-outline line-clamp-1 italic">{{ vuln.description|default:"No technical description available." }}</p>
+            </div>
+            <div class="col-span-2 flex items-center gap-1">
+                {% if vuln.host %}
+                <span class="px-2 py-0.5 rounded bg-surface-container-highest text-[9px] font-bold text-outline uppercase border border-outline-variant/10">SRV</span>
+                <span class="text-[10px] font-bold text-outline uppercase ml-1">{{ vuln.host.ip_address }}</span>
+                {% elif vuln.software %}
+                <span class="px-2 py-0.5 rounded bg-primary/10 text-primary text-[9px] font-bold uppercase border border-primary/10">SW</span>
+                <span class="text-[10px] font-bold text-outline uppercase ml-1">{{ vuln.software.name|truncatechars:10 }}</span>
+                {% endif %}
+            </div>
+            <div class="col-span-2 text-center">
+                <div class="inline-flex items-center gap-2">
+                    <span class="w-1.5 h-1.5 rounded-full {% if vuln.status == 'fixed' %}bg-primary{% elif vuln.status == 'in_progress' %}bg-tertiary{% else %}bg-outline-variant{% endif %} shadow-sm"></span>
+                    <span class="text-[10px] font-bold text-on-surface uppercase tracking-widest">{{ vuln.get_status_display }}</span>
+                </div>
+            </div>
+            <div class="col-span-1 text-right">
+                <a href="{% url 'vuln_detail' vuln.id %}" class="material-symbols-outlined text-outline hover:text-primary transition-all">chevron_right</a>
+            </div>
+        </div>
+        {% empty %}
+        <div class="text-center py-20">
+            <span class="material-symbols-outlined text-outline-variant text-6xl mb-4">security</span>
+            <p class="text-on-surface-variant font-headline font-bold uppercase tracking-[0.3em]">Ledger Clear</p>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <div class="mt-8 flex items-center justify-between px-6 pt-6 border-t border-outline-variant/5">
+        <p class="text-[10px] font-black text-outline uppercase tracking-widest">Showing {{ vulns|length }} vulnerabilities</p>
+        <div class="flex gap-2">
+            <button class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary"><span class="material-symbols-outlined text-sm">chevron_left</span></button>
+            <button class="w-8 h-8 rounded-lg bg-primary text-surface flex items-center justify-center text-[10px] font-black">1</button>
+            <button class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary"><span class="material-symbols-outlined text-sm">chevron_right</span></button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

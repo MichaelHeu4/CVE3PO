@@ -1,0 +1,205 @@
+{% extends 'vuln_manager/base.html' %}
+
+{% block title %}Asset Details: {{ host.ip_address }}{% endblock %}
+
+{% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
+
+{% block content %}
+<section class="mb-12 flex justify-between items-end">
+    <div>
+        <h1 class="font-headline font-extrabold text-4xl text-on-surface tracking-tight mb-2">{{ host.ip_address }}</h1>
+        <p class="text-on-surface-variant font-body">Asset Name: <span class="text-primary font-bold uppercase tracking-widest text-xs">{{ host.hostname|default:"Anonymous Node" }}</span></p>
+    </div>
+    
+<div class="flex gap-4">
+  <div class="flex gap-3">
+    <form action="{% url 'delete_host' host.id %}" method="POST" onsubmit="return confirm('Delete asset?')">
+      {% csrf_token %}
+      <button type="submit" class="px-6 py-2.5 rounded-xl border border-error/20 text-error text-[10px] font-black tracking-widest uppercase hover:bg-error hover:text-surface transition-all flex items-center gap-2">
+          <span class="material-symbols-outlined text-sm">delete</span> Delete Asset
+      </button>
+    </form>
+  </div>
+  <div class="bg-surface-container-high px-6 py-4 rounded-xl flex items-center gap-4">
+    <div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+      <span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">sensors</span>
+    </div>
+    <div>
+      <p class="text-[10px] uppercase tracking-widest text-outline">Criticality</p>
+      <p class="font-bold {%if host.criticality == 'Critical' %}text-error{%elif host.criticality == 'High' %}text-error{% elif host.criticality == 'Medium' %}text-warning{% else %}text-success{% endif %} text-sm uppercase tracking-tight">
+        {{host.criticality}}
+      </p>
+    </div>
+  </div>
+</div>
+
+</section>
+
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12">
+    <!-- Analysis & Chart -->
+    <div class="lg:col-span-8">
+        <div class="bg-surface-container rounded-3xl p-8 mb-8">
+            <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-8">Scan History</h5>
+            <div style="height: 250px;">
+                <canvas id="hostTimeline"></canvas>
+            </div>
+        </div>
+
+        <div class="bg-surface-container rounded-3xl p-8">
+            <div class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+                <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline">Detected Threats</h5>
+                
+                <div class="flex items-center gap-2 bg-surface-container-low p-1 rounded-xl">
+                    <a href="?mode=all" class="px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all {% if show_mode == 'all' %}bg-surface-variant text-on-surface shadow-sm{% else %}text-outline hover:text-on-surface{% endif %}">All Findings</a>
+                    <a href="?mode=direct" class="px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all {% if show_mode == 'direct' %}bg-surface-variant text-on-surface shadow-sm{% else %}text-outline hover:text-on-surface{% endif %}">Direct Only</a>
+                </div>
+            </div>
+            
+            <div class="space-y-4">
+                {% for vuln in vulns %}
+                <div class="group bg-surface-container-low rounded-2xl overflow-hidden hover:bg-surface-container-high transition-all">
+                    <button class="w-full text-left p-6 flex items-center justify-between" onclick="toggleAccordion('vuln-{{ vuln.id }}')">
+                        <div class="flex items-center gap-6">
+                            <span class="badge severity-{{ vuln.severity|lower }} rounded-full px-3 py-1 text-[9px] font-black min-w-[70px] text-center">{{ vuln.severity|upper }}</span>
+                            <div>
+                                <p class="font-headline font-black text-on-surface text-sm uppercase tracking-tight">{{ vuln.cve_id }}</p>
+                                <p class="text-[10px] text-on-surface-variant line-clamp-1 mt-0.5">
+                                    {% if vuln.software %}<span class="text-primary font-bold">[{{ vuln.software.name }}]</span> {% endif %}
+                                    {{ vuln.name }}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <span class="text-[10px] font-black text-outline uppercase tracking-widest">{{ vuln.get_status_display }}</span>
+                            <span class="material-symbols-outlined text-outline group-hover:text-primary transition-all">expand_more</span>
+                        </div>
+                    </button>
+                    <div id="vuln-{{ vuln.id }}" class="hidden px-6 pb-6 border-t border-outline-variant/5">
+                        <div class="pt-6">
+                            <p class="text-xs text-on-surface-variant leading-relaxed mb-6">{{ vuln.description|default:"No technical intelligence provided." }}</p>
+                            <div class="flex justify-between items-center">
+                                <a href="{% url 'vuln_detail' vuln.id %}" class="text-[10px] font-black tracking-widest text-primary uppercase hover:underline">Full Analysis & POC</a>
+                                <span class="text-[9px] text-outline uppercase">Scan Identifier: {{ vuln.scan.id }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="text-center py-12">
+                    <span class="material-symbols-outlined text-outline-variant text-4xl mb-3 opacity-20">verified_user</span>
+                    <p class="text-outline text-[10px] font-black uppercase tracking-widest">No Active Threats Detected</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Infrastructure Specs -->
+    <div class="lg:col-span-4 space-y-8">
+        <!-- Criticality Card -->
+        <div class="bg-surface-container-high rounded-3xl p-8 shadow-2xl shadow-black/40 border-l-4 {% if host.criticality == 'Critical' %}border-error{% elif host.criticality == 'High' %}border-tertiary{% elif host.criticality == 'Medium' %}border-primary{% else %}border-outline-variant{% endif %}">
+            <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-6">Business Criticality</h5>
+            
+            <form action="{% url 'update_host_criticality' host.id %}" method="POST">
+                {% csrf_token %}
+                <div class="relative group">
+                    <select name="criticality" onchange="this.form.submit()" class="w-full bg-surface-container-highest border-none rounded-xl px-5 py-4 text-on-surface text-sm font-black uppercase tracking-widest focus:ring-2 focus:ring-primary/30 transition-all appearance-none cursor-pointer">
+                        <option value="">NOT DEFINED</option>
+                        {% for val, label in criticality_choices %}
+                        <option value="{{ val }}" {% if host.criticality == val %}selected{% endif %}>{{ label|upper }}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-outline group-hover:text-primary transition-colors">
+                        <span class="material-symbols-outlined text-sm">stat_3</span>
+                    </div>
+                </div>
+            </form>
+            <p class="text-[9px] text-outline-variant mt-4 leading-relaxed italic">Defines architectural priority and remediation SLAs for this specific node.</p>
+        </div>
+
+        <!-- Ports -->
+        <div class="bg-surface-container-high rounded-3xl p-8 shadow-2xl shadow-black/40">
+            <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-6">Open Ports / Services</h5>
+            <div class="space-y-3">
+                {% for port in active_ports %}
+                <div class="flex items-center justify-between p-4 bg-surface-container-highest rounded-2xl">
+                    <div class="flex items-center gap-4">
+                        <span class="text-sm font-black font-headline text-primary">{{ port.port_number }}</span>
+                        <span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">{{ port.service_name }}</span>
+                    </div>
+                    <span class="w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_#3bbffa]"></span>
+                </div>
+                {% empty %}
+                <p class="text-[10px] text-outline text-center py-4 uppercase font-bold tracking-widest">No Active Ports</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Software -->
+        <div class="bg-surface-container rounded-3xl p-8 border border-outline-variant/5">
+            <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-6">Associated Software</h5>
+            <div class="space-y-4">
+                {% for sw in installed_software %}
+                <a href="{% url 'software_detail' sw.id %}" class="flex items-center justify-between p-4 bg-surface-container-low rounded-2xl hover:bg-surface-container-high transition-all group">
+                    <div class="flex items-center gap-4 overflow-hidden">
+                        <div class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-outline group-hover:text-primary transition-colors">
+                            <span class="material-symbols-outlined text-sm">deployed_code</span>
+                        </div>
+                        <div class="overflow-hidden">
+                            <p class="text-xs font-bold text-on-surface truncate mb-0.5">{{ sw.name }}</p>
+                            <p class="text-[9px] text-outline uppercase tracking-tighter">{{ sw.version|default:"v. unknown" }}</p>
+                        </div>
+                    </div>
+                    {% if sw.active_vulns > 0 %}
+                    <span class="w-5 h-5 rounded-full bg-error text-surface flex items-center justify-center text-[9px] font-black">{{ sw.active_vulns }}</span>
+                    {% else %}
+                    <span class="material-symbols-outlined text-sm text-outline-variant">chevron_right</span>
+                    {% endif %}
+                </a>
+                {% empty %}
+                <p class="text-[10px] text-outline text-center py-4 uppercase font-bold tracking-widest">No Software Registered</p>
+                {% endfor %}
+            </div>
+            <a href="{% url 'software_add' %}" class="w-full mt-6 py-3 rounded-xl bg-primary/5 text-primary text-[10px] font-black tracking-widest uppercase hover:bg-primary/10 transition-all block text-center">
+                Assign Software
+            </a>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleAccordion(id) {
+    const el = document.getElementById(id);
+    const all = document.querySelectorAll('[id^="vuln-"]');
+    all.forEach(item => {
+        if (item.id !== id) item.classList.add('hidden');
+    });
+    el.classList.toggle('hidden');
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const ctx = document.getElementById('hostTimeline').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: {{ timeline_labels|safe }},
+            datasets: [{
+                data: {{ timeline_values|safe }},
+                backgroundColor: '#3bbffa',
+                borderRadius: 8,
+                barThickness: 20
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true, grid: { color: 'rgba(163, 170, 196, 0.05)' }, ticks: { color: '#a3aac4', font: { size: 10 } } },
+                x: { grid: { display: false }, ticks: { color: '#a3aac4', font: { size: 10 } } }
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

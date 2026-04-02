@@ -1,0 +1,88 @@
+{% extends 'vuln_manager/base.html' %}
+{% load vuln_filters %}
+
+{% block title %}Scan History{% endblock %}
+
+{% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
+
+{% block content %}
+<section class="mb-8 flex justify-between items-end">
+    <div>
+        <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight">Import <span class="text-primary">History</span></h1>
+        <p class="text-on-surface-variant text-sm mt-1">Audit trail of all imported scans on the platform.</p>
+    </div>
+    <a href="{% url 'scan_import' %}" class="bg-gradient-to-r from-primary to-primary-container text-surface px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg shadow-primary/20 hover:brightness-110 transition-all flex items-center gap-2">
+        <span class="material-symbols-outlined text-sm">upload_file</span> New Import
+    </a>
+</section>
+
+<div class="bg-surface-container rounded-3xl p-8 overflow-hidden">
+    <div class="space-y-4">
+        <!-- Header -->
+        <div class="grid grid-cols-12 px-6 py-2 text-[10px] font-bold text-outline uppercase tracking-[0.2em]">
+            <div class="col-span-3">Intelligence Source</div>
+            <div class="col-span-4">Scan Name</div>
+            <div class="col-span-2 text-center">Timestamp</div>
+            <div class="col-span-1 text-center">Findings</div>
+            <div class="col-span-2 text-right">Operations</div>
+        </div>
+
+        {% for scan in scans %}
+        <div class="grid grid-cols-12 items-center p-6 bg-surface-container-low rounded-2xl hover:bg-surface-container-high transition-all group">
+            <!-- Scan Type -->
+            <div class="col-span-3 flex items-center gap-4">
+                <div class="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center text-primary">
+                    <span class="material-symbols-outlined text-sm">{% if scan.scan_type == 'SEMGREP' %}terminal{% else %}analytics{% endif %}</span>
+                </div>
+                <span class="text-[10px] font-black tracking-widest text-on-surface uppercase">{{ scan.get_scan_type_display }}</span>
+            </div>
+
+            <!-- File Name -->
+            <div class="col-span-4">
+                <p class="font-bold text-on-surface text-sm truncate pr-4">
+                    {% if scan.raw_file %}
+                        {{ scan.raw_file.name|basename }}
+                    {% else %}
+                        <span class="text-outline-variant italic font-normal">Manual Intelligence Entry</span>
+                    {% endif %}
+                </p>
+            </div>
+
+            <!-- Date -->
+            <div class="col-span-2 text-center">
+                <p class="text-on-surface font-bold text-[10px]">{{ scan.uploaded_at|date:"d M Y" }}</p>
+                <p class="text-outline text-[9px] uppercase tracking-tighter">{{ scan.uploaded_at|date:"H:i" }} UTC</p>
+            </div>
+
+            <!-- Findings -->
+            <div class="col-span-1 text-center">
+                <span class="w-8 h-8 rounded-full bg-surface-container-highest text-primary flex items-center justify-center text-xs font-black mx-auto">
+                    {{ scan.num_vulns }}
+                </span>
+            </div>
+
+            <!-- Actions -->
+            <div class="col-span-2 text-right flex items-center justify-end gap-2">
+                {% if scan.raw_file %}
+                <a href="{{ scan.raw_file.url }}" class="w-9 h-9 rounded-xl bg-surface-container-highest flex items-center justify-center text-outline hover:text-primary hover:bg-primary/10 transition-all" title="Archive Access" download>
+                    <span class="material-symbols-outlined text-sm">download</span>
+                </a>
+                {% endif %}
+                <form action="{% url 'delete_scan' scan.id %}" method="POST" onsubmit="return confirm('Expunge intelligence manifest and all derived findings?')">
+                    {% csrf_token %}
+                    <button type="submit" class="w-9 h-9 rounded-xl bg-surface-container-highest flex items-center justify-center text-error/50 hover:text-error hover:bg-error/10 transition-all">
+                        <span class="material-symbols-outlined text-sm">delete_sweep</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% empty %}
+        <div class="text-center py-20 bg-surface-container-low rounded-3xl">
+            <span class="material-symbols-outlined text-outline-variant text-6xl mb-4">history</span>
+            <p class="text-on-surface-variant font-headline font-bold">Registry Empty</p>
+            <p class="text-outline text-xs mt-2 uppercase tracking-widest">System awaiting architectural ingestion</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,92 @@
+{% extends 'vuln_manager/base.html' %}
+
+{% block title %}{% if software %}Edit{% else %}Register{% endif %} Artifact{% endblock %}
+
+{% block header_title %}Inventory <span class="text-primary">Management</span>{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <section class="mb-12">
+        <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight mb-2">
+            {% if software %}Update <span class="text-primary">Software Artifact</span>{% else %}Register <span class="text-primary">Software Artifact</span>{% endif %}
+        </h1>
+        <p class="text-on-surface-variant text-sm">Define or modify architectural components to track their security posture across the infrastructure.</p>
+    </section>
+
+    <div class="bg-surface-container rounded-3xl p-10 shadow-2xl shadow-black/40">
+        <form action="{% if software %}{% url 'software_edit' software.id %}{% else %}{% url 'software_add' %}{% endif %}" method="POST">
+            {% csrf_token %}
+            <div class="space-y-10">
+                <!-- Basic Specs -->
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-8">
+                    <div class="md:col-span-12">
+                        <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline mb-3">Artifact Identity (Name)</label>
+                        <input type="text" name="name" value="{{ software.name|default:'' }}" class="w-full bg-surface-container-lowest border-none rounded-xl px-5 py-4 text-on-surface text-sm focus:ring-2 focus:ring-primary/30 transition-all" placeholder="e.g. Nginx Edge Proxy" required>
+                    </div>
+                    
+                    <div class="md:col-span-4">
+                        <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline mb-3">Version Tag</label>
+                        <input type="text" name="version" value="{{ software.version|default:'' }}" class="w-full bg-surface-container-lowest border-none rounded-xl px-5 py-4 text-on-surface text-sm focus:ring-2 focus:ring-primary/30 transition-all" placeholder="e.g. 1.24.0">
+                    </div>
+                    
+                    <div class="md:col-span-4">
+                        <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline mb-3">Vendor / Authority</label>
+                        <input type="text" name="vendor" value="{{ software.vendor|default:'' }}" class="w-full bg-surface-container-lowest border-none rounded-xl px-5 py-4 text-on-surface text-sm focus:ring-2 focus:ring-primary/30 transition-all" placeholder="e.g. F5 Networks">
+                    </div>
+
+                    <div class="md:col-span-4">
+                        <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline mb-3">Surface Port</label>
+                        <input type="number" name="listening_port" value="{{ software.listening_port|default:'' }}" class="w-full bg-surface-container-lowest border-none rounded-xl px-5 py-4 text-on-surface text-sm focus:ring-2 focus:ring-primary/30 transition-all" placeholder="e.g. 443">
+                    </div>
+
+                    <div class="md:col-span-12">
+                        <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline mb-3">Software Criticality</label>
+                        <div class="relative group">
+                            <select name="criticality" class="w-full bg-surface-container-lowest border-none rounded-xl px-5 py-4 text-on-surface text-sm font-black uppercase tracking-widest focus:ring-2 focus:ring-primary/30 transition-all appearance-none cursor-pointer">
+                                <option value="">NOT DEFINED</option>
+                                {% for val, label in criticality_choices %}
+                                <option value="{{ val }}" {% if software.criticality == val %}selected{% endif %}>{{ label|upper }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-outline">
+                                <span class="material-symbols-outlined text-sm">priority_high</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Host Assignment -->
+                <div>
+                    <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline mb-4">Architectural Deployment Nodes</label>
+                    <div class="bg-surface-container-low rounded-2xl p-6 max-h-64 overflow-y-auto custom-scrollbar">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {% for host in hosts %}
+                            <label class="flex items-center gap-4 p-3 bg-surface-container rounded-xl cursor-pointer hover:bg-surface-container-highest transition-all group">
+                                <input type="checkbox" name="hosts" value="{{ host.id }}" 
+                                    {% if host in software.hosts.all %}checked{% endif %}
+                                    class="w-5 h-5 rounded-md bg-surface-container-lowest border-none text-primary focus:ring-offset-0 focus:ring-primary/30">
+                                <div class="overflow-hidden">
+                                    <p class="text-xs font-bold text-on-surface group-hover:text-primary transition-colors">{{ host.ip_address }}</p>
+                                    <p class="text-[9px] text-outline uppercase truncate">{{ host.hostname|default:"Anonymous Node" }}</p>
+                                </div>
+                            </label>
+                            {% empty %}
+                            <div class="col-span-full text-center py-8">
+                                <p class="text-outline text-[10px] font-black uppercase tracking-widest">No nodes registered in the infrastructure</p>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-6 flex items-center justify-end gap-6">
+                    <a href="{% url 'software_list' %}" class="text-[10px] font-black text-outline uppercase tracking-widest hover:text-on-surface transition-colors">Cancel</a>
+                    <button type="submit" class="bg-gradient-to-r from-primary to-primary-container text-surface px-10 py-4 rounded-2xl font-headline font-black uppercase tracking-[0.2em] text-xs shadow-lg shadow-primary/20 hover:brightness-110 active:scale-95 transition-all">
+                        {% if software %}Apply Artifact Updates{% else %}Commit Artifact to Registry{% endif %}
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

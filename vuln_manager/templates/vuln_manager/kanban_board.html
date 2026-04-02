@@ -1,0 +1,129 @@
+{% extends 'vuln_manager/base.html' %}
+{% load vuln_filters %}
+
+{% block title %}Kanban Board{% endblock %}
+
+{% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
+
+{% block content %}
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+
+<section class="mb-12">
+    <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight">Kanban <span class="text-primary">Board</span></h1>
+    <p class="text-on-surface-variant text-sm mt-1">Manage vulnerabilities through its lifecycle phases.</p>
+</section>
+
+<div class="flex gap-6 overflow-x-auto pb-8 snap-x">
+    {% for status_key, vulns in board.items %}
+    <div class="flex-shrink-0 w-80 snap-start">
+        <div class="bg-surface-container-low rounded-3xl p-4 flex flex-col h-[75vh]">
+            <!-- Column Header -->
+            <div class="px-4 py-4 mb-4 flex items-center justify-between">
+                <h6 class="font-headline font-bold text-xs uppercase tracking-[0.25em] text-outline">
+                    {{ status_key|replace_underscore|title }}
+                </h6>
+                <span class="w-6 h-6 rounded-full bg-surface-container-highest flex items-center justify-center text-[10px] font-black text-primary vuln-count" id="count-{{ status_key }}">
+                    {{ vulns|length }}
+                </span>
+            </div>
+
+            <!-- Draggable Area -->
+            <div class="flex-grow overflow-y-auto space-y-4 kanban-column custom-scrollbar px-1" id="{{ status_key }}" data-status="{{ status_key }}">
+                {% for vuln in vulns %}
+                <div class="vuln-card bg-surface-container rounded-2xl p-5 hover:bg-surface-container-high transition-all cursor-grab active:cursor-grabbing relative group shadow-sm" 
+                     data-id="{{ vuln.id }}" data-sev-score="{{ vuln.sev_score }}">
+                    
+                    <!-- Severity Indicator (Vertical bar) -->
+                    <div class="absolute left-0 top-6 bottom-6 w-1 rounded-r-full severity-{{ vuln.severity|lower }}"></div>
+
+                    <div class="flex justify-between items-start mb-3 ms-2">
+                        <span class="text-[9px] font-black tracking-widest text-outline uppercase">{{ vuln.severity|upper }}</span>
+                        <a href="{% url 'vuln_detail' vuln.id %}" class="opacity-0 group-hover:opacity-100 text-primary transition-opacity">
+                            <span class="material-symbols-outlined text-sm">open_in_new</span>
+                        </a>
+                    </div>
+
+                    <h6 class="font-bold text-on-surface text-sm mb-1 ms-2 leading-tight">
+                        <a href="{% url 'vuln_detail' vuln.id %}" class="hover:text-primary transition-colors">{{ vuln.cve_id }}</a>
+                    </h6>
+                    <p class="text-[10px] text-on-surface-variant line-clamp-2 ms-2 mb-4">{{ vuln.name }}</p>
+
+                    <div class="flex items-center gap-2 mt-auto pt-3 border-t border-outline-variant/10 ms-2">
+                        <div class="w-5 h-5 rounded-lg bg-surface-container-highest flex items-center justify-center">
+                            <span class="material-symbols-outlined text-[10px] text-outline">dns</span>
+                        </div>
+                        <span class="text-[9px] font-bold text-outline uppercase tracking-wider truncate">
+                            {% if vuln.host %}{{ vuln.host.ip_address }}{% else %}{{ vuln.software.name }}{% endif %}
+                        </span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<style>
+    .kanban-column::-webkit-scrollbar { width: 4px; }
+    .kanban-column::-webkit-scrollbar-track { background: transparent; }
+    .kanban-column::-webkit-scrollbar-thumb { background: rgba(163, 170, 196, 0.1); border-radius: 10px; }
+    
+    .bg-light-primary { 
+        background-color: rgba(59, 191, 250, 0.05) !important;
+        outline: 2px dashed #3bbffa;
+        outline-offset: -4px;
+        border-radius: 1.5rem;
+    }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const columns = document.querySelectorAll('.kanban-column');
+        
+        columns.forEach(column => {
+            new Sortable(column, {
+                group: 'vulnerabilities',
+                animation: 250,
+                ghostClass: 'bg-light-primary',
+                onEnd: function(evt) {
+                    const vulnId = evt.item.getAttribute('data-id');
+                    const newStatus = evt.to.getAttribute('data-status');
+                    updateStatus(vulnId, newStatus);
+                    updateCounts();
+                    sortColumn(evt.to);
+                }
+            });
+        });
+
+        function sortColumn(columnElement) {
+            const cards = Array.from(columnElement.querySelectorAll('.vuln-card'));
+            cards.sort((a, b) => {
+                const scoreA = parseInt(a.getAttribute('data-sev-score')) || 0;
+                const scoreB = parseInt(b.getAttribute('data-sev-score')) || 0;
+                return scoreB - scoreA;
+            });
+            cards.forEach(card => columnElement.appendChild(card));
+        }
+
+        function updateStatus(vulnId, status) {
+            fetch(`/api/vulnerabilities/${vulnId}/status/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({ status: status })
+            });
+        }
+
+        function updateCounts() {
+            document.querySelectorAll('.kanban-column').forEach(col => {
+                const status = col.getAttribute('data-status');
+                const count = col.querySelectorAll('.vuln-card').length;
+                document.getElementById(`count-${status}`).innerText = count;
+            });
+        }
+    });
+</script>
+{% endblock %}

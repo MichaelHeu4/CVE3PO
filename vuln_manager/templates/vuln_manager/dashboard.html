@@ -1,0 +1,219 @@
+{% extends 'vuln_manager/base.html' %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
+
+{% block content %}
+<!-- Welcome Hero Section -->
+<section class="mb-12">
+    <div class="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div>
+            <h1 class="font-headline font-extrabold text-4xl text-on-surface tracking-tight mb-2">System <span class="text-primary">Overview</span></h1>
+            <p class="text-on-surface-variant font-body max-w-xl">Overview of the imported assets and associated findings. <br /> Intelligence suggests <span class="text-tertiary font-bold">{% if vuln_count > 10 %}Elevated Risk{% else %}Optimal Stance{% endif %}</span> with current findings.</p>
+        </div>
+    </div>
+</section>
+
+<!-- High Level Metrics -->
+<section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+    <!-- Metric 1 -->
+    <div class="bg-surface-container rounded-2xl p-6 relative overflow-hidden group">
+        <div class="absolute -right-4 -top-4 w-24 h-24 bg-primary/5 rounded-full blur-2xl group-hover:bg-primary/10 transition-all"></div>
+        <p class="text-outline font-label text-[10px] uppercase tracking-[0.2em] mb-4">Total Assets</p>
+        <div class="flex items-end justify-between">
+            <h2 class="text-4xl font-headline font-black text-on-surface">{{ host_count }}</h2>
+            <div class="text-primary-container text-xs font-bold mb-1 d-flex align-items-center">
+                <span class="material-symbols-outlined text-sm me-1">hub</span> Without software
+            </div>
+        </div>
+        <div class="mt-4 h-1 w-full bg-surface-container-highest rounded-full overflow-hidden">
+            <div class="h-full bg-primary w-full"></div>
+        </div>
+    </div>
+    <!-- Metric 2 -->
+    <div class="bg-surface-container rounded-2xl p-6 relative overflow-hidden group">
+        <p class="text-outline font-label text-[10px] uppercase tracking-[0.2em] mb-4">Active Findings</p>
+        <div class="flex items-end justify-between">
+            <h2 class="text-4xl font-headline font-black text-on-surface">{{ vuln_count }}</h2>
+            <div class="text-error text-xs font-bold mb-1 flex items-center">
+                <span class="material-symbols-outlined text-sm me-1">report</span> Risks
+            </div>
+        </div>
+        <div class="mt-4 h-1 w-full bg-surface-container-highest rounded-full overflow-hidden">
+            <div class="h-full bg-error" style="width: {% if vuln_count > 0 %}70%{% else %}0%{% endif %}"></div>
+        </div>
+    </div>
+    <!-- Metric 3 -->
+    <div class="bg-surface-container-high rounded-2xl p-6 border-l-4 border-tertiary shadow-xl shadow-black/20">
+        <p class="text-outline font-label text-[10px] uppercase tracking-[0.2em] mb-4">High/Critical</p>
+        <h2 class="text-4xl font-headline font-black text-tertiary">{{ severity_map.critical|add:severity_map.high }}</h2>
+        <p class="text-[10px] text-on-surface-variant mt-2">Requiring immediate review</p>
+    </div>
+    <!-- Metric 4 -->
+    <div class="bg-surface-container rounded-2xl p-6 flex flex-col justify-between">
+        <div>
+            <p class="text-outline font-label text-[10px] uppercase tracking-[0.2em] mb-1">Entry Points</p>
+            <h2 class="text-3xl font-headline font-bold text-on-surface"><span class="material-symbols-outlined text-md me-1">network_intel_node</span>{{ port_count }} <span class="text-sm font-normal text-outline">Ports</span></h2>
+            <h2 class="text-3xl font-headline font-bold text-on-surface"><span class="material-symbols-outlined text-md me-1">deployed_code</span>{{ software_count }} <span class="text-sm font-normal text-outline">Software</span></h2>
+        </div>
+    </div>
+</section>
+
+<!-- Visual Analytics Row -->
+<section class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
+    <!-- Trend Chart -->
+    <div class="lg:col-span-2 bg-surface-container rounded-3xl p-8">
+        <div class="flex items-center justify-between mb-10">
+            <h3 class="font-headline font-bold text-xl text-on-surface">Vulnerability Trend</h3>
+            <div class="flex gap-2">
+                <span class="px-3 py-1 bg-primary text-[10px] rounded-full text-surface font-bold cursor-pointer">LATEST</span>
+            </div>
+        </div>
+        <div class="relative h-64 w-full">
+            <canvas id="vulnTimeline"></canvas>
+        </div>
+    </div>
+    
+    <!-- Severity Pie -->
+    <div class="bg-surface-container rounded-3xl p-8 flex flex-col">
+        <h3 class="font-headline font-bold text-xl text-on-surface mb-8">Severity Bias</h3>
+        <div class="flex-grow flex items-center justify-center relative">
+            <div style="height: 200px; width: 200px;">
+                <canvas id="severityDoughnut"></canvas>
+            </div>
+            <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <p class="text-3xl font-black font-headline text-on-surface leading-none">{{ vuln_count }}</p>
+                <p class="text-[9px] text-outline uppercase tracking-widest mt-1">Total</p>
+            </div>
+        </div>
+        <div class="mt-8 grid grid-cols-2 gap-3">
+            <div class="p-2 rounded-lg bg-surface-container-low text-center">
+                <p class="text-[10px] text-error font-bold uppercase">Critical</p>
+                <p class="h5 mb-0 fw-black">{{ severity_map.critical }}</p>
+            </div>
+            <div class="p-2 rounded-lg bg-surface-container-low text-center">
+                <p class="text-[10px] text-tertiary font-bold uppercase">High</p>
+                <p class="h5 mb-0 fw-black">{{ severity_map.high }}</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Findings Grid -->
+<section class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+    <!-- Recent Findings -->
+    <div class="bg-surface-container rounded-3xl p-8">
+        <div class="flex items-center justify-between mb-8">
+            <h3 class="font-headline font-bold text-xl text-on-surface">Recent Findings</h3>
+            <a href="{% url 'vuln_list' %}" class="text-primary text-[10px] font-bold uppercase tracking-widest hover:underline">View All</a>
+        </div>
+        <div class="space-y-3">
+            {% for vuln in recent_vulns %}
+            <div class="flex items-center p-4 bg-surface-container-low rounded-2xl hover:bg-surface-container-high transition-colors group">
+                <div class="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center text-outline mr-4">
+                    <span class="material-symbols-outlined text-sm">{% if vuln.severity == 'critical' %}gavel{% else %}security{% endif %}</span>
+                </div>
+                <div class="flex-grow overflow-hidden">
+                    <h4 class="font-bold text-on-surface text-sm truncate">{{ vuln.cve_id }}</h4>
+                    {% if vuln.software %}
+                    <p class="text-[10px] text-outline uppercase tracking-widest mt-0.5 truncate">{{ vuln.host.ip_address|default:vuln.software.name }}</p>
+                    {% else %}
+                    <p class="text-[10px] text-outline uppercase tracking-widest mt-0.5 truncate">{{ vuln.host.ip_address|default:"No software associated" }}</p>
+                    {% endif %}
+                </div>
+                <span class="badge severity-{{ vuln.severity|lower }} rounded-full px-3 py-1 text-[9px] font-bold">{{ vuln.severity|upper }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Top Ports -->
+    <div class="bg-surface-container rounded-3xl p-8">
+        <h3 class="font-headline font-bold text-xl text-on-surface mb-8">Exposed Vectors</h3>
+        <div class="space-y-4">
+            {% for port in top_ports %}
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-2xl bg-primary/5 flex flex-col items-center justify-center text-primary">
+                        <span class="text-xs font-black">{{ port.port_number }}</span>
+                    </div>
+                    <div>
+                        <p class="font-bold text-on-surface text-sm mb-0">{{ port.service_name|upper }}</p>
+                        <p class="text-[10px] text-outline uppercase tracking-widest">Protocol Intelligence</p>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <p class="text-lg font-headline font-black text-on-surface mb-0">{{ port.count }}</p>
+                    <p class="text-[9px] text-outline uppercase tracking-tighter">Active Hosts</p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Trend Chart
+        const trendCtx = document.getElementById('vulnTimeline').getContext('2d');
+        new Chart(trendCtx, {
+            type: 'line',
+            data: {
+                labels: {{ timeline_labels|safe }},
+                datasets: [{
+                    data: {{ timeline_values|safe }},
+                    borderColor: '#3bbffa',
+                    backgroundColor: 'rgba(59, 191, 250, 0.05)',
+                    borderWidth: 4,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    pointHoverRadius: 6,
+                    pointHoverBackgroundColor: '#3bbffa',
+                    pointHoverBorderColor: '#060e20',
+                    pointHoverBorderWidth: 3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, grid: { color: 'rgba(163, 170, 196, 0.05)' }, ticks: { color: '#a3aac4', font: { size: 10 } } },
+                    x: { grid: { display: false }, ticks: { color: '#a3aac4', font: { size: 10 } } }
+                }
+            }
+        });
+
+        // Severity Doughnut
+        const sevCtx = document.getElementById('severityDoughnut').getContext('2d');
+        new Chart(sevCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Critical', 'High', 'Medium', 'Low', 'Info'],
+                datasets: [{
+                    data: [
+                        {{ severity_map.critical }}, 
+                        {{ severity_map.high }}, 
+                        {{ severity_map.medium }}, 
+                        {{ severity_map.low }}, 
+                        {{ severity_map.info }}
+                    ],
+                    backgroundColor: ['#9f0519', '#fc4563', '#8950fc', '#1bc5bd', '#3699ff'],
+                    borderWidth: 0,
+                    hoverOffset: 10
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '85%',
+                plugins: { legend: { display: false } }
+            }
+        });
+    });
+</script>
+{% endblock %}

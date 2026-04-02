@@ -1,0 +1,144 @@
+{% extends 'vuln_manager/base.html' %}
+{% load vuln_filters %}
+
+{% block title %}Intelligence: {{ vuln.cve_id }}{% endblock %}
+
+{% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
+
+{% block content %}
+<nav class="mb-8">
+    <ol class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-outline">
+        <li><a href="{% url 'dashboard' %}" class="hover:text-primary transition-colors">Dashboard</a></li>
+        <li class="material-symbols-outlined text-xs">chevron_right</li>
+        <li><a href="{% url 'vuln_list' %}" class="hover:text-primary transition-colors">Vulnerabilities</a></li>
+        <li class="material-symbols-outlined text-xs">chevron_right</li>
+        <li class="text-on-surface">{{ vuln.cve_id }}</li>
+    </ol>
+</nav>
+
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+    <!-- Main Detail -->
+    <div class="lg:col-span-8 space-y-8">
+        <div class="bg-surface-container rounded-3xl p-10 relative overflow-hidden">
+            <div class="absolute top-0 right-0 p-8">
+                <span class="badge severity-{{ vuln.severity|lower }} rounded-full px-6 py-2 text-xs font-black tracking-widest shadow-lg">{{ vuln.severity|upper }}</span>
+            </div>
+
+            <div class="mb-10">
+                <h1 class="font-headline font-black text-5xl text-on-surface tracking-tighter mb-4">{{ vuln.cve_id }}</h1>
+                <h4 class="text-xl text-primary font-bold tracking-tight opacity-80">{{ vuln.name }}</h4>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 mb-10">
+                <div class="bg-surface-container-low p-4 rounded-2xl">
+                    <p class="text-[9px] uppercase tracking-[0.2em] text-outline mb-1">Current Lifecycle Status</p>
+                    <div class="flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-primary shadow-[0_0_10px_#3bbffa]"></span>
+                        <p class="font-bold text-on-surface text-sm uppercase tracking-wider">{{ vuln.get_status_display }}</p>
+                    </div>
+                </div>
+                <div class="bg-surface-container-low p-4 rounded-2xl">
+                    <p class="text-[9px] uppercase tracking-[0.2em] text-outline mb-1">Actions</p>
+                    <form action="{% url 'update_vuln_status' vuln.id %}" method="POST">
+                        {% csrf_token %}
+                        <select name="status" onchange="this.form.submit()" class="bg-transparent border-none p-0 text-sm font-bold text-primary focus:ring-0 cursor-pointer uppercase tracking-widest">
+                            {% for sk, sl in vuln.STATUS_CHOICES %}
+                            <option value="{{ sk }}" {% if vuln.status == sk %}selected{% endif %}>Promote to {{ sl }}</option>
+                            {% endfor %}
+                        </select>
+                    </form>
+                </div>
+            </div>
+
+            <div class="prose prose-invert max-w-none">
+                <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-4">Finding Intelligence</h5>
+                <p class="text-on-surface-variant leading-relaxed text-lg">{{ vuln.description|linebreaksbr }}</p>
+            </div>
+
+            {% if vuln.nuclei_poc %}
+            <div class="mt-12">
+                <div class="flex items-center justify-between mb-4">
+                    <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-error flex items-center gap-2">
+                        <span class="material-symbols-outlined text-sm">terminal</span> Proof of Concept
+                    </h5>
+                    <button onclick="copyPoc()" class="text-[10px] font-black tracking-widest text-outline hover:text-primary transition-colors uppercase">Copy Payload</button>
+                </div>
+                <div class="bg-surface-container-lowest p-8 rounded-2xl border border-outline-variant/10 group relative">
+                    <pre class="m-0 overflow-x-auto custom-scrollbar"><code id="pocText" class="text-primary-container font-mono text-sm leading-relaxed">{{ vuln.nuclei_poc }}</code></pre>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Sidebar Info -->
+    <div class="lg:col-span-4 space-y-6">
+        <!-- Target Info -->
+        <div class="bg-surface-container-high rounded-3xl p-8 shadow-2xl shadow-black/40">
+            <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-6">Affected Assets</h5>
+            <div class="space-y-6">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-2xl bg-surface-container-highest flex items-center justify-center text-primary">
+                        <span class="material-symbols-outlined">hub</span>
+                    </div>
+                    <div>
+                        <p class="text-[9px] uppercase tracking-widest text-outline">IP / Hostname</p>
+                        {% if vuln.host %}
+                        <a href="{% url 'host_detail' vuln.host.id %}" class="font-black text-on-surface hover:text-primary transition-colors">{{ vuln.host.ip_address }}</a>
+                        {% else %}
+                        <p class="font-black text-on-surface">Global Architecture</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if vuln.software %}
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                        <span class="material-symbols-outlined">deployed_code</span>
+                    </div>
+                    <div>
+                        <p class="text-[9px] uppercase tracking-widest text-outline">Affected Software</p>
+                        <a href="{% url 'software_detail' vuln.software.id %}" class="font-black text-on-surface hover:text-primary transition-colors uppercase text-xs">{{ vuln.software.name }}</a>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Scan Origin -->
+        <div class="bg-surface-container rounded-3xl p-8 border border-outline-variant/5">
+            <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-6">Scan Source</h5>
+            <p class="text-xs text-on-surface-variant mb-2">Detected via <span class="text-primary font-bold">{{ vuln.scan.get_scan_type_display }}</span></p>
+            <p class="text-[10px] text-outline uppercase tracking-tighter mb-6">Imported: {{ vuln.scan.uploaded_at|date:"d M Y | H:i" }}</p>
+            
+            <form action="{% url 'delete_vulnerability' vuln.id %}" method="POST" onsubmit="return confirm('Delete finding?')">
+                {% csrf_token %}
+                <button type="submit" class="w-full py-3 rounded-xl border border-error/20 text-error text-[10px] font-black tracking-[0.2em] uppercase hover:bg-error hover:text-surface transition-all">
+                    Delete Finding
+                </button>
+            </form>
+        </div>
+        {% if vuln.supply_chain %}
+        <div class="bg-surface-container rounded-3xl p-8 border border-outline-variant/5">
+          <div class="flex items-center gap-4">
+              <div class="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                  <span class="material-symbols-outlined">conveyor_belt</span>
+              </div>
+              <div>
+                  <p class="font-black text-on-surface transition-colors">Supply Chain</p>
+              </div>
+          </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function copyPoc() {
+    const text = document.getElementById('pocText').innerText;
+    navigator.clipboard.writeText(text).then(() => {
+        alert('Tactical payload copied to clipboard.');
+    });
+}
+</script>
+{% endblock %}
