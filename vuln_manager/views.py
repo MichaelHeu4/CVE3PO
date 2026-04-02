@@ -8,9 +8,11 @@ from .utils import (
     parse_openvas_xml,
     parse_semgrep_json,
 )
-import os
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.models import User
 import json
 
 CRITICALITY_WEIGHTS = {
@@ -23,6 +25,41 @@ CRITICALITY_WEIGHTS = {
 }
 
 
+def login_view(request):
+    next_url = request.GET.get("next", "dashboard")
+    if request.user.is_authenticated:
+        return redirect(next_url)
+    if request.method == "POST":
+        username = request.POST.get("email")
+        password = request.POST.get("password")
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)
+            print(next_url)
+            return redirect(next_url)
+    return render(request, "vuln_manager/login.html")
+
+
+def register_view(request):
+    if request.user.is_authenticated:
+        return redirect("dashboard")
+    if request.method == "POST":
+        username = request.POST.get("email")
+        password = request.POST.get("password")
+        user = User.objects.create_user(username=username, password=password)
+        if user is not None:
+            login(request, user)
+            return redirect("dashboard")
+    return render(request, "vuln_manager/register.html")
+
+
+@login_required
+def logout_view(request):
+    logout(request)
+    return redirect("login")
+
+
+@login_required
 def recalculate_host_criticality(host):
     max_weight = CRITICALITY_WEIGHTS.get(host.criticality, 0)
     for sw in host.software_inventory.all():
@@ -34,6 +71,7 @@ def recalculate_host_criticality(host):
 
 
 @csrf_exempt
+@login_required
 def api_update_vuln_status(request, pk):
     if request.method == "POST":
         try:
@@ -49,6 +87,7 @@ def api_update_vuln_status(request, pk):
     return JsonResponse({"status": "invalid method"}, status=405)
 
 
+@login_required
 def dashboard(request):
     host_count = Host.objects.count()
     latest_port_ids = Port.objects.values("host").annotate(
@@ -79,13 +118,15 @@ def dashboard(request):
         .annotate(count=Count("id"))
         .order_by("date")
     )
-    timeline_labels = [item["date"].strftime("%d.%m.%Y") for item in timeline_raw]
+    timeline_labels = [item["date"].strftime(
+        "%d.%m.%Y") for item in timeline_raw]
     timeline_values = [item["count"] for item in timeline_raw]
     top_hosts = (
         Host.objects.annotate(
             num_vulns=Count(
                 "vulnerabilities",
-                filter=~Q(vulnerabilities__status__in=["fixed", "false_positive"])
+                filter=~Q(vulnerabilities__status__in=[
+                          "fixed", "false_positive"])
                 & ~Q(vulnerabilities__severity="info"),
             )
         )
@@ -131,19 +172,23 @@ def dashboard(request):
         "timeline_labels": json.dumps(timeline_labels),
         "timeline_values": json.dumps(timeline_values),
         "software_count": software_count,
+        "user": User.objects.get(pk=request.user.id),
     }
     return render(request, "vuln_manager/dashboard.html", context)
 
 
+@login_required
 def host_list(request):
     hosts = Host.objects.all().order_by("ip_address")
     for host in hosts:
         latest_scan = host.ports.aggregate(latest=Max("scan_id"))["latest"]
         host.current_port_count = (
-            host.ports.filter(scan_id=latest_scan).count() if latest_scan else 0
+            host.ports.filter(
+                scan_id=latest_scan).count() if latest_scan else 0
         )
         inherited_q = (
-            Vulnerability.objects.filter(Q(host=host) | Q(software__hosts=host))
+            Vulnerability.objects.filter(
+                Q(host=host) | Q(software__hosts=host))
             .exclude(status__in=["fixed", "false_positive"])
             .distinct()
         )
@@ -152,10 +197,12 @@ def host_list(request):
     return render(request, "vuln_manager/host_list.html", {"hosts": hosts})
 
 
+@login_required
 def host_detail(request, pk):
     host = get_object_or_404(Host, pk=pk)
     latest_scan_id = host.ports.aggregate(latest=Max("scan_id"))["latest"]
-    active_ports = host.ports.filter(scan_id=latest_scan_id).order_by("port_number")
+    active_ports = host.ports.filter(
+        scan_id=latest_scan_id).order_by("port_number")
     historic_ports = (
         host.ports.exclude(scan_id=latest_scan_id)
         .values("port_number", "service_name")
@@ -172,7 +219,8 @@ def host_detail(request, pk):
         )
     else:
         vulns = (
-            Vulnerability.objects.filter(Q(host=host) | Q(software__hosts=host))
+            Vulnerability.objects.filter(
+                Q(host=host) | Q(software__hosts=host))
             .exclude(status="false_positive")
             .distinct()
             .order_by("-severity")
@@ -212,11 +260,14 @@ def host_detail(request, pk):
     )
 
 
+@login_required
 def software_list(request):
-    software = Software.objects.annotate(num_hosts=Count("hosts")).order_by("name")
+    software = Software.objects.annotate(
+        num_hosts=Count("hosts")).order_by("name")
     return render(request, "vuln_manager/software_list.html", {"software": software})
 
 
+@login_required
 def software_detail(request, pk):
     item = get_object_or_404(Software, pk=pk)
     hosts = item.hosts.all()
@@ -237,6 +288,7 @@ def software_detail(request, pk):
     )
 
 
+@login_required
 def software_form(request, pk=None):
     sw = None
     if pk:
@@ -288,6 +340,7 @@ def software_form(request, pk=None):
     )
 
 
+@login_required
 def update_software_criticality(request, pk):
     if request.method == "POST":
         sw = get_object_or_404(Software, pk=pk)
@@ -299,6 +352,7 @@ def update_software_criticality(request, pk):
     return redirect("software_detail", pk=pk)
 
 
+@login_required
 def delete_software(request, pk):
     if request.method == "POST":
         sw = get_object_or_404(Software, pk=pk)
@@ -306,6 +360,7 @@ def delete_software(request, pk):
     return redirect("software_list")
 
 
+@login_required
 def remove_host_from_software(request, software_pk, host_pk):
     if request.method == "POST":
         sw = get_object_or_404(Software, pk=software_pk)
@@ -315,6 +370,7 @@ def remove_host_from_software(request, software_pk, host_pk):
     return redirect("software_detail", pk=software_pk)
 
 
+@login_required
 def update_host_criticality(request, pk):
     if request.method == "POST":
         host = get_object_or_404(Host, pk=pk)
@@ -325,6 +381,7 @@ def update_host_criticality(request, pk):
     return redirect("host_detail", pk=pk)
 
 
+@login_required
 def vuln_add(request):
     if request.method == "POST":
         ip_address = request.POST.get("ip_address")
@@ -338,7 +395,8 @@ def vuln_add(request):
         if ip_address:
             host_obj, _ = Host.objects.get_or_create(ip_address=ip_address)
         manual_scan = (
-            Scan.objects.filter(scan_type="MANUAL").order_by("-uploaded_at").first()
+            Scan.objects.filter(scan_type="MANUAL").order_by(
+                "-uploaded_at").first()
         )
         if not manual_scan:
             manual_scan = Scan.objects.create(scan_type="MANUAL")
@@ -368,6 +426,7 @@ def vuln_add(request):
     )
 
 
+@login_required
 def delete_vulnerability(request, pk):
     if request.method == "POST":
         vuln = get_object_or_404(Vulnerability, pk=pk)
@@ -378,9 +437,12 @@ def delete_vulnerability(request, pk):
     return redirect("dashboard")
 
 
+@login_required
 def port_list(request):
-    latest_scan_ids = Port.objects.values("host").annotate(latest=Max("scan_id"))
-    active_port_ids = [item["latest"] for item in latest_scan_ids if item["latest"]]
+    latest_scan_ids = Port.objects.values(
+        "host").annotate(latest=Max("scan_id"))
+    active_port_ids = [item["latest"]
+                       for item in latest_scan_ids if item["latest"]]
     active_ports = (
         Port.objects.filter(scan_id__in=active_port_ids)
         .select_related("host")
@@ -396,6 +458,7 @@ def port_list(request):
     return render(request, "vuln_manager/port_list.html", {"port_groups": sorted_ports})
 
 
+@login_required
 def scan_list(request):
     scans = Scan.objects.annotate(num_vulns=Count("vulnerabilities")).order_by(
         "-uploaded_at"
@@ -403,6 +466,7 @@ def scan_list(request):
     return render(request, "vuln_manager/scan_list.html", {"scans": scans})
 
 
+@login_required
 def kanban_board(request):
     severity_order = Case(
         When(severity__iexact="critical", then=Value(5)),
@@ -432,6 +496,7 @@ def kanban_board(request):
     return render(request, "vuln_manager/kanban_board.html", {"board": board_data})
 
 
+@login_required
 def update_vuln_status(request, pk):
     if request.method == "POST":
         vuln = get_object_or_404(Vulnerability, pk=pk)
@@ -442,6 +507,7 @@ def update_vuln_status(request, pk):
     return redirect(request.META.get("HTTP_REFERER", "kanban_board"))
 
 
+@login_required
 def vuln_list(request):
     severity = request.GET.get("severity")
     status_filter = request.GET.get("status", "active")
@@ -479,6 +545,7 @@ def vuln_list(request):
     )
 
 
+@login_required
 def vuln_detail(request, pk):
     vuln = get_object_or_404(
         Vulnerability.objects.select_related("host", "scan"), pk=pk
@@ -486,6 +553,7 @@ def vuln_detail(request, pk):
     return render(request, "vuln_manager/vuln_detail.html", {"vuln": vuln})
 
 
+@login_required
 def scan_import(request):
     sw_id = request.GET.get("software")
     pre_sw = get_object_or_404(Software, pk=sw_id) if sw_id else None
@@ -495,7 +563,8 @@ def scan_import(request):
         software_id = request.POST.get("software_id")
         sw_obj = Software.objects.get(pk=software_id) if software_id else None
         if scan_type and raw_file:
-            scan_obj = Scan.objects.create(scan_type=scan_type, raw_file=raw_file)
+            scan_obj = Scan.objects.create(
+                scan_type=scan_type, raw_file=raw_file)
             file_path = scan_obj.raw_file.path
             if scan_type == "NMAP":
                 parse_nmap_xml(file_path, scan_obj)
@@ -515,6 +584,7 @@ def scan_import(request):
     return render(request, "vuln_manager/scan_import.html", context)
 
 
+@login_required
 def delete_host(request, pk):
     if request.method == "POST":
         host = get_object_or_404(Host, pk=pk)
@@ -523,6 +593,7 @@ def delete_host(request, pk):
     return redirect("host_detail", pk=pk)
 
 
+@login_required
 def delete_scan(request, pk):
     if request.method == "POST":
         scan = get_object_or_404(Scan, pk=pk)

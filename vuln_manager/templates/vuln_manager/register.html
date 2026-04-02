@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+   <head>
+      <meta charset="utf-8"/>
+      <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+      <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet"/>
+      <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+      <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+      <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+      <script id="tailwind-config">
+         tailwind.config = {
+             darkMode: "class",
+             theme: {
+                 extend: {
+                     colors: {
+                         "surface-dim": "#060e20",
+                         "outline": "#6d758c",
+                         "on-tertiary-fixed": "#39000b",
+                         "secondary-fixed-dim": "#bacae4",
+                         "secondary-fixed": "#c8d8f3",
+                         "primary-container": "#22b1ec",
+                         "on-surface": "#dee5ff",
+                         "on-tertiary-container": "#100001",
+                         "on-background": "#dee5ff",
+                         "tertiary-fixed": "#ff9099",
+                         "surface-bright": "#1f2b49",
+                         "on-error": "#490006",
+                         "primary-fixed-dim": "#05a9e3",
+                         "surface-container": "#0f1930",
+                         "on-secondary-fixed-variant": "#46556b",
+                         "on-primary": "#00374d",
+                         "inverse-primary": "#00668b",
+                         "secondary-dim": "#bacae4",
+                         "primary-fixed": "#2db7f2",
+                         "primary": "#3bbffa",
+                         "surface-container-lowest": "#000000",
+                         "on-secondary": "#3c4c61",
+                         "primary-dim": "#05a9e3",
+                         "tertiary-container": "#fc4563",
+                         "secondary-container": "#38485d",
+                         "error-container": "#9f0519",
+                         "tertiary": "#ff6f7e",
+                         "on-secondary-fixed": "#29394e",
+                         "on-primary-fixed-variant": "#003a50",
+                         "inverse-surface": "#faf8ff",
+                         "tertiary-fixed-dim": "#ff7986",
+                         "on-tertiary": "#490010",
+                         "on-secondary-container": "#c1d1eb",
+                         "outline-variant": "#40485d",
+                         "on-primary-container": "#002b3d",
+                         "on-error-container": "#ffa8a3",
+                         "surface-variant": "#192540",
+                         "inverse-on-surface": "#4d556b",
+                         "surface-tint": "#3bbffa",
+                         "secondary": "#c8d8f3",
+                         "surface": "#060e20",
+                         "surface-container-low": "#091328",
+                         "on-surface-variant": "#a3aac4",
+                         "on-primary-fixed": "#00121d",
+                         "error-dim": "#d7383b",
+                         "background": "#060e20",
+                         "error": "#ff716c",
+                         "tertiary-dim": "#ff6f7e",
+                         "surface-container-high": "#141f38",
+                         "surface-container-highest": "#192540",
+                         "on-tertiary-fixed-variant": "#780021"
+                     },
+                     fontFamily: {
+                         "headline": ["Manrope"],
+                         "body": ["Inter"],
+                         "label": ["Inter"]
+                     },
+                     borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "9999px"},
+                 },
+             },
+         }
+      </script>
+      <style>
+         .material-symbols-outlined {
+         font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+         }
+         .glass-panel {
+         background: rgba(25, 37, 64, 0.6);
+         backdrop-filter: blur(20px);
+         }
+      </style>
+   </head>
+   <body class="bg-surface font-body text-on-surface min-h-screen flex flex-col">
+      <main class="flex-grow flex items-center justify-center relative overflow-hidden py-12 px-6">
+         <div class="absolute top-0 left-0 w-full h-full pointer-events-none opacity-20">
+            <div class="absolute top-[-10%] right-[-5%] w-[600px] h-[600px] bg-primary blur-[120px] rounded-full"></div>
+            <div class="absolute bottom-[-10%] left-[-5%] w-[400px] h-[400px] bg-tertiary blur-[100px] rounded-full"></div>
+         </div>
+         <div class="max-w-6xl w-full grid grid-cols-1 md:grid-cols-2 gap-0 relative z-10">
+            <div class="hidden md:flex flex-col justify-center p-12 bg-surface-container-low rounded-l-xl">
+               <div class="mb-8">
+                  <span class="text-primary font-headline font-bold tracking-tighter text-3xl">CVE3PO</span>
+               </div>
+               <h1 class="font-headline font-extrabold text-5xl lg:text-7xl text-on-surface leading-tight mb-6">
+                  Start Your <span class="text-primary">Watch</span>.
+               </h1>
+               <p class="text-on-surface-variant text-lg max-w-md font-light leading-relaxed mb-12">
+                  Join now and start managing your vulnerabilities with CVE3PO. Get insights, track the status of vulnerabilities, and get an comprehensive overview to stay ahead of threats.
+               </p>
+            </div>
+            <!-- Form Side: Focused Transactional -->
+            <div class="glass-panel p-8 md:p-16 flex flex-col justify-center rounded-xl md:rounded-l-none">
+               <div class="md:hidden mb-8 text-center">
+                  <h1 class="font-headline font-extrabold text-4xl text-on-surface mb-2">Start Your Watch</h1>
+                  <p class="text-on-surface-variant text-sm">Join CVE3PO now.</p>
+               </div>
+               <form class="space-y-6" method="POST" action="{% url 'register' %}">
+                  {% csrf_token %}
+                  <div class="space-y-2">
+                     <label class="text-xs font-headline font-bold uppercase tracking-widest text-on-surface-variant">Work Email</label>
+                     <div class="relative">
+                        <input class="w-full bg-surface-container-lowest border-none focus:ring-2 focus:ring-primary/30 text-on-surface px-4 py-4 rounded-lg placeholder:text-outline transition-all" name="email" placeholder="email@company.com" type="email"/>
+                     </div>
+                  </div>
+                  <div class="space-y-2">
+                     <label class="text-xs font-headline font-bold uppercase tracking-widest text-on-surface-variant">Create Password</label>
+                     <div class="relative">
+                        <input class="w-full bg-surface-container-lowest border-none focus:ring-2 focus:ring-primary/30 text-on-surface px-4 py-4 rounded-lg placeholder:text-outline transition-all" name="password" placeholder="••••••••" type="password"/>
+                     </div>
+                  </div>
+                  <div class="pt-4">
+                     <button class="w-full bg-gradient-to-br from-primary to-primary-container text-on-primary-container font-headline font-bold py-4 rounded-lg uppercase tracking-widest hover:brightness-110 active:scale-[0.98] transition-all shadow-lg shadow-primary/20" type="submit">
+                     Create Account
+                     </button>
+                  </div>
+               </form>
+               <div class="mt-8 flex items-center justify-between">
+                  <p class="text-sm text-on-surface-variant">Already have an account?</p>
+                  <a class="text-sm font-bold text-primary hover:text-primary-container transition-colors" href="{% url 'login' %}">Sign In</a>
+               </div>
+            </div>
+         </div>
+      </main>
+      <!-- Footer from Shared Components JSON -->
+      <footer class="w-full py-8 mt-auto bg-[#060e20]">
+         <div class="flex flex-col md:flex-row justify-between items-center px-12 max-w-7xl mx-auto">
+            <div class="font-inter text-xs text-[#a3aac4] mb-4 md:mb-0">
+               CVE3PO Vulnerability Management. GNU General Public License v3.0
+            </div>
+         </div>
+      </footer>
+   </body>
+</html>
+

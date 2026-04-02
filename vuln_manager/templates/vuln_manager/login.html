@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+   <head>
+      <meta charset="utf-8"/>
+      <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+      <title>CVE3PO - Login</title>
+      <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+      <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+      <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+      <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+      <script id="tailwind-config">
+         tailwind.config = {
+           darkMode: "class",
+           theme: {
+             extend: {
+               colors: {
+                 "inverse-surface": "#faf8ff",
+                 "primary-fixed-dim": "#05a9e3",
+                 "secondary-fixed": "#c8d8f3",
+                 "on-background": "#dee5ff",
+                 "surface-tint": "#3bbffa",
+                 "primary-dim": "#05a9e3",
+                 "on-tertiary-fixed-variant": "#780021",
+                 "on-secondary": "#3c4c61",
+                 "on-tertiary-container": "#100001",
+                 "primary": "#3bbffa",
+                 "surface-container-lowest": "#000000",
+                 "on-error": "#490006",
+                 "error-container": "#9f0519",
+                 "on-primary-fixed-variant": "#003a50",
+                 "tertiary-dim": "#ff6f7e",
+                 "tertiary-fixed-dim": "#ff7986",
+                 "secondary-container": "#38485d",
+                 "tertiary-fixed": "#ff9099",
+                 "surface-container-highest": "#192540",
+                 "secondary": "#c8d8f3",
+                 "on-secondary-fixed-variant": "#46556b",
+                 "on-primary": "#00374d",
+                 "secondary-dim": "#bacae4",
+                 "surface-container-high": "#141f38",
+                 "inverse-primary": "#00668b",
+                 "on-tertiary": "#490010",
+                 "on-secondary-fixed": "#29394e",
+                 "background": "#060e20",
+                 "on-primary-container": "#002b3d",
+                 "on-primary-fixed": "#00121d",
+                 "on-error-container": "#ffa8a3",
+                 "surface-container-low": "#091328",
+                 "error-dim": "#d7383b",
+                 "tertiary": "#ff6f7e",
+                 "tertiary-container": "#fc4563",
+                 "surface-dim": "#060e20",
+                 "outline": "#6d758c",
+                 "on-secondary-container": "#c1d1eb",
+                 "surface-container": "#0f1930",
+                 "inverse-on-surface": "#4d556b",
+                 "surface-bright": "#1f2b49",
+                 "on-tertiary-fixed": "#39000b",
+                 "error": "#ff716c",
+                 "primary-container": "#22b1ec",
+                 "on-surface-variant": "#a3aac4",
+                 "surface": "#060e20",
+                 "outline-variant": "#40485d",
+                 "primary-fixed": "#2db7f2",
+                 "on-surface": "#dee5ff",
+                 "secondary-fixed-dim": "#bacae4",
+                 "surface-variant": "#192540"
+               },
+               fontFamily: {
+                 "headline": ["Manrope"],
+                 "body": ["Inter"],
+                 "label": ["Inter"]
+               },
+               borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+             },
+           },
+         }
+      </script>
+      <style>
+         .material-symbols-outlined {
+         font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+         display: inline-block;
+         line-height: 1;
+         text-transform: none;
+         letter-spacing: normal;
+         word-wrap: normal;
+         white-space: nowrap;
+         direction: ltr;
+         }
+         .bg-mesh {
+         background-color: #060e20;
+         background-image: 
+         radial-gradient(at 0% 0%, hsla(200, 96%, 61%, 0.1) 0px, transparent 50%),
+         radial-gradient(at 100% 0%, hsla(354, 100%, 72%, 0.05) 0px, transparent 50%),
+         radial-gradient(at 100% 100%, hsla(200, 96%, 61%, 0.1) 0px, transparent 50%),
+         radial-gradient(at 0% 100%, hsla(354, 100%, 72%, 0.05) 0px, transparent 50%);
+         }
+         .glass-card {
+         background: rgba(15, 25, 48, 0.7);
+         backdrop-filter: blur(20px);
+         -webkit-backdrop-filter: blur(20px);
+         }
+      </style>
+   </head>
+   <body class="bg-mesh font-body text-on-surface min-h-screen flex items-center justify-center p-6 selection:bg-primary/30 selection:text-primary">
+      <div class="absolute inset-0 overflow-hidden pointer-events-none opacity-20">
+         <div class="absolute top-0 left-0 w-full h-full" style="background-image: radial-gradient(#3bbffa 0.5px, transparent 0.5px); background-size: 32px 32px;"></div>
+      </div>
+      <main class="w-full max-w-[440px] relative z-10">
+         <div class="mb-12 text-center">
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-surface-container-high mb-6 shadow-2xl">
+               <span class="material-symbols-outlined text-primary text-4xl" style="font-variation-settings: 'FILL' 1;">shield_person</span>
+            </div>
+            <h1 class="font-headline text-4xl font-extrabold tracking-tight text-primary mb-2">CVE3PO</h1>
+            <p class="text-on-surface-variant text-sm font-medium tracking-wide uppercase">Vulnerability Management</p>
+         </div>
+         <div class="glass-card rounded-xl p-10 shadow-[0_20px_40px_rgba(0,0,0,0.4)] relative">
+            <div class="absolute inset-0 rounded-xl outline outline-1 outline-outline-variant/15 pointer-events-none"></div>
+            <header class="mb-10">
+               <h2 class="font-headline text-2xl font-bold text-on-surface leading-tight">Sign In</h2>
+            </header>
+            <form class="space-y-6" method="POST" action="{% url 'login' %}?next={{ request.GET.next|urlencode }}">
+               {% csrf_token %}
+               <div class="space-y-2">
+                  <label class="font-label text-[0.6875rem] uppercase tracking-wider text-on-surface-variant font-semibold" for="email">Email Address</label>
+                  <div class="relative group">
+                     <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <span class="material-symbols-outlined text-outline text-lg group-focus-within:text-primary transition-colors">alternate_email</span>
+                     </div>
+                     <input class="block w-full bg-surface-container-lowest border-0 rounded-lg py-3.5 pl-11 pr-4 text-on-surface placeholder:text-outline/50 focus:ring-2 focus:ring-primary/30 transition-all font-body text-sm" id="email" name="email" placeholder="architect@cve3po.io" required="" type="email"/>
+                  </div>
+               </div>
+               <div class="space-y-2">
+                  <div class="flex justify-between items-end">
+                     <label class="font-label text-[0.6875rem] uppercase tracking-wider text-on-surface-variant font-semibold" for="password">Password</label>
+                     <a class="font-label text-[0.6875rem] uppercase tracking-wider text-primary hover:text-primary-container transition-colors font-bold" href="#">Forgot Access?</a>
+                  </div>
+                  <div class="relative group">
+                     <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <span class="material-symbols-outlined text-outline text-lg group-focus-within:text-primary transition-colors">lock</span>
+                     </div>
+                     <input class="block w-full bg-surface-container-lowest border-0 rounded-lg py-3.5 pl-11 pr-4 text-on-surface placeholder:text-outline/50 focus:ring-2 focus:ring-primary/30 transition-all font-body text-sm" id="password" name="password" placeholder="••••••••••••" required="" type="password"/>
+                  </div>
+               </div>
+               <button class="w-full flex justify-center items-center gap-2 py-4 px-6 rounded-lg bg-gradient-to-br from-primary to-primary-container text-on-primary font-label text-sm font-bold uppercase tracking-[0.05em] shadow-lg shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all mt-4" type="submit">
+               <span>Sign In</span>
+               <span class="material-symbols-outlined text-lg">arrow_forward</span>
+               </button>
+            </form>
+            <footer class="mt-10 pt-8 flex items-center justify-between gap-4">
+               <div class="h-px flex-1 bg-outline-variant/20"></div>
+               <span class="text-[0.625rem] font-label uppercase tracking-widest text-outline">Internal Access Only</span>
+               <div class="h-px flex-1 bg-outline-variant/20"></div>
+            </footer>
+         </div>
+         <div class="mt-12 flex flex-col items-center space-y-4">
+            <p class="text-[0.625rem] font-inter uppercase tracking-wider text-outline/60 text-center leading-relaxed">
+               CVE3PO Vulnerability Management.<br/>GNU Public License v3.0
+            </p>
+         </div>
+      </main>
+      <div class="fixed bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/20 to-transparent"></div>
+   </body>
+</html>
+
