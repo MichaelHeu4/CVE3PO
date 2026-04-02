@@ -83,7 +83,7 @@ def api_update_vuln_status(request, pk):
                 vuln.save()
                 return JsonResponse({"status": "success"})
         except Exception as e:
-            return JsonResponse({"status": "error", "message": str(e)}, status=400)
+            return JsonResponse({"status": "error"}, status=400)
     return JsonResponse({"status": "invalid method"}, status=405)
 
 
