@@ -171,13 +171,16 @@
                         <span class="material-symbols-outlined text-primary text-sm">person</span>
                     </div>
                     <div class="overflow-hidden">
-                        <p class="text-xs font-bold text-on-surface truncate">Admin</p>
-                        <p class="text-[9px] text-outline uppercase tracking-tighter">Security Lead</p>
+                      <p class="text-xs font-bold text-on-surface truncate">{{user.username}}</p>
+                        <p class="text-[9px] text-outline uppercase tracking-tighter">User</p>
                     </div>
                 </div>
+                <form method="post" action="{% url 'logout' %}">
+                {% csrf_token %}
                 <button class="text-outline hover:text-error transition-colors">
                     <span class="material-symbols-outlined text-lg">logout</span>
                 </button>
+                </form>
             </div>
         </div>
     </aside>
