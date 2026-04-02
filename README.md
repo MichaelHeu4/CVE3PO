@@ -55,11 +55,14 @@ python manage.py makemigrations
 python manage.py migrate
 ```
 
-### 3. Deploy Local Instance
+### 3. Change Settings
+Before running the server, ensure you update the `SECRET_KEY` in `cve3po/settings.py` to a secure random value for production use. Futhermore make sure to adjust the `ALLOWED_HOSTS` setting to include your server's domain or IP address when deploying. Last but not least, check if DEBUG is set to `False` for production environments to enhance security.
+
+### 4. Deploy Local Instance
 ```bash
 python manage.py runserver
 ```
 Access the console at `http://localhost:8000`.
 
-### 4. Create a user
+### 5. Create a user
 Navigate to http://localhost:8000/register/ to create a new user account.
