@@ -1,4 +1,4 @@
-# CVE3PO | The Vigilant Architect
+# CVE3PO
 
 [![Django](https://img.shields.io/badge/Framework-Django%205.2-092e20?logo=django)](https://www.djangoproject.com/)
 [![Tailwind CSS](https://img.shields.io/badge/Design-Tailwind%20CSS-06b6d4?logo=tailwind-css)](https://tailwindcss.com/)
