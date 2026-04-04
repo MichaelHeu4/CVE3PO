@@ -44,25 +44,11 @@ Ingest and parse technical manifests from industry-standard security tools:
 ```bash
 git clone https://github.com/MichaelHeu4/cve3po.git
 cd cve3po
-python3.11 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+docker compose up -d
 ```
 
-### 2. Initialize Database
-```bash
-python manage.py makemigrations
-python manage.py migrate
-```
+### 2. Change Settings
+Before running the server, ensure you set the `SECRET_KEY` Environment variable (using a .env file) to a secure random value for production use. Futhermore make sure to adjust the `ALLOWED_HOSTS` setting to include your server's domain or IP address when deploying. Last but not least, check if DEBUG is set to `False` for production environments to enhance security.
 
-### 3. Change Settings
-Before running the server, ensure you update the `SECRET_KEY` in `cve3po/settings.py` to a secure random value for production use. Futhermore make sure to adjust the `ALLOWED_HOSTS` setting to include your server's domain or IP address when deploying. Last but not least, check if DEBUG is set to `False` for production environments to enhance security.
-
-### 4. Deploy Local Instance
-```bash
-python manage.py runserver
-```
-Access the console at `http://localhost:8000`.
-
-### 5. Create a user
+### 3. Create a user
 Navigate to http://localhost:8000/register/ to create a new user account.
