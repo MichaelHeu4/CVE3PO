@@ -1,0 +1,13 @@
+services:
+  cve3po:
+    build: .
+    container_name: cve3po
+    ports:
+      - "8000:8000"
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DEBUG: ${DEBUG}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS}
+      DISABLE_REGISTER: ${DISABLE_REGISTER}
+    env_file:
+      - .env 
