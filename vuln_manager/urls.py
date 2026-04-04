@@ -41,8 +41,7 @@ urlpatterns = [
     path("software/add/", views.software_form, name="software_add"),
     path("software/<int:pk>/edit/", views.software_form, name="software_edit"),
     path("software/<int:pk>/", views.software_detail, name="software_detail"),
-    path("software/<int:pk>/delete/",
-         views.delete_software, name="delete_software"),
+    path("software/<int:pk>/delete/", views.delete_software, name="delete_software"),
     path(
         "software/<int:pk>/criticality/",
         views.update_software_criticality,

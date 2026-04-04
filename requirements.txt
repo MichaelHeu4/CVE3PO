@@ -12,6 +12,7 @@ click-option-group==0.5.9
 colorama==0.4.6
 cryptography==46.0.6
 Django==5.2.12
+gunicorn==23.0.0
 exceptiongroup==1.2.2
 face==26.0.0
 glom==25.12.0

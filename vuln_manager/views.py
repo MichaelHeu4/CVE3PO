@@ -2,18 +2,19 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.db.models import Count, Q, Max, Case, When, Value, IntegerField
 from django.db.models.functions import TruncDate
 from .models import Host, Port, Vulnerability, Scan, Software
-from .utils import (
-    parse_nmap_xml,
-    parse_nuclei_jsonl,
-    parse_openvas_xml,
-    parse_semgrep_json,
-)
+from .parser import nmap
+from .parser import nuclei
+from .parser import openvas
+from .parser import osvscanner
+from .parser import semgrep
+from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
 import json
+import os
 
 CRITICALITY_WEIGHTS = {
     "Critical": 4,
@@ -41,6 +42,9 @@ def login_view(request):
 
 
 def register_view(request):
+    if settings.DISABLE_REGISTER:
+        print("[*] Someone tried to register...")
+        return redirect("login")
     if request.user.is_authenticated:
         return redirect("dashboard")
     if request.method == "POST":
@@ -118,15 +122,13 @@ def dashboard(request):
         .annotate(count=Count("id"))
         .order_by("date")
     )
-    timeline_labels = [item["date"].strftime(
-        "%d.%m.%Y") for item in timeline_raw]
+    timeline_labels = [item["date"].strftime("%d.%m.%Y") for item in timeline_raw]
     timeline_values = [item["count"] for item in timeline_raw]
     top_hosts = (
         Host.objects.annotate(
             num_vulns=Count(
                 "vulnerabilities",
-                filter=~Q(vulnerabilities__status__in=[
-                          "fixed", "false_positive"])
+                filter=~Q(vulnerabilities__status__in=["fixed", "false_positive"])
                 & ~Q(vulnerabilities__severity="info"),
             )
         )
@@ -183,12 +185,10 @@ def host_list(request):
     for host in hosts:
         latest_scan = host.ports.aggregate(latest=Max("scan_id"))["latest"]
         host.current_port_count = (
-            host.ports.filter(
-                scan_id=latest_scan).count() if latest_scan else 0
+            host.ports.filter(scan_id=latest_scan).count() if latest_scan else 0
         )
         inherited_q = (
-            Vulnerability.objects.filter(
-                Q(host=host) | Q(software__hosts=host))
+            Vulnerability.objects.filter(Q(host=host) | Q(software__hosts=host))
             .exclude(status__in=["fixed", "false_positive"])
             .distinct()
         )
@@ -201,8 +201,7 @@ def host_list(request):
 def host_detail(request, pk):
     host = get_object_or_404(Host, pk=pk)
     latest_scan_id = host.ports.aggregate(latest=Max("scan_id"))["latest"]
-    active_ports = host.ports.filter(
-        scan_id=latest_scan_id).order_by("port_number")
+    active_ports = host.ports.filter(scan_id=latest_scan_id).order_by("port_number")
     historic_ports = (
         host.ports.exclude(scan_id=latest_scan_id)
         .values("port_number", "service_name")
@@ -219,8 +218,7 @@ def host_detail(request, pk):
         )
     else:
         vulns = (
-            Vulnerability.objects.filter(
-                Q(host=host) | Q(software__hosts=host))
+            Vulnerability.objects.filter(Q(host=host) | Q(software__hosts=host))
             .exclude(status="false_positive")
             .distinct()
             .order_by("-severity")
@@ -262,8 +260,7 @@ def host_detail(request, pk):
 
 @login_required
 def software_list(request):
-    software = Software.objects.annotate(
-        num_hosts=Count("hosts")).order_by("name")
+    software = Software.objects.annotate(num_hosts=Count("hosts")).order_by("name")
     return render(request, "vuln_manager/software_list.html", {"software": software})
 
 
@@ -395,8 +392,7 @@ def vuln_add(request):
         if ip_address:
             host_obj, _ = Host.objects.get_or_create(ip_address=ip_address)
         manual_scan = (
-            Scan.objects.filter(scan_type="MANUAL").order_by(
-                "-uploaded_at").first()
+            Scan.objects.filter(scan_type="MANUAL").order_by("-uploaded_at").first()
         )
         if not manual_scan:
             manual_scan = Scan.objects.create(scan_type="MANUAL")
@@ -439,10 +435,8 @@ def delete_vulnerability(request, pk):
 
 @login_required
 def port_list(request):
-    latest_scan_ids = Port.objects.values(
-        "host").annotate(latest=Max("scan_id"))
-    active_port_ids = [item["latest"]
-                       for item in latest_scan_ids if item["latest"]]
+    latest_scan_ids = Port.objects.values("host").annotate(latest=Max("scan_id"))
+    active_port_ids = [item["latest"] for item in latest_scan_ids if item["latest"]]
     active_ports = (
         Port.objects.filter(scan_id__in=active_port_ids)
         .select_related("host")
@@ -563,17 +557,18 @@ def scan_import(request):
         software_id = request.POST.get("software_id")
         sw_obj = Software.objects.get(pk=software_id) if software_id else None
         if scan_type and raw_file:
-            scan_obj = Scan.objects.create(
-                scan_type=scan_type, raw_file=raw_file)
+            scan_obj = Scan.objects.create(scan_type=scan_type, raw_file=raw_file)
             file_path = scan_obj.raw_file.path
             if scan_type == "NMAP":
-                parse_nmap_xml(file_path, scan_obj)
+                nmap.parse_nmap_xml(file_path, scan_obj)
             elif scan_type == "NUCLEI":
-                parse_nuclei_jsonl(file_path, scan_obj)
+                nuclei.parse_nuclei_jsonl(file_path, scan_obj)
             elif scan_type == "OPENVAS":
-                parse_openvas_xml(file_path, scan_obj)
+                openvas.parse_openvas_xml(file_path, scan_obj)
             elif scan_type == "SEMGREP":
-                parse_semgrep_json(file_path, scan_obj, software_obj=sw_obj)
+                semgrep.parse_semgrep_json(file_path, scan_obj, software_obj=sw_obj)
+            elif scan_type == "OSV":
+                osvscanner.parse_osv_json(file_path, scan_obj, software_obj=sw_obj)
             if sw_obj:
                 return redirect("software_detail", pk=sw_obj.id)
             return redirect("dashboard")
