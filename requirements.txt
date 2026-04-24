@@ -10,7 +10,7 @@ charset-normalizer==3.4.6
 click==8.1.8
 click-option-group==0.5.9
 colorama==0.4.6
-cryptography==46.0.6
+cryptography==46.0.7
 Django==5.2.13
 gunicorn==23.0.0
 exceptiongroup==1.2.2
@@ -48,7 +48,7 @@ pydantic_core==2.41.5
 Pygments==2.20.0
 PyJWT==2.12.1
 python-dotenv==1.2.2
-python-multipart==0.0.22
+python-multipart==0.0.26
 referencing==0.37.0
 requests==2.33.1
 rich==14.3.3
