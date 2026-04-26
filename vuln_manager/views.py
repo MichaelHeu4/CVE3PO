@@ -324,7 +324,6 @@ def software_form(request, pk=None):
 
         if host_ids:
             sw.hosts.set(host_ids)
-            # Propagate criticality
             for host in sw.hosts.all():
                 recalculate_host_criticality(host)
         else:
@@ -505,7 +504,14 @@ def update_vuln_status(request, pk):
         if new_status in dict(Vulnerability.STATUS_CHOICES):
             vuln.status = new_status
             vuln.save()
-    return redirect(request.META.get("HTTP_REFERER", "kanban_board"))
+        referer = request.META.get("HTTP_REFERER")
+        if referer and url_has_allowed_host_and_scheme(
+            url=referer,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        ):
+            return redirect("referer")
+    return redirect("kanban_board")
 
 
 @login_required
