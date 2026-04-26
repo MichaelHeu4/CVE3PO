@@ -13,6 +13,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
+from django.utils.http import url_has_allowed_host_and_scheme
 import json
 import os
 
@@ -28,6 +29,12 @@ CRITICALITY_WEIGHTS = {
 
 def login_view(request):
     next_url = request.GET.get("next", "dashboard")
+    if not url_has_allowed_host_and_scheme(
+        url=next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        next_url = "dashboard"
     if request.user.is_authenticated:
         return redirect(next_url)
     if request.method == "POST":
@@ -317,7 +324,6 @@ def software_form(request, pk=None):
 
         if host_ids:
             sw.hosts.set(host_ids)
-            # Propagate criticality
             for host in sw.hosts.all():
                 recalculate_host_criticality(host)
         else:
@@ -498,7 +504,14 @@ def update_vuln_status(request, pk):
         if new_status in dict(Vulnerability.STATUS_CHOICES):
             vuln.status = new_status
             vuln.save()
-    return redirect(request.META.get("HTTP_REFERER", "kanban_board"))
+        referer = request.META.get("HTTP_REFERER")
+        if referer and url_has_allowed_host_and_scheme(
+            url=referer,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        ):
+            return redirect("referer")
+    return redirect("kanban_board")
 
 
 @login_required
