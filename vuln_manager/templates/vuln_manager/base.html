@@ -141,6 +141,11 @@
                 <span class="font-semibold text-sm uppercase tracking-widest">Vulnerabilities</span>
             </a>
 
+            <a href="{% url 'ai_dashboard' %}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all {% if request.resolver_match.url_name == 'ai_dashboard' %}bg-gradient-to-r from-primary to-primary-container text-surface shadow-lg shadow-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant hover:text-on-surface{% endif %}">
+                <span class="material-symbols-outlined">automation</span>
+                <span class="font-semibold text-sm uppercase tracking-widest">AI Dashboard</span>
+            </a>
+
             <a href="{% url 'kanban_board' %}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all {% if request.resolver_match.url_name == 'kanban_board' %}bg-gradient-to-r from-primary to-primary-container text-surface shadow-lg shadow-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant hover:text-on-surface{% endif %}">
                 <span class="material-symbols-outlined">view_kanban</span>
                 <span class="font-semibold text-sm uppercase tracking-widest">Board</span>

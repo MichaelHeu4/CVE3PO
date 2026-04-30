@@ -49,22 +49,22 @@ def extract_severity(vuln):
         if score_type in ("CVSS_V3", "CVSS_V4"):
             base_score = extract_cvss_base_score(score_value)
             if base_score is not None:
-                return normalize_severity_from_score(base_score)
+                return (score_value, normalize_severity_from_score(base_score))
 
     # 2. Fallback: database_specific.severity
     database_specific = vuln.get("database_specific", {})
     sev_raw = database_specific.get("severity", "UNKNOWN").lower()
 
     if sev_raw == "critical":
-        return "critical"
+        return (None, "critical")
     if sev_raw == "high":
-        return "high"
+        return (None, "high")
     if sev_raw in ("moderate", "medium"):
-        return "medium"
+        return (None, "medium")
     if sev_raw == "low":
-        return "low"
+        return (None, "low")
 
-    return "info"
+    return (None, "info")
 
 
 def extract_cve_id(vuln):
@@ -120,13 +120,16 @@ def parse_osv_json(file_path, scan_obj, software_obj=None):
 
         description, poc = extract_poc_from_description(description)
 
-        severity = extract_severity(vuln)
-
+        cvss_score, severity = extract_severity(vuln)
+        if (cvss_score):
+            print(extract_cve_id(vuln) + " CVSS: " + cvss_score)
+        
         Vulnerability.objects.create(
             host=None,
             scan=scan_obj,
             software=software_obj,
             cve_id=extract_cve_id(vuln),
+            cvss=cvss_score,
             severity=severity,
             name=f"OSV: {summary}",
             description=description,

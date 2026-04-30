@@ -7,6 +7,7 @@ from .parser import nuclei
 from .parser import openvas
 from .parser import osvscanner
 from .parser import semgrep
+from .utils import ai_triage
 from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -70,7 +71,6 @@ def logout_view(request):
     return redirect("login")
 
 
-@login_required
 def recalculate_host_criticality(host):
     max_weight = CRITICALITY_WEIGHTS.get(host.criticality, 0)
     for sw in host.software_inventory.all():
@@ -607,3 +607,34 @@ def delete_scan(request, pk):
         scan = get_object_or_404(Scan, pk=pk)
         scan.delete()
     return redirect("scan_list")
+
+
+@login_required
+def ki_dashboard(request):
+    selected_vuln_id = request.GET.get("selected_vuln")
+    selected_vuln = None
+    if selected_vuln_id: 
+        selected_vuln = get_object_or_404(Vulnerability, pk=selected_vuln_id)
+    
+    triaged_vulns = 0
+    all_vulns = Vulnerability.objects.exclude(status="false_positive").distinct()
+    action_required = 0
+    ai = {
+        "model": "DeepSeek V4 Flash",
+        "proc_time": 0,
+    }
+    context = {
+        "triaged_vulns": triaged_vulns,
+        "all_vulns": all_vulns,
+        "action_required": action_required,
+        "ai": ai,
+        "selected_vuln": selected_vuln
+    }
+    return render(request, "vuln_manager/ki_dashboard.html", context)
+
+@login_required
+def do_triage(request):
+    all_vulns = Vulnerability.objects.filter(cve_id="DEBIAN-CVE-2022-2274")
+    for vuln in all_vulns:
+        ai_triage.triage(vuln)
+    return redirect("ai_dashboard")
