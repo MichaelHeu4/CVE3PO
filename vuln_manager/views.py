@@ -440,6 +440,34 @@ def delete_vulnerability(request, pk):
 
 
 @login_required
+def host_form(request, pk=None):
+    host_obj = None
+    if pk:
+        host_obj = get_object_or_404(Host, pk=pk)
+
+    if request.method == "POST":
+        ip_address = request.POST.get("ip_address")
+        hostname = request.POST.get("hostname")
+        criticality = request.POST.get("criticality")
+
+        if not host_obj:
+            host_obj = Host(ip_address=ip_address)
+        else:
+            host_obj.ip_address = ip_address
+
+        host_obj.hostname = hostname
+        host_obj.criticality = criticality
+        host_obj.save()
+        return redirect("host_list")
+
+    context = {
+        "host_obj": host_obj,
+        "criticality_choices": Host.CRITICALITY_CHOICES,
+    }
+    return render(request, "vuln_manager/host_form.html", context)
+
+
+@login_required
 def port_list(request):
     latest_scan_ids = Port.objects.values("host").annotate(latest=Max("scan_id"))
     active_port_ids = [item["latest"] for item in latest_scan_ids if item["latest"]]
@@ -510,7 +538,7 @@ def update_vuln_status(request, pk):
             allowed_hosts={request.get_host()},
             require_https=request.is_secure(),
         ):
-            return redirect("referer")
+            return redirect(referer)
     return redirect("kanban_board")
 
 

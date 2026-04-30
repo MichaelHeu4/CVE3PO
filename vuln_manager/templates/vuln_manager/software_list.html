@@ -15,72 +15,78 @@
     </a>
 </section>
 
-<div class="bg-surface-container rounded-3xl p-8 overflow-hidden">
-    <div class="space-y-4">
+<div class="bg-surface-container rounded-3xl p-6 md:p-8 overflow-hidden shadow-2xl">
+    <div class="space-y-3">
         <!-- Header -->
-        <div class="grid grid-cols-12 px-6 py-2 text-[10px] font-bold text-outline uppercase tracking-[0.2em]">
-            <div class="col-span-4">Software Name</div>
+        <div class="hidden md:grid grid-cols-12 px-6 py-3 text-[10px] font-black text-outline/40 uppercase tracking-[0.3em] border-b border-outline-variant/5 mb-2 font-headline">
+            <div class="col-span-4">Software Component</div>
             <div class="col-span-3">Criticality</div>
-            <div class="col-span-2">Version</div>
-            <div class="col-span-1 text-center">Number of Servers</div>
-            <div class="col-span-2 text-right">Operations</div>
+            <div class="col-span-2 text-center">Version Control</div>
+            <div class="col-span-1 text-center">Node Count</div>
+            <div class="col-span-2 text-right">Explore</div>
         </div>
 
         {% for item in software %}
-        <div class="grid grid-cols-12 items-center p-6 bg-surface-container-low rounded-2xl hover:bg-surface-container-high transition-all group">
+        <div class="grid grid-cols-1 md:grid-cols-12 items-center p-5 bg-surface-container-low rounded-2xl border border-outline-variant/5 hover:border-primary/20 hover:bg-surface-container-high transition-all group relative">
             <!-- Name -->
-            <div class="col-span-4 flex items-center gap-4">
-                <div class="w-12 h-12 rounded-2xl bg-surface-container-highest flex items-center justify-center text-primary">
-                    <span class="material-symbols-outlined">deployed_code</span>
+            <div class="col-span-4 flex items-center gap-4 mb-3 md:mb-0">
+                <div class="w-12 h-12 rounded-xl bg-surface-container-highest flex items-center justify-center text-primary border border-outline-variant/10 group-hover:scale-110 transition-transform">
+                    <span class="material-symbols-outlined text-2xl">deployed_code</span>
                 </div>
-                <div>
-                    <a href="{% url 'software_detail' item.id %}" class="font-bold text-on-surface hover:text-primary transition-colors block text-sm">{{ item.name }}</a>
-                    <p class="text-[9px] text-outline uppercase tracking-widest mt-0.5">Software</p>
+                <div class="overflow-hidden">
+                    <a href="{% url 'software_detail' item.id %}" class="font-headline font-black text-on-surface hover:text-primary transition-colors block truncate text-base tracking-tight">{{ item.name }}</a>
+                    <p class="text-[10px] text-outline uppercase tracking-[0.1em] mt-0.5">Software Artifact</p>
                 </div>
             </div>
 
-            <div class="col-span-3 text-left">
+            <!-- Criticality -->
+            <div class="col-span-3 flex justify-start mb-3 md:mb-0 pl-0 md:pl-0">
                 {% if item.criticality %}
-                <span class="px-3 py-1 rounded-lg text-[9px] font-black tracking-widest {% if item.criticality == 'Critical' %}bg-error/10 text-error border border-error/20{% elif item.criticality == 'High' %}bg-tertiary/10 text-tertiary border border-tertiary/20{% else %}bg-primary/10 text-primary border border-primary/20{% endif %}">
-                    {{ item.criticality|upper }}
+                <span class="px-4 py-1.5 rounded-lg text-[9px] font-black tracking-[0.1em] uppercase {% if item.criticality == 'Critical' %}bg-error/10 text-error border border-error/20{% elif item.criticality == 'High' %}bg-tertiary/10 text-tertiary border border-tertiary/20{% else %}bg-primary/10 text-primary border border-primary/20{% endif %}">
+                    {{ item.criticality }}
                 </span>
                 {% else %}
-                <span class="text-outline-variant text-[9px] font-bold uppercase tracking-widest opacity-30">Undefined</span>
+                <span class="text-outline/20 text-[9px] font-black uppercase tracking-[0.1em]">No Priority</span>
                 {% endif %}
             </div>
 
             <!-- Version -->
-            <div class="col-span-2">
-                <span class="px-3 py-1 rounded-lg bg-surface-container-highest text-on-surface text-[10px] font-bold border border-outline-variant/10">
+            <div class="col-span-2 flex justify-center mb-3 md:mb-0">
+                <span class="px-3 py-1 rounded-lg bg-surface-container-highest text-primary text-[10px] font-black border border-outline-variant/10 shadow-sm">
                     {{ item.version|default:"v. unknown" }}
                 </span>
             </div>
 
             <!-- Nodes -->
-            <div class="col-span-1 text-center">
-                <span class="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-black mx-auto">
+            <div class="col-span-1 flex flex-col items-center gap-1 mb-4 md:mb-0">
+                <span class="w-9 h-9 rounded-xl bg-primary/10 text-primary border border-primary/20 flex items-center justify-center text-xs font-black shadow-lg shadow-primary/5">
                     {{ item.num_hosts }}
                 </span>
+                <p class="text-[8px] text-outline/50 font-black uppercase tracking-tighter italic">Nodes</p>
             </div>
 
             <!-- Actions -->
-            <div class="col-span-2 text-right flex items-center justify-end gap-2">
-                <a href="{% url 'software_detail' item.id %}" class="w-9 h-9 rounded-xl bg-surface-container-highest flex items-center justify-center text-outline hover:text-primary hover:bg-primary/10 transition-all">
-                    <span class="material-symbols-outlined text-sm">visibility</span>
-                </a>
-                <form action="{% url 'delete_software' item.id %}" method="POST" onsubmit="return confirm('Expunge software artifact from registry?')">
-                    {% csrf_token %}
-                    <button type="submit" class="w-9 h-9 rounded-xl bg-surface-container-highest flex items-center justify-center text-error/50 hover:text-error hover:bg-error/10 transition-all">
-                        <span class="material-symbols-outlined text-sm">delete</span>
-                    </button>
-                </form>
+            <div class="col-span-2 flex items-center justify-end gap-3">
+                <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <a href="{% url 'software_detail' item.id %}" class="w-10 h-10 rounded-xl bg-surface-container-highest border border-outline-variant/10 flex items-center justify-center text-on-surface hover:bg-primary hover:text-surface hover:border-primary transition-all shadow-xl">
+                        <span class="material-symbols-outlined text-lg">visibility</span>
+                    </a>
+                    <form action="{% url 'delete_software' item.id %}" method="POST" onsubmit="return confirm('Expunge software artifact from registry?')">
+                        {% csrf_token %}
+                        <button type="submit" class="w-10 h-10 rounded-xl bg-surface-container-highest border border-outline-variant/10 flex items-center justify-center text-error hover:bg-error hover:text-surface hover:border-error transition-all shadow-xl">
+                            <span class="material-symbols-outlined text-lg">delete</span>
+                        </button>
+                    </form>
+                </div>
             </div>
         </div>
         {% empty %}
-        <div class="text-center py-20 bg-surface-container-low rounded-3xl">
-            <span class="material-symbols-outlined text-outline-variant text-6xl mb-4">inventory_2</span>
-            <p class="text-on-surface-variant font-headline font-bold">No Software Artifacts Registered</p>
-            <p class="text-outline text-xs mt-2 uppercase tracking-widest">Awaiting architectural discovery</p>
+        <div class="text-center py-32 bg-surface-container-low rounded-3xl border-2 border-dashed border-outline-variant/10">
+            <div class="w-20 h-20 bg-surface-container-highest rounded-full flex items-center justify-center mx-auto mb-6">
+                <span class="material-symbols-outlined text-outline-variant text-4xl">inventory_2</span>
+            </div>
+            <h3 class="text-on-surface font-headline font-black text-xl tracking-tight uppercase tracking-[0.2em]">No Artifacts Registered</h3>
+            <p class="text-outline text-xs mt-2 uppercase tracking-[0.1em]">Awaiting architectural discovery or manual entry</p>
         </div>
         {% endfor %}
     </div>

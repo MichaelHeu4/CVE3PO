@@ -5,34 +5,50 @@
 {% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
 
 {% block content %}
-<section class="mb-12 flex justify-between items-end">
-    <div>
-        <h1 class="font-headline font-extrabold text-4xl text-on-surface tracking-tight mb-2">{{ host.ip_address }}</h1>
-        <p class="text-on-surface-variant font-body">Asset Name: <span class="text-primary font-bold uppercase tracking-widest text-xs">{{ host.hostname|default:"Anonymous Node" }}</span></p>
+<nav class="mb-8">
+    <ol class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-outline/50">
+        <li><a href="{% url 'dashboard' %}" class="hover:text-primary transition-colors">Dashboard</a></li>
+        <li class="material-symbols-outlined text-xs">chevron_right</li>
+        <li><a href="{% url 'host_list' %}" class="hover:text-primary transition-colors">Assets</a></li>
+        <li class="material-symbols-outlined text-xs">chevron_right</li>
+        <li class="text-on-surface">{{ host.ip_address }}</li>
+    </ol>
+</nav>
+
+<section class="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
+    <div class="flex items-center gap-6">
+        <div class="w-20 h-20 rounded-2xl bg-surface-container-highest border border-outline-variant/10 flex items-center justify-center text-primary shadow-2xl">
+            <span class="material-symbols-outlined text-4xl">dns</span>
+        </div>
+        <div>
+            <div class="flex items-center gap-2 mb-2">
+                <span class="px-2 py-0.5 rounded bg-primary/10 text-primary text-[9px] font-black uppercase tracking-widest border border-primary/20">Active Node</span>
+                <span class="w-1.5 h-1.5 rounded-full bg-outline-variant/30"></span>
+                <span class="text-[10px] text-outline font-black uppercase tracking-[0.1em]">{{ host.hostname|default:"Unidentified Architectural Node" }}</span>
+            </div>
+            <h1 class="font-headline font-black text-4xl md:text-5xl text-on-surface tracking-tighter">{{ host.ip_address }}</h1>
+        </div>
     </div>
     
-<div class="flex gap-4">
-  <div class="flex gap-3">
-    <form action="{% url 'delete_host' host.id %}" method="POST" onsubmit="return confirm('Delete asset?')">
-      {% csrf_token %}
-      <button type="submit" class="px-6 py-2.5 rounded-xl border border-error/20 text-error text-[10px] font-black tracking-widest uppercase hover:bg-error hover:text-surface transition-all flex items-center gap-2">
-          <span class="material-symbols-outlined text-sm">delete</span> Delete Asset
-      </button>
-    </form>
-  </div>
-  <div class="bg-surface-container-high px-6 py-4 rounded-xl flex items-center gap-4">
-    <div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-      <span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">sensors</span>
+    <div class="flex items-center gap-4">
+        <div class="bg-surface-container-high px-6 py-4 rounded-2xl border border-outline-variant/10 flex items-center gap-4 shadow-xl">
+            <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
+                <span class="material-symbols-outlined text-primary text-xl" style="font-variation-settings: 'FILL' 1;">sensors</span>
+            </div>
+            <div>
+                <p class="text-[9px] uppercase tracking-[0.2em] text-outline font-black mb-0.5">Global Priority</p>
+                <p class="font-black {%if host.criticality == 'Critical' %}text-error{%elif host.criticality == 'High' %}text-error{% elif host.criticality == 'Medium' %}text-tertiary{% else %}text-primary{% endif %} text-sm uppercase tracking-widest">
+                    {{ host.criticality|default:"NOT DEFINED" }}
+                </p>
+            </div>
+        </div>
+        <form action="{% url 'delete_host' host.id %}" method="POST" onsubmit="return confirm('Expunge node from registry?')">
+            {% csrf_token %}
+            <button type="submit" class="w-14 h-14 rounded-2xl bg-surface-container-highest border border-error/20 text-error hover:bg-error hover:text-surface hover:border-error transition-all flex items-center justify-center shadow-xl group">
+                <span class="material-symbols-outlined text-2xl transition-transform group-hover:scale-110">delete</span>
+            </button>
+        </form>
     </div>
-    <div>
-      <p class="text-[10px] uppercase tracking-widest text-outline">Criticality</p>
-      <p class="font-bold {%if host.criticality == 'Critical' %}text-error{%elif host.criticality == 'High' %}text-error{% elif host.criticality == 'Medium' %}text-warning{% else %}text-success{% endif %} text-sm uppercase tracking-tight">
-        {{host.criticality}}
-      </p>
-    </div>
-  </div>
-</div>
-
 </section>
 
 <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12">
