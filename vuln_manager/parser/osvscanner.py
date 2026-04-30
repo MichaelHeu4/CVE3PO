@@ -1,6 +1,6 @@
 import json
 import re
-from cvss import CVSS3, CVSS4
+from cvss import CVSS2, CVSS3, CVSS4
 from vuln_manager.models import Vulnerability
 
 
@@ -18,11 +18,9 @@ def normalize_severity_from_score(score):
         return "low"
     return "info"
 
-
 def extract_cvss_base_score(cvss_vector):
     """
-    Unterstützt CVSS v3.x und v4.0 Vector-Strings grob über cvss Library.
-    pip install cvss
+    Unterstützt CVSS v2, v3.x und v4.0 Vector-Strings über cvss Library.
     """
     if not cvss_vector:
         return None
@@ -33,6 +31,10 @@ def extract_cvss_base_score(cvss_vector):
 
         if cvss_vector.startswith(("CVSS:3.0", "CVSS:3.1")):
             return CVSS3(cvss_vector).scores()[0]
+        
+        if cvss_vector.startswith("AV:"):
+            # CVSS v2 often starts with AV:
+            return CVSS2(cvss_vector).scores()[0]
 
     except Exception:
         return None
@@ -46,26 +48,28 @@ def extract_severity(vuln):
         score_type = item.get("type")
         score_value = item.get("score")
 
-        if score_type in ("CVSS_V3", "CVSS_V4"):
+        if score_type in ("CVSS_V2", "CVSS_V3", "CVSS_V4"):
             base_score = extract_cvss_base_score(score_value)
             if base_score is not None:
-                return normalize_severity_from_score(base_score)
+                return (score_value, normalize_severity_from_score(base_score))
 
     # 2. Fallback: database_specific.severity
     database_specific = vuln.get("database_specific", {})
     sev_raw = database_specific.get("severity", "UNKNOWN").lower()
 
     if sev_raw == "critical":
-        return "critical"
+        return (None, "critical")
     if sev_raw == "high":
-        return "high"
+        return (None, "high")
     if sev_raw in ("moderate", "medium"):
-        return "medium"
+        return (None, "medium")
     if sev_raw == "low":
-        return "low"
+        return (None, "low")
 
-    return "info"
+    return (None, "info")
 
+
+CVE_REGEX = re.compile(r"CVE-\d{4}-\d{4,}", re.IGNORECASE)
 
 def extract_cve_id(vuln):
     ids = []
@@ -76,9 +80,23 @@ def extract_cve_id(vuln):
 
     ids.extend(vuln.get("aliases", []))
 
+    # 1. Bevorzugt exakte Treffer, die mit CVE- beginnen
     for entry in ids:
-        if str(entry).startswith("CVE-"):
-            return entry
+        if str(entry).upper().startswith("CVE-"):
+            return str(entry).upper()
+
+    # 2. Suche nach CVE-Muster in allen IDs (auch wenn nicht am Anfang)
+    for entry in ids:
+        match = CVE_REGEX.search(str(entry))
+        if match:
+            return match.group(0).upper()
+
+    # 3. Fallback für Formate wie DEBIAN_CVE_... (Ersetze _ durch - für Regex)
+    for entry in ids:
+        normalized = str(entry).replace("_", "-")
+        match = CVE_REGEX.search(normalized)
+        if match:
+            return match.group(0).upper()
 
     return osv_id or "OSV-Unknown"
 
@@ -120,13 +138,16 @@ def parse_osv_json(file_path, scan_obj, software_obj=None):
 
         description, poc = extract_poc_from_description(description)
 
-        severity = extract_severity(vuln)
-
+        cvss_score, severity = extract_severity(vuln)
+        if (cvss_score):
+            print(extract_cve_id(vuln) + " CVSS: " + cvss_score)
+        
         Vulnerability.objects.create(
             host=None,
             scan=scan_obj,
             software=software_obj,
             cve_id=extract_cve_id(vuln),
+            cvss=cvss_score,
             severity=severity,
             name=f"OSV: {summary}",
             description=description,

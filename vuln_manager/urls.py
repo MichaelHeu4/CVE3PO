@@ -52,4 +52,6 @@ urlpatterns = [
         views.remove_host_from_software,
         name="remove_host_from_software",
     ),
+    path("ai/dashboard/", views.ki_dashboard, name="ai_dashboard"),
+    path("ai/triage", views.do_triage, name="do_triage")
 ]

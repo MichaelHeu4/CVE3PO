@@ -7,6 +7,7 @@ from .parser import nuclei
 from .parser import openvas
 from .parser import osvscanner
 from .parser import semgrep
+from .utils import ai_triage
 from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -70,7 +71,6 @@ def logout_view(request):
     return redirect("login")
 
 
-@login_required
 def recalculate_host_criticality(host):
     max_weight = CRITICALITY_WEIGHTS.get(host.criticality, 0)
     for sw in host.software_inventory.all():
@@ -607,3 +607,65 @@ def delete_scan(request, pk):
         scan = get_object_or_404(Scan, pk=pk)
         scan.delete()
     return redirect("scan_list")
+
+
+import threading
+from django.db.models import Avg
+
+@login_required
+def ki_dashboard(request):
+    selected_vuln_id = request.GET.get("selected_vuln")
+    selected_vuln = None
+    if selected_vuln_id: 
+        selected_vuln = get_object_or_404(Vulnerability, pk=selected_vuln_id)
+
+    all_vulns = Vulnerability.objects.exclude(status="false_positive").distinct()
+    triaged_vulns = all_vulns.exclude(ai_result="tbd").count()
+    action_required = all_vulns.filter(ai_result="Act").count()
+
+    avg_proc_time = Vulnerability.objects.filter(ai_proc_time__gt=0).aggregate(Avg('ai_proc_time'))['ai_proc_time__avg'] or 0
+
+    ai = {
+        "model": "DeepSeek V4 Flash",
+        "proc_time": round(avg_proc_time, 2),
+    }
+    context = {
+        "triaged_vulns": triaged_vulns,
+        "all_vulns": all_vulns,
+        "action_required": action_required,
+        "ai": ai,
+        "selected_vuln": selected_vuln
+    }
+    return render(request, "vuln_manager/ki_dashboard.html", context)
+
+def run_triage_background():
+    # 1. Alle unbewerteten (tbd)
+    pending = Vulnerability.objects.exclude(
+        status__in=["fixed", "false_positive", "risk_accepted"]
+    ).filter(ai_result="tbd")
+    
+    for vuln in pending:
+        ai_triage.triage(vuln)
+        
+    # 2. Bereits bewertete, bei denen sich die Asset-Kritikalität geändert hat
+    triaged = Vulnerability.objects.exclude(
+        status__in=["fixed", "false_positive", "risk_accepted"]
+    ).exclude(ai_result="tbd")
+    
+    for vuln in triaged:
+        current_crit = "Low"
+        if vuln.most_critical_host:
+            current_crit = vuln.most_critical_host.criticality or "Low"
+            
+        if vuln.ai_last_criticality != current_crit:
+            print(f"[AI] Re-triaging {vuln.cve_id} due to criticality change: {vuln.ai_last_criticality} -> {current_crit}")
+            ai_triage.triage(vuln)
+
+@login_required
+def do_triage(request):
+    if request.method == "POST":
+        thread = threading.Thread(target=run_triage_background)
+        thread.start()
+        print("[AI] Background triage started.")
+
+    return redirect("ai_dashboard")

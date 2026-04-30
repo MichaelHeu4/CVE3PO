@@ -9,5 +9,14 @@ services:
       DEBUG: ${DEBUG}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS}
       DISABLE_REGISTER: ${DISABLE_REGISTER}
+      DATABASE_PATH: ${DATABASE_PATH}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
     env_file:
-      - .env 
+      - .env
+    volumes:
+      - cve3po:/app/data
+      - cve3po:/app/media
+
+volumes:
+  cve3po:
+  cve3po-reports:

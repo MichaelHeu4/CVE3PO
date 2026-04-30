@@ -12,11 +12,11 @@ COPY --from=builder /usr/local/lib/python3.13/site-packages/ /usr/local/lib/pyth
 COPY --from=builder /usr/local/bin/ /usr/local/bin/
 
 WORKDIR /app
-
+RUN mkdir -p /app/data && chown -R appuser:appuser /app/data
 COPY --chown=appuser:appuser . .
 
 USER appuser
 
 EXPOSE 8000
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "cve3po.wsgi:application"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "cve3po.wsgi:application"]
 

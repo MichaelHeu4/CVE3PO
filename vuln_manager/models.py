@@ -92,6 +92,13 @@ class Vulnerability(models.Model):
         ("risk_accepted", "Risk Accepted"),
         ("false_positive", "False Positive"),
     )
+    AI_RESULTS = (
+        ("Track", "Track"),
+        ("Track*", "Track*"),
+        ("Attend", "Attend"),
+        ("Act", "Act"),
+        ("tbd", "tbd")
+    )
     host = models.ForeignKey(
         Host,
         on_delete=models.CASCADE,
@@ -120,10 +127,51 @@ class Vulnerability(models.Model):
     severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES)
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default="open")
+    cvss = models.TextField(blank=True, null=True)
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
     nuclei_poc = models.TextField(blank=True, null=True)
     supply_chain = models.BooleanField(default=False)
 
+    ai_reason = models.TextField(blank=True, null=True)
+    ai_result = models.CharField(max_length=10, choices=AI_RESULTS, default="tbd")
+    ai_suggestion = models.TextField(blank=True, null=True)
+    ai_proc_time = models.FloatField(default=0.0)
+    ai_last_criticality = models.CharField(max_length=20, blank=True, null=True)
+
     def __str__(self):
         return f"{self.cve_id} - {self.name} ({self.severity})"
+
+    @property
+    def most_critical_host(self):
+        """
+        Gibt das Host-Objekt mit der höchsten Kritikalität zurück.
+        Prüft den direkt verknüpften Host sowie alle Hosts der verknüpften Software.
+        """
+        weight_map = {
+            "Critical": 4,
+            "High": 3,
+            "Medium": 2,
+            "Low": 1
+        }
+        
+        highest_weight = 0
+        top_host = None
+
+        # 1. Den direkt verknüpften Host prüfen
+        if self.host and self.host.criticality:
+            weight = weight_map.get(self.host.criticality, 0)
+            if weight > highest_weight:
+                highest_weight = weight
+                top_host = self.host
+
+        # 2. Die Hosts über die Software prüfen
+        if self.software:
+            for host in self.software.hosts.all():
+                if host.criticality:
+                    weight = weight_map.get(host.criticality, 0)
+                    if weight > highest_weight:
+                        highest_weight = weight
+                        top_host = host
+
+        return top_host
