@@ -24,7 +24,7 @@ class TriageErgebnis(BaseModel):
 # ==========================================
 # 2. API-CLIENT SETUP (OPENROUTER)
 # ==========================================
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "DEFAULT_CHANGE_ME")
 
 client = instructor.from_openai(
     OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY),
