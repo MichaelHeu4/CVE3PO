@@ -1,7 +1,7 @@
 {% extends 'vuln_manager/base.html' %}
 {% load vuln_filters %}
 
-{% block title %}Intelligence: {{ vuln.cve_id }}{% endblock %}
+{% block title %}Vulnerability: {{ vuln.cve_id }}{% endblock %}
 
 {% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
 
@@ -24,7 +24,7 @@
             <div class="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-10 pb-10 border-b border-outline-variant/10">
                 <div>
                     <div class="flex items-center gap-3 mb-4">
-                        <span class="px-3 py-1 rounded-lg bg-primary/10 text-primary text-[10px] font-black uppercase tracking-[0.2em] border border-primary/20">Security Intelligence</span>
+                        <span class="px-3 py-1 rounded-lg bg-primary/10 text-primary text-[10px] font-black uppercase tracking-[0.2em] border border-primary/20">Security Analysis</span>
                         <span class="w-1.5 h-1.5 rounded-full bg-outline-variant/30"></span>
                         <span class="text-[10px] text-outline font-black uppercase tracking-[0.1em]">{{ vuln.scan.get_scan_type_display }}</span>
                     </div>
@@ -71,7 +71,7 @@
             <div class="prose prose-invert max-w-none">
                 <div class="flex items-center gap-3 mb-6">
                     <div class="h-px flex-grow bg-outline-variant/10"></div>
-                    <h5 class="font-headline font-black text-[10px] uppercase tracking-[0.4em] text-outline whitespace-nowrap">Technical Intelligence</h5>
+                    <h5 class="font-headline font-black text-[10px] uppercase tracking-[0.4em] text-outline whitespace-nowrap">Technical Details</h5>
                     <div class="h-px flex-grow bg-outline-variant/10"></div>
                 </div>
                 <p class="text-on-surface-variant leading-relaxed text-lg font-medium selection:bg-primary/30">{{ vuln.description|linebreaksbr }}</p>
@@ -87,7 +87,7 @@
                     <div>
                         <div class="flex items-center gap-2 mb-2">
                             <span class="material-symbols-outlined text-primary text-sm">robot_2</span>
-                            <h5 class="font-headline font-black text-[10px] uppercase tracking-[0.3em] text-primary">AI Triage Intelligence</h5>
+                            <h5 class="font-headline font-black text-[10px] uppercase tracking-[0.3em] text-primary">AI Triage Results</h5>
                         </div>
                         <h3 class="text-on-surface font-black text-2xl tracking-tight">Automated Risk Analysis</h3>
                     </div>

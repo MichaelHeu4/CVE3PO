@@ -98,6 +98,61 @@ def api_update_vuln_status(request, pk):
     return JsonResponse({"status": "invalid method"}, status=405)
 
 
+import io
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from django.http import FileResponse
+from django.utils.timezone import now
+
+from xhtml2pdf import pisa
+from django.template.loader import render_to_string
+
+@login_required
+def export_dashboard_pdf(request):
+    all_vulns = Vulnerability.objects.exclude(status__in=["fixed", "false_positive"])
+    critical_count = all_vulns.filter(severity="critical").count()
+    high_count = all_vulns.filter(severity="high").count()
+    host_count = Host.objects.count()
+    vuln_hosts_count = Host.objects.filter(vulnerabilities__in=all_vulns).distinct().count()
+    avg_proc_time_ms = Vulnerability.objects.filter(ai_proc_time__gt=0).aggregate(Avg('ai_proc_time'))['ai_proc_time__avg'] or 0
+
+    top_hosts = Host.objects.annotate(
+        num_vulns=Count(
+            "vulnerabilities",
+            filter=~Q(vulnerabilities__status__in=["fixed", "false_positive"])
+        )
+    ).order_by("-num_vulns")[:5]
+
+    recent_vulns = Vulnerability.objects.filter(
+        severity__in=["critical", "high"]
+    ).exclude(status__in=["fixed", "false_positive"]).order_by("-id")[:5]
+
+    context = {
+        "report_date": now(),
+        "metrics": {
+            "host_count": host_count,
+            "vuln_count": all_vulns.count(),
+            "critical_count": critical_count,
+            "high_count": high_count,
+            "vuln_hosts_count": vuln_hosts_count,
+            "mttt": round(avg_proc_time_ms / 1000, 2),
+        },
+        "top_hosts": top_hosts,
+        "recent_vulns": recent_vulns,
+    }
+
+    html = render_to_string("vuln_manager/report_pdf.html", context)
+    buffer = io.BytesIO()
+    pisa_status = pisa.CreatePDF(html, dest=buffer)
+
+    if pisa_status.err:
+        return HttpResponse("Fehler bei der PDF-Erstellung", status=500)
+
+    buffer.seek(0)
+    return FileResponse(buffer, as_attachment=True, filename=f"cve3po_report_{now().strftime('%Y%m%d')}.pdf")
+
+
 @login_required
 def dashboard(request):
     host_count = Host.objects.count()
@@ -168,6 +223,13 @@ def dashboard(request):
     )
     last_scans = Scan.objects.all().order_by("-uploaded_at")[:5]
     software_count = Software.objects.count()
+
+    # AI Stats (MTTT)
+    avg_proc_time_ms = Vulnerability.objects.filter(ai_proc_time__gt=0).aggregate(Avg('ai_proc_time'))['ai_proc_time__avg'] or 0
+    ai_context = {
+        "proc_time": round(avg_proc_time_ms / 1000, 2),
+    }
+
     context = {
         "host_count": host_count,
         "port_count": port_count,
@@ -181,6 +243,7 @@ def dashboard(request):
         "timeline_labels": json.dumps(timeline_labels),
         "timeline_values": json.dumps(timeline_values),
         "software_count": software_count,
+        "ai": ai_context,
         "user": User.objects.get(pk=request.user.id),
     }
     return render(request, "vuln_manager/dashboard.html", context)
@@ -651,11 +714,11 @@ def ki_dashboard(request):
     triaged_vulns = all_vulns.exclude(ai_result="tbd").count()
     action_required = all_vulns.filter(ai_result="Act").count()
 
-    avg_proc_time = Vulnerability.objects.filter(ai_proc_time__gt=0).aggregate(Avg('ai_proc_time'))['ai_proc_time__avg'] or 0
+    avg_proc_time_ms = Vulnerability.objects.filter(ai_proc_time__gt=0).aggregate(Avg('ai_proc_time'))['ai_proc_time__avg'] or 0
 
     ai = {
         "model": "DeepSeek V4 Flash",
-        "proc_time": round(avg_proc_time, 2),
+        "proc_time": round(avg_proc_time_ms / 1000, 2),
     }
     context = {
         "triaged_vulns": triaged_vulns,

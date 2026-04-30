@@ -22,9 +22,9 @@
         </div>
         <div>
             <div class="flex items-center gap-2 mb-2">
-                <span class="px-2 py-0.5 rounded bg-primary/10 text-primary text-[9px] font-black uppercase tracking-widest border border-primary/20">Active Node</span>
+                <span class="px-2 py-0.5 rounded bg-primary/10 text-primary text-[9px] font-black uppercase tracking-widest border border-primary/20">Active Host</span>
                 <span class="w-1.5 h-1.5 rounded-full bg-outline-variant/30"></span>
-                <span class="text-[10px] text-outline font-black uppercase tracking-[0.1em]">{{ host.hostname|default:"Unidentified Architectural Node" }}</span>
+                <span class="text-[10px] text-outline font-black uppercase tracking-[0.1em]">{{ host.hostname|default:"Unidentified Host" }}</span>
             </div>
             <h1 class="font-headline font-black text-4xl md:text-5xl text-on-surface tracking-tighter">{{ host.ip_address }}</h1>
         </div>
@@ -42,7 +42,7 @@
                 </p>
             </div>
         </div>
-        <form action="{% url 'delete_host' host.id %}" method="POST" onsubmit="return confirm('Expunge node from registry?')">
+        <form action="{% url 'delete_host' host.id %}" method="POST" onsubmit="return confirm('Delete host and its data?')">
             {% csrf_token %}
             <button type="submit" class="w-14 h-14 rounded-2xl bg-surface-container-highest border border-error/20 text-error hover:bg-error hover:text-surface hover:border-error transition-all flex items-center justify-center shadow-xl group">
                 <span class="material-symbols-outlined text-2xl transition-transform group-hover:scale-110">delete</span>
@@ -92,7 +92,7 @@
                     </button>
                     <div id="vuln-{{ vuln.id }}" class="hidden px-6 pb-6 border-t border-outline-variant/5">
                         <div class="pt-6">
-                            <p class="text-xs text-on-surface-variant leading-relaxed mb-6">{{ vuln.description|default:"No technical intelligence provided." }}</p>
+                            <p class="text-xs text-on-surface-variant leading-relaxed mb-6">{{ vuln.description|default:"No technical details provided." }}</p>
                             <div class="flex justify-between items-center">
                                 <a href="{% url 'vuln_detail' vuln.id %}" class="text-[10px] font-black tracking-widest text-primary uppercase hover:underline">Full Analysis & POC</a>
                                 <span class="text-[9px] text-outline uppercase">Scan Identifier: {{ vuln.scan.id }}</span>
@@ -130,7 +130,7 @@
                     </div>
                 </div>
             </form>
-            <p class="text-[9px] text-outline-variant mt-4 leading-relaxed italic">Defines architectural priority and remediation SLAs for this specific node.</p>
+            <p class="text-[9px] text-outline-variant mt-4 leading-relaxed italic">Defines host priority and remediation SLAs for this asset.</p>
         </div>
 
         <!-- Ports -->

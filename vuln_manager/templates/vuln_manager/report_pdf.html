@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>CVE3PO Security Report</title>
+    <style>
+        @page {
+            size: a4 portrait;
+            @frame header_frame {
+                -pdf-frame-content: header_content;
+                left: 50pt; width: 512pt; top: 50pt; height: 40pt;
+            }
+            @frame content_frame {
+                left: 50pt; width: 512pt; top: 90pt; height: 632pt;
+            }
+            @frame footer_frame {
+                -pdf-frame-content: footer_content;
+                left: 50pt; width: 512pt; top: 772pt; height: 20pt;
+            }
+        }
+        body {
+            font-family: Helvetica, Arial, sans-serif;
+            color: #060e20;
+            font-size: 10pt;
+            line-height: 1.4;
+        }
+        h1 { font-size: 28pt; color: #00668b; margin-bottom: 2pt; letter-spacing: -1pt; }
+        h2 { font-size: 18pt; color: #00668b; margin-top: 25pt; border-bottom: 2pt solid #3bbffa; padding-bottom: 5pt; text-transform: uppercase; letter-spacing: 1pt; }
+        h3 { font-size: 14pt; color: #00668b; margin-top: 15pt; }
+        
+        .header-info { font-size: 9pt; color: #6d758c; margin-bottom: 30pt; border-left: 3pt solid #dee5ff; padding-left: 10pt; }
+        
+        .metric-container { width: 100%; margin-bottom: 30pt; }
+        .metric-box { background-color: #f8faff; border: 1pt solid #dee5ff; padding: 15pt; border-radius: 8pt; width: 30%; display: inline-block; margin-right: 2%; text-align: center; }
+        .metric-label { font-size: 7pt; font-weight: bold; color: #6d758c; text-transform: uppercase; letter-spacing: 1pt; margin-bottom: 5pt; }
+        .metric-value { font-size: 24pt; font-weight: bold; color: #00668b; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 15pt; border: 1pt solid #dee5ff; }
+        th { background-color: #f0f4f8; color: #00668b; padding: 8pt; text-align: left; font-size: 8pt; font-weight: bold; text-transform: uppercase; border-bottom: 1pt solid #dee5ff; }
+        td { border-bottom: 1pt solid #f0f4f8; padding: 8pt; font-size: 9pt; vertical-align: top; }
+        
+        .severity { padding: 3pt 8pt; border-radius: 4pt; font-weight: bold; font-size: 7pt; color: white; text-transform: uppercase; }
+        .severity-critical { background-color: #9f0519; }
+        .severity-high { background-color: #fc4563; }
+        .severity-medium { background-color: #8950fc; }
+        .severity-low { background-color: #1bc5bd; }
+        
+        .cve-id { font-weight: bold; color: #00668b; font-family: monospace; font-size: 10pt; }
+        .asset-tag { font-size: 8pt; color: #6d758c; margin-top: 2pt; }
+        
+        .footer { text-align: center; font-size: 8pt; color: #a3aac4; border-top: 1pt solid #dee5ff; padding-top: 10pt; }
+    </style>
+</head>
+<body>
+    <div id="header_content">
+        <h1>CVE<span style="color: #3bbffa;">3PO</span> <span style="font-weight: normal; color: #6d758c; font-size: 18pt;">| Security</span></h1>
+    </div>
+
+    <div id="footer_content" class="footer">
+        Vulnerability Assessment Report | Confidential | Page <pdf:pagenumber>
+    </div>
+
+    <p class="header-info">
+        <strong>Report ID:</strong> {{ report_date|date:"Ymd-His" }}<br>
+        <strong>Generated:</strong> {{ report_date|date:"d. F Y | H:i" }} UTC<br>
+        <strong>Authority:</strong> CVE3PO Autonomous Triage Engine
+    </p>
+
+    <h2>Executive Summary</h2>
+    <div class="metric-container">
+        <div class="metric-box">
+            <div class="metric-label">Infrastructure Assets</div>
+            <div class="metric-value">{{ metrics.host_count }}</div>
+        </div>
+        <div class="metric-box">
+            <div class="metric-label">Active Threats</div>
+            <div class="metric-value">{{ metrics.vuln_count }}</div>
+        </div>
+        <div class="metric-box">
+            <div class="metric-label">Mean Triage Speed</div>
+            <div class="metric-value">{{ metrics.mttt }}s</div>
+        </div>
+    </div>
+
+    <div style="margin-top: 10pt; background-color: #fff5f5; border: 1pt solid #fed7d7; padding: 15pt; border-radius: 8pt;">
+        <p style="margin: 0; color: #9f0519; font-weight: bold; font-size: 11pt;">Critical Risk Alert</p>
+        <p style="margin: 5pt 0 0 0; color: #060e20;">There are currently <strong>{{ metrics.critical_count }}</strong> critical and <strong>{{ metrics.high_count }}</strong> high-priority vulnerabilities requiring immediate remediation. <strong>{{ metrics.vuln_hosts_count }}</strong> out of {{ metrics.host_count }} assets are currently impacted.</p>
+    </div>
+
+    <h2>Top Vulnerable Assets</h2>
+    <table>
+        <thead>
+            <tr>
+                <th width="30%">IP Address</th>
+                <th width="35%">Hostname</th>
+                <th width="20%">Priority</th>
+                <th width="15%" style="text-align: center;">Risks</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for host in top_hosts %}
+            <tr>
+                <td style="font-weight: bold;">{{ host.ip_address }}</td>
+                <td>{{ host.hostname|default:"n/a" }}</td>
+                <td>
+                    {% if host.criticality %}
+                    <span style="font-weight: bold; font-size: 8pt; color: #00668b;">{{ host.criticality|upper }}</span>
+                    {% else %}
+                    <span style="color: #a3aac4; font-style: italic;">not set</span>
+                    {% endif %}
+                </td>
+                <td style="text-align: center; font-weight: bold; color: #fc4563;">{{ host.num_vulns }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <pdf:nextpage />
+
+    <h2>Recent High-Priority Findings</h2>
+    <table>
+        <thead>
+            <tr>
+                <th width="25%">CVE ID</th>
+                <th width="15%">Severity</th>
+                <th width="60%">Security Context</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for vuln in recent_vulns %}
+            <tr>
+                <td><span class="cve-id">{{ vuln.cve_id }}</span></td>
+                <td><span class="severity severity-{{ vuln.severity|lower }}">{{ vuln.severity|upper }}</span></td>
+                <td>
+                    <div style="font-weight: bold; font-size: 10pt; margin-bottom: 3pt;">{{ vuln.name|truncatechars:60 }}</div>
+                    <div class="asset-tag">
+                        <strong>Target:</strong> {% if vuln.host %}{{ vuln.host.ip_address }}{% else %}{{ vuln.software.name }}{% endif %}
+                        <br>
+                        <strong>Status:</strong> {{ vuln.get_status_display }}
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>

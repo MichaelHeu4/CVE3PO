@@ -20,7 +20,7 @@
     <div class="space-y-4">
         <!-- Header -->
         <div class="grid grid-cols-12 px-6 py-2 text-[10px] font-bold text-outline uppercase tracking-[0.2em]">
-            <div class="col-span-3">Intelligence Source</div>
+            <div class="col-span-3">Data Source</div>
             <div class="col-span-4">Scan Name</div>
             <div class="col-span-2 text-center">Timestamp</div>
             <div class="col-span-1 text-center">Findings</div>
@@ -43,7 +43,7 @@
                     {% if scan.raw_file %}
                         {{ scan.raw_file.name|basename }}
                     {% else %}
-                        <span class="text-outline-variant italic font-normal">Manual Intelligence Entry</span>
+                        <span class="text-outline-variant italic font-normal">Manual Data Entry</span>
                     {% endif %}
                 </p>
             </div>
@@ -68,7 +68,7 @@
                     <span class="material-symbols-outlined text-sm">download</span>
                 </a>
                 {% endif %}
-                <form action="{% url 'delete_scan' scan.id %}" method="POST" onsubmit="return confirm('Expunge intelligence manifest and all derived findings?')">
+                <form action="{% url 'delete_scan' scan.id %}" method="POST" onsubmit="return confirm('Delete scan file and all related findings?')">
                     {% csrf_token %}
                     <button type="submit" class="w-9 h-9 rounded-xl bg-surface-container-highest flex items-center justify-center text-error/50 hover:text-error hover:bg-error/10 transition-all">
                         <span class="material-symbols-outlined text-sm">delete_sweep</span>
@@ -79,8 +79,8 @@
         {% empty %}
         <div class="text-center py-20 bg-surface-container-low rounded-3xl">
             <span class="material-symbols-outlined text-outline-variant text-6xl mb-4">history</span>
-            <p class="text-on-surface-variant font-headline font-bold">Registry Empty</p>
-            <p class="text-outline text-xs mt-2 uppercase tracking-widest">System awaiting architectural ingestion</p>
+            <p class="text-on-surface-variant font-headline font-bold">Inventory Empty</p>
+            <p class="text-outline text-xs mt-2 uppercase tracking-widest">System awaiting host import</p>
         </div>
         {% endfor %}
     </div>

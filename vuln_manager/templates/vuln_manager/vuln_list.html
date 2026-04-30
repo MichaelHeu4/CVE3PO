@@ -1,7 +1,7 @@
 {% extends 'vuln_manager/base.html' %}
 {% load vuln_filters %}
 
-{% block title %}Strategic Risk Ledger{% endblock %}
+{% block title %}Vulnerability List{% endblock %}
 
 {% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
 
@@ -10,7 +10,7 @@
 <section class="mb-12">
     <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-6">
         <div>
-            <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight">Threat <span class="text-primary">Intelligence</span></h1>
+            <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight">Security <span class="text-primary">Alerts</span></h1>
             <p class="text-on-surface-variant font-body max-w-xl text-sm">Overview of detected security flaws across the network.</p>
         </div>
         <div class="flex items-center gap-4 bg-surface-container-low p-1.5 rounded-xl">
@@ -65,9 +65,9 @@
     <div class="space-y-3">
         <!-- Header -->
         <div class="hidden md:grid grid-cols-12 px-6 py-4 text-[10px] font-black text-outline/40 uppercase tracking-[0.3em] border-b border-outline-variant/5 mb-2">
-            <div class="col-span-2">Strategic ID</div>
+            <div class="col-span-2">CVE ID</div>
             <div class="col-span-1 text-center">Severity</div>
-            <div class="col-span-4">Vulnerability Intelligence</div>
+            <div class="col-span-4">Vulnerability Details</div>
             <div class="col-span-2 text-center">Target Scope</div>
             <div class="col-span-2 text-center">Lifecycle</div>
             <div class="col-span-1 text-right">Explore</div>
@@ -96,7 +96,7 @@
                 <div class="flex items-center gap-2">
                     <span class="text-[9px] text-outline/50 font-black uppercase tracking-tighter italic">Found via {{ vuln.scan.get_scan_type_display }}</span>
                     <span class="w-1 h-1 rounded-full bg-outline-variant/30"></span>
-                    <p class="text-[10px] text-outline/60 line-clamp-1 italic max-w-[200px]">{{ vuln.description|default:"No deep intelligence available." }}</p>
+                    <p class="text-[10px] text-outline/60 line-clamp-1 italic max-w-[200px]">{{ vuln.description|default:"No description available." }}</p>
                 </div>
             </div>
 
@@ -141,8 +141,8 @@
             <div class="w-20 h-20 bg-surface-container-highest rounded-full flex items-center justify-center mx-auto mb-6">
                 <span class="material-symbols-outlined text-outline-variant text-4xl">security</span>
             </div>
-            <h3 class="text-on-surface font-headline font-black text-xl tracking-tight uppercase tracking-[0.2em]">Risk Ledger Clear</h3>
-            <p class="text-outline text-xs mt-2 uppercase tracking-[0.1em]">No strategic threats currently identified in the environment</p>
+            <h3 class="text-on-surface font-headline font-black text-xl tracking-tight uppercase tracking-[0.2em]">All Systems Clear</h3>
+            <p class="text-outline text-xs mt-2 uppercase tracking-[0.1em]">No vulnerabilities found in the environment</p>
         </div>
         {% endfor %}
     </div>
