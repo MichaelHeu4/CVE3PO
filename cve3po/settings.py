@@ -75,10 +75,19 @@ WSGI_APPLICATION = "cve3po.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+DATABASE_PATH_ENV = os.environ.get("DATABASE_PATH")
+if DATABASE_PATH_ENV:
+    db_path = Path(DATABASE_PATH_ENV)
+    # Falls nur ein Ordner angegeben wurde, hänge den Dateinamen an
+    if db_path.is_dir() or DATABASE_PATH_ENV.endswith("/"):
+        db_path = db_path / "db.sqlite3"
+else:
+    db_path = BASE_DIR / "db.sqlite3"
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "NAME": db_path,
     }
 }
 

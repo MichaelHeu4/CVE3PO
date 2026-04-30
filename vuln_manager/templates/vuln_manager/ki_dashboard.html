@@ -61,6 +61,13 @@
                         <h3 class="font-headline font-bold text-on-surface text-lg">Triage Queue</h3>
                         <p class="font-body text-xs text-on-surface-variant mt-0.5">Prioritized by AI Confidence &amp; Potential Impact</p>
                     </div>
+                    <form action="{% url 'do_triage' %}" method="post">
+                        {% csrf_token %}
+                        <button type="submit" class="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-md hover:bg-primary-hover transition-colors font-body text-sm font-bold">
+                            <span class="material-symbols-outlined text-[18px]">auto_fix</span>
+                            Run AI Triage
+                        </button>
+                    </form>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-left border-collapse">
@@ -89,7 +96,13 @@
                                 <td class="py-4 px-5 font-medium text-on-surface">{{ vuln.cve_id }}</td>
                                 <td class="py-4 px-5">
                                     <div class="flex flex-col">
-                                        <span class="text-on-surface">{% if vuln.host %} {{ vuln.host }} {% else %} n/a {% endif %}</span>
+                                        <span class="text-on-surface">
+                                            {% if vuln.most_critical_host %}
+                                                {{ vuln.most_critical_host }}
+                                            {% else %}
+                                                n/a
+                                            {% endif %}
+                                        </span>
                                         <span class="text-xs text-on-surface-variant">{% if vuln.software %} {{ vuln.software }} {% endif %}</span>
                                     </div>
                                 </td>
@@ -112,44 +125,83 @@
             <!-- AI Rationale Pane (Contextual Details) -->
             <div class="w-full xl:w-96 flex flex-col gap-6">
                 <!-- Rationale Card -->
-                <div class="bg-surface-container-highest rounded-lg p-6 ghost-border ambient-shadow relative overflow-hidden">
+                <div class="bg-surface-container-highest rounded-lg p-6 ghost-border ambient-shadow relative overflow-hidden flex-1">
                     <div class="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-bl-full pointer-events-none"></div>
-                    <div class="flex items-center gap-2 mb-6 border-b border-outline-variant/20 pb-4">
-                        <span class="material-symbols-outlined text-primary text-xl">psychology</span>
-                        <h3 class="font-headline font-bold text-on-surface">AI Rationale</h3>
+                    <div class="flex items-center justify-between mb-6 border-b border-outline-variant/20 pb-4">
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-outlined text-primary text-xl">psychology</span>
+                            <h3 class="font-headline font-bold text-on-surface">AI Rationale</h3>
+                        </div>
+                        {% if selected_vuln.ai_result != "tbd" %}
+                        <span class="px-3 py-1 rounded-md bg-primary text-on-primary font-bold text-sm">
+                            {{ selected_vuln.ai_result }}
+                        </span>
+                        {% endif %}
                     </div>
-                    <div class="space-y-5">
-                        <div class="flex flex-col gap-1">
-                            <span class="text-xs font-body font-medium text-on-surface-variant uppercase tracking-wider">Context Analysis</span>
-                            <p class="font-body text-sm text-on-surface leading-relaxed">
-                                {% if selected_vuln %}
-                                    {{ selected_vuln.ai_reason }}
-                                {% else %}
-                                    Select a triaged vulnerability to show the reasoning of the AI
-                                {% endif %}
+                    
+                    {% if selected_vuln %}
+                    <div class="space-y-6">
+                        <!-- Gedankengang -->
+                        <div class="flex flex-col gap-2">
+                            <span class="text-[10px] font-body font-bold text-primary uppercase tracking-widest">Analysis & Reasoning</span>
+                            <p class="font-body text-sm text-on-surface leading-relaxed italic bg-surface-container-low/50 p-3 rounded-md border-l-2 border-primary">
+                                "{{ selected_vuln.ai_reason }}"
                             </p>
                         </div>
-                        <div class="flex flex-col gap-3">
+
+                        <!-- Patching Vorschlag -->
+                        <div class="flex flex-col gap-2">
+                            <span class="text-[10px] font-body font-bold text-tertiary uppercase tracking-widest">Remediation Strategy</span>
+                            <div class="bg-tertiary-container/20 p-4 rounded-lg border border-tertiary/10">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <span class="material-symbols-outlined text-tertiary text-sm">build</span>
+                                    <span class="text-xs font-bold text-on-surface">Patching Suggestion</span>
+                                </div>
+                                <p class="font-body text-sm text-on-surface">
+                                    {{ selected_vuln.ai_suggestion }}
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Findings & Indicators -->
+                        <div class="flex flex-col gap-3 pt-4 border-t border-outline-variant/10">
+                            <span class="text-[10px] font-body font-bold text-on-surface-variant uppercase tracking-widest mb-1">Contextual Indicators</span>
+                            
                             {% if selected_vuln.nuclei_poc %}
-                            <div class="flex items-start gap-3">
-                                <span class="material-symbols-outlined text-tertiary text-[18px] mt-0.5">warning</span>
+                            <div class="flex items-start gap-3 p-2 rounded-md hover:bg-error-container/10 transition-colors">
+                                <span class="material-symbols-outlined text-error text-[18px]">warning</span>
                                 <div>
-                                    <span class="block text-sm font-medium text-on-surface">Active Exploit Detected</span>
-                                    <span class="block text-xs text-on-surface-variant">An active Exploit or PoC exists for this vulnerability</span>
+                                    <span class="block text-xs font-bold text-on-surface">Exploit Available</span>
+                                    <span class="block text-[10px] text-on-surface-variant line-clamp-1">{{ selected_vuln.nuclei_poc }}</span>
                                 </div>
                             </div>
                             {% endif %}
-                            {% if selected_vuln.host %} <!-- TODO auf Internet Facing überprüfen -->
-                            <div class="flex items-start gap-3">
-                                <span class="material-symbols-outlined text-primary text-[18px] mt-0.5">hub</span>
+
+                            {% if selected_vuln.host or selected_vuln.software.hosts.all %}
+                            <div class="flex items-start gap-3 p-2 rounded-md hover:bg-primary-container/10 transition-colors">
+                                <span class="material-symbols-outlined text-primary text-[18px]">hub</span>
                                 <div>
-                                    <span class="block text-sm font-medium text-on-surface">Asset Exposure</span>
-                                    <span class="block text-xs text-on-surface-variant">Asset is publicly facing.</span>
+                                    <span class="block text-xs font-bold text-on-surface">Asset Intelligence</span>
+                                    <span class="block text-[10px] text-on-surface-variant">
+                                        {% if selected_vuln.most_critical_host.criticality == "Critical" or selected_vuln.most_critical_host.criticality == "High" %}
+                                            High-Value Asset detected
+                                        {% else %}
+                                            Standard Internal Asset
+                                        {% endif %}
+                                    </span>
                                 </div>
                             </div>
                             {% endif %}
                         </div>
                     </div>
+                    {% else %}
+                    <div class="flex flex-col items-center justify-center py-12 text-center">
+                        <span class="material-symbols-outlined text-outline text-5xl mb-4 opacity-20">target</span>
+                        <p class="font-body text-sm text-on-surface-variant">
+                            Select a vulnerability from the queue<br>to view the AI's deep analysis.
+                        </p>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>

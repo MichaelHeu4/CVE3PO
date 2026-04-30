@@ -136,6 +136,8 @@ class Vulnerability(models.Model):
     ai_reason = models.TextField(blank=True, null=True)
     ai_result = models.CharField(max_length=10, choices=AI_RESULTS, default="tbd")
     ai_suggestion = models.TextField(blank=True, null=True)
+    ai_proc_time = models.FloatField(default=0.0)
+    ai_last_criticality = models.CharField(max_length=20, blank=True, null=True)
 
     def __str__(self):
         return f"{self.cve_id} - {self.name} ({self.severity})"
