@@ -729,6 +729,62 @@ def ki_dashboard(request):
     }
     return render(request, "vuln_manager/ki_dashboard.html", context)
 
+@login_required
+def extensions_view(request):
+    # Hardcoded modules for the prototype UI
+    modules = [
+        {
+            "id": "wazuh",
+            "name": "Wazuh Connector",
+            "description": "Real-time vulnerability streaming via webhooks. Automatically creates hosts and manages vulnerability lifecycles.",
+            "status": "Active",
+            "icon": "webhook",
+            "color": "primary",
+            "updated": "Just now"
+        },
+        {
+            "id": "cloud_sentinel",
+            "name": "Cloud Sentinel",
+            "description": "Continuous posture monitoring and threat detection across AWS, GCP, and Azure environments.",
+            "version": "v2.4.0",
+            "status": "Active",
+            "icon": "cloud_sync",
+            "color": "primary",
+            "updated": "2d ago"
+        },
+        {
+            "id": "docker_auditor",
+            "name": "Docker Auditor",
+            "description": "Automated vulnerability scanning for container images and runtime security policy enforcement.",
+            "version": "v1.8.2",
+            "status": "Active",
+            "icon": "view_in_ar",
+            "color": "tertiary",
+            "updated": "5h ago"
+        },
+        {
+            "id": "slack_notifier",
+            "name": "Slack Notifier",
+            "description": "Direct integration for instant critical vulnerability alerts and weekly security reports.",
+            "version": "v3.0.1",
+            "status": "Inactive",
+            "icon": "chat_bubble",
+            "color": "on-surface",
+            "updated": "N/A"
+        },
+        {
+            "id": "ghost_inspector",
+            "name": "Ghost Inspector",
+            "description": "Deep packet inspection and stealth reconnaissance for unknown network entry points.",
+            "status": "Live Monitoring",
+            "icon": "visibility_lock",
+            "color": "primary-fixed",
+            "updated": "Live"
+        },
+    ]
+    return render(request, "vuln_manager/extensions.html", {"modules": modules})
+
+
 def run_triage_background():
     # 1. Alle unbewerteten (tbd)
     pending = Vulnerability.objects.exclude(
