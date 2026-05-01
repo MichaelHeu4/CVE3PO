@@ -2,7 +2,7 @@ from django.views.decorators.http import require_POST
 from django.shortcuts import render, redirect, get_object_or_404
 from django.db.models import Count, Q, Max, Case, When, Value, IntegerField
 from django.db.models.functions import TruncDate
-from .models import Host, Port, Vulnerability, Scan, Software, Extension
+from .models import Host, Port, Vulnerability, Scan, Software, Extension, HostSoftwareRelationship
 from .parser import nmap
 from .parser import nuclei
 from .parser import openvas
@@ -158,15 +158,9 @@ def export_dashboard_pdf(request):
 @require_POST
 def update_inventory_api(request):
     """
-    API endpoint for agents to report software inventory.
-    Payload: {
-        "host_ip": "192.168.1.5",
-        "hostname": "optional-name",
-        "software": [
-            {"name": "openssl", "version": "1.1.1", "vendor": "openssl"},
-            ...
-        ]
-    }
+    API endpoint for agents to report software inventory (Strategy A).
+    Removes previous agent-sourced entries for the host before adding new ones.
+    Manual entries remain untouched.
     """
     try:
         data = json.loads(request.body)
@@ -183,16 +177,15 @@ def update_inventory_api(request):
             host.hostname = hostname
             host.save()
 
-        # 2. Software verknüpfen
-        # Optional: Hier könnte man alte Software-Links löschen, wenn man einen Full-Snapshot möchte
-        # host.software_inventory.clear() 
+        # 2. Strategy A: Alle bisherigen "agent" Einträge für diesen Host löschen
+        HostSoftwareRelationship.objects.filter(host=host, source="agent").delete()
 
         added_count = 0
         for sw_item in software_list:
             name = sw_item.get("name")
             version = sw_item.get("version")
             vendor = sw_item.get("vendor")
-            port = sw_item.get("port") # optional
+            port = sw_item.get("port")
 
             if name:
                 sw_obj, _ = Software.objects.get_or_create(
@@ -201,13 +194,19 @@ def update_inventory_api(request):
                     vendor=vendor,
                     listening_port=port
                 )
-                sw_obj.hosts.add(host)
+                
+                # Gezielt als "agent" Verknüpfung anlegen
+                HostSoftwareRelationship.objects.get_or_create(
+                    host=host,
+                    software=sw_obj,
+                    source="agent"
+                )
                 added_count += 1
 
         return JsonResponse({
             "status": "success", 
             "host": host.ip_address,
-            "software_added": added_count
+            "agent_software_synced": added_count
         }, status=200)
 
     except Exception as e:

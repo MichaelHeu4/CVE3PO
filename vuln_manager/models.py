@@ -72,6 +72,21 @@ class Software(models.Model):
         return f"{self.name} {self.version or ''}{port_info}"
 
 
+class HostSoftwareRelationship(models.Model):
+    SOURCE_CHOICES = (
+        ("manual", "Manual Entry"),
+        ("agent", "Agent Collection"),
+        ("scanner", "Automated Scanner"),
+    )
+    host = models.ForeignKey(Host, on_delete=models.CASCADE)
+    software = models.ForeignKey(Software, on_delete=models.CASCADE)
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default="manual")
+    installed_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("host", "software")
+
+
 class Port(models.Model):
     host = models.ForeignKey(
         Host, on_delete=models.CASCADE, related_name="ports")
