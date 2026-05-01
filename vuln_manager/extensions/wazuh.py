@@ -1,6 +1,6 @@
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponseNotFound
 import json
 from vuln_manager.models import Host, Scan, Vulnerability, Extension
 
@@ -15,9 +15,7 @@ def webhook(request):
     try:
         wazuh_ext, _ = Extension.objects.get_or_create(name_id="wazuh")
         if not wazuh_ext.is_active:
-            return JsonResponse(
-                {"status": "ignored", "reason": "extension disabled"}, status=200
-            )
+            return HttpResponseNotFound()
 
         provided_token = request.headers.get("X-API-Key")
         if not provided_token or provided_token != wazuh_ext.api_token:

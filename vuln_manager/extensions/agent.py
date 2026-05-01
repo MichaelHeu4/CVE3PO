@@ -1,6 +1,11 @@
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponseNotFound
 from django.views.decorators.csrf import csrf_exempt
-from vuln_manager.models import HostSoftwareRelationship, Extension, Host, Software
+from vuln_manager.models import (
+    HostSoftwareRelationship,
+    Extension,
+    Host,
+    Software,
+)
 import json
 from django.views.decorators.http import require_POST
 
@@ -14,6 +19,9 @@ def update_inventory_api(request):
     """
     try:
         api_ext, _ = Extension.objects.get_or_create(name_id="agent_api")
+        if not api_ext.is_active:
+            return HttpResponseNotFound()
+
         provided_token = request.headers.get("X-API-Key")
         if not provided_token or provided_token != api_ext.api_token:
             return JsonResponse(
@@ -35,7 +43,13 @@ def update_inventory_api(request):
             host.hostname = hostname
             host.save()
 
-        HostSoftwareRelationship.objects.filter(host=host, source="agent").delete()
+        host_software_rel = HostSoftwareRelationship.objects.filter(
+            host=host, source="agent"
+        )
+
+        for hsr in host_software_rel:
+            hsr.software.delete()
+            hsr.delete()
 
         added_count = 0
         for sw_item in software_list:
@@ -46,12 +60,19 @@ def update_inventory_api(request):
 
             if name:
                 sw_obj, _ = Software.objects.get_or_create(
-                    name=name, version=version, vendor=vendor, listening_port=port
+                    name=name,
+                    version=version,
+                    vendor=vendor,
+                    listening_port=port,
                 )
+
+                sw_obj.hosts.add(host)
+                sw_obj.save()
 
                 HostSoftwareRelationship.objects.get_or_create(
                     host=host, software=sw_obj, source="agent"
                 )
+
                 added_count += 1
 
         return JsonResponse(
