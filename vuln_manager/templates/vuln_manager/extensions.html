@@ -45,9 +45,18 @@
             </div>
             
             <h3 class="text-xl font-headline font-black text-on-surface mb-3 tracking-tight group-hover:text-primary transition-colors">{{ mod.name }}</h3>
-            <p class="text-xs text-on-surface-variant font-body leading-relaxed mb-8">
+            <p class="text-xs text-on-surface-variant font-body leading-relaxed mb-6">
                 {{ mod.description }}
             </p>
+
+            <!-- API Key Display -->
+            <div class="mb-8 p-3 rounded-xl bg-surface-container-lowest border border-outline-variant/10">
+                <p class="text-[8px] font-black uppercase tracking-widest text-outline/50 mb-2">Access Token (X-API-Key)</p>
+                <div class="flex items-center justify-between gap-2 overflow-hidden">
+                    <code class="text-[10px] font-mono text-primary truncate filter blur-[4px] hover:blur-none transition-all cursor-help" id="token-{{ mod.id }}">{{ mod.api_token }}</code>
+                    <button onclick="copyToClipboard('{{ mod.api_token }}')" class="material-symbols-outlined text-xs text-outline hover:text-primary transition-colors">content_copy</button>
+                </div>
+            </div>
         </div>
         
         <div class="flex items-center justify-between pt-6 border-t border-outline-variant/10">
@@ -82,4 +91,17 @@
         <span class="material-symbols-outlined text-3xl">developer_board</span>
     </div>
 </section>
+
+<script>
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        // Optional: Replace alert with a more subtle toast later
+        const toast = document.createElement('div');
+        toast.className = 'fixed bottom-8 right-8 bg-primary text-surface px-6 py-3 rounded-xl shadow-2xl text-[10px] font-black uppercase tracking-widest z-[100] animate-bounce';
+        toast.innerText = 'Token copied to clipboard';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+    });
+}
+</script>
 {% endblock %}

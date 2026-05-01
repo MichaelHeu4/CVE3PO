@@ -1,9 +1,17 @@
 from django.db import models
 
 
+import secrets
+
 class Extension(models.Model):
     name_id = models.CharField(max_length=50, unique=True)
     is_active = models.BooleanField(default=False)
+    api_token = models.CharField(max_length=100, blank=True, null=True)
+
+    def save(self, *args, **kwargs):
+        if not self.api_token:
+            self.api_token = secrets.token_urlsafe(32)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.name_id} ({'Active' if self.is_active else 'Inactive'})"

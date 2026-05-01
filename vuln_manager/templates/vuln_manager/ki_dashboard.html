@@ -18,7 +18,7 @@
                 <h3 class="font-body text-sm text-on-surface-variant mb-1">Auto-Triaged</h3>
                 <div class="flex items-baseline gap-2">
                     <span class="font-headline text-4xl font-bold text-on-surface">{{ triaged_vulns }}</span>
-                    <span class="font-body text-sm text-on-surface-variant">/ {{ all_vulns | length }}</span>
+                    <span class="font-body text-sm text-on-surface-variant">/ {{ all_vulns.paginator.count }}</span>
                 </div>
             </div>
             <!-- Manual Review Card -->
@@ -31,7 +31,7 @@
                 <h3 class="font-body text-sm text-on-surface-variant mb-1">Action Required</h3>
                 <div class="flex items-baseline gap-2">
                     <span class="font-headline text-4xl font-bold text-on-surface">{{ action_required }}</span>
-                    <span class="font-body text-sm text-on-surface-variant">/ {{ all_vulns | length }}</span>
+                    <span class="font-body text-sm text-on-surface-variant">/ {{ all_vulns.paginator.count }}</span>
                 </div>
             </div>
             <!-- Total Processed Card -->
@@ -120,6 +120,30 @@
                             {% endfor %}
                         </tbody>
                     </table>
+                </div>
+                
+                <!-- Pagination -->
+                <div class="p-5 border-t border-outline-variant/10 flex justify-between items-center bg-surface-container-low/30">
+                    <p class="text-[10px] font-black text-outline uppercase tracking-widest">
+                        Page {{ all_vulns.number }} of {{ all_vulns.paginator.num_pages }}
+                    </p>
+                    <div class="flex gap-2">
+                        {% if all_vulns.has_previous %}
+                            <a href="?page={{ all_vulns.previous_page_number }}{% if selected_vuln %}&selected_vuln={{ selected_vuln.id }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5">
+                                <span class="material-symbols-outlined text-sm">chevron_left</span>
+                            </a>
+                        {% endif %}
+                        
+                        <button class="w-8 h-8 rounded-lg bg-primary text-surface flex items-center justify-center text-[10px] font-black shadow-lg shadow-primary/20">
+                            {{ all_vulns.number }}
+                        </button>
+                        
+                        {% if all_vulns.has_next %}
+                            <a href="?page={{ all_vulns.next_page_number }}{% if selected_vuln %}&selected_vuln={{ selected_vuln.id }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5">
+                                <span class="material-symbols-outlined text-sm">chevron_right</span>
+                            </a>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
             <!-- AI Rationale Pane (Contextual Details) -->

@@ -9,13 +9,18 @@ from vuln_manager.models import Host, Scan, Vulnerability, Extension
 def webhook(request):
     """
     Wazuh Webhook Integration.
-    Only processes data if the 'wazuh' extension is marked as active.
+    Only processes data if the 'wazuh' extension is marked as active and token is valid.
     """
     try:
-        # Check if extension is enabled
+        # 1. Check if extension is enabled
         wazuh_ext, _ = Extension.objects.get_or_create(name_id="wazuh")
         if not wazuh_ext.is_active:
             return JsonResponse({"status": "ignored", "reason": "extension disabled"}, status=200)
+
+        # 2. Authentication Check
+        provided_token = request.headers.get("X-API-Key")
+        if not provided_token or provided_token != wazuh_ext.api_token:
+            return JsonResponse({"status": "error", "message": "unauthorized"}, status=401)
 
         data = json.loads(request.body)
         

@@ -160,10 +160,15 @@ def export_dashboard_pdf(request):
 def update_inventory_api(request):
     """
     API endpoint for agents to report software inventory (Strategy A).
-    Removes previous agent-sourced entries for the host before adding new ones.
-    Manual entries remain untouched.
+    Payload must include 'X-API-Key' header.
     """
     try:
+        # 1. Authentication Check
+        api_ext, _ = Extension.objects.get_or_create(name_id="agent_api")
+        provided_token = request.headers.get("X-API-Key")
+        if not provided_token or provided_token != api_ext.api_token:
+            return JsonResponse({"status": "error", "message": "unauthorized"}, status=401)
+
         data = json.loads(request.body)
         host_ip = data.get("host_ip")
         hostname = data.get("hostname")
@@ -361,16 +366,21 @@ def host_detail(request, pk):
     ]
     show_mode = request.GET.get("mode", "all")
     if show_mode == "direct":
-        vulns = host.vulnerabilities.exclude(status="false_positive").order_by(
+        vulns_query = host.vulnerabilities.exclude(status="false_positive").order_by(
             "-severity"
         )
     else:
-        vulns = (
+        vulns_query = (
             Vulnerability.objects.filter(Q(host=host) | Q(software__hosts=host))
             .exclude(status="false_positive")
             .distinct()
             .order_by("-severity")
         )
+    
+    # Paginate Threats
+    vuln_paginator = Paginator(vulns_query, 20)
+    vuln_page_number = request.GET.get('vuln_page')
+    vulns = vuln_paginator.get_page(vuln_page_number)
     host_timeline_raw = (
         host.vulnerabilities.exclude(status="false_positive")
         .values("scan__id", "scan__uploaded_at")
@@ -381,14 +391,22 @@ def host_detail(request, pk):
         item["scan__uploaded_at"].strftime("%d.%m %H:%M") for item in host_timeline_raw
     ]
     host_timeline_values = [item["count"] for item in host_timeline_raw]
-    installed_software = host.software_inventory.annotate(
+    
+    # Software Inventory with Pagination
+    sw_query = host.software_inventory.annotate(
         active_vulns=Count(
             "vulnerabilities",
-            filter=Q(vulnerabilities__host=host)
-            | Q(vulnerabilities__software__hosts=host)
+            filter=(Q(vulnerabilities__host=host) | Q(vulnerabilities__software__hosts=host))
             & ~Q(vulnerabilities__status__in=["fixed", "false_positive"]),
         )
     ).order_by("name")
+    
+    sw_paginator = Paginator(sw_query, 20)
+    sw_page_number = request.GET.get('sw_page')
+    installed_software = sw_paginator.get_page(sw_page_number)
+    
+    active_tab = request.GET.get('tab', 'threats')
+
     return render(
         request,
         "vuln_manager/host_detail.html",
@@ -401,6 +419,7 @@ def host_detail(request, pk):
             "timeline_values": json.dumps(host_timeline_values),
             "installed_software": installed_software,
             "show_mode": show_mode,
+            "active_tab": active_tab,
             "criticality_choices": Host.CRITICALITY_CHOICES,
         },
     )
@@ -799,14 +818,20 @@ from django.db.models import Avg
 def ki_dashboard(request):
     selected_vuln_id = request.GET.get("selected_vuln")
     selected_vuln = None
-    if selected_vuln_id: 
+    if selected_vuln_id:
         selected_vuln = get_object_or_404(Vulnerability, pk=selected_vuln_id)
 
-    all_vulns = Vulnerability.objects.exclude(status="false_positive").distinct()
-    triaged_vulns = all_vulns.exclude(ai_result="tbd").count()
-    action_required = all_vulns.filter(ai_result="Act").count()
+    all_vulns_query = Vulnerability.objects.exclude(status="false_positive").order_by("-severity", "cve_id").distinct()
 
+    # AI Stats
+    triaged_vulns = all_vulns_query.exclude(ai_result="tbd").count()
+    action_required = all_vulns_query.filter(ai_result="Act").count()
     avg_proc_time_ms = Vulnerability.objects.filter(ai_proc_time__gt=0).aggregate(Avg('ai_proc_time'))['ai_proc_time__avg'] or 0
+
+    # Pagination
+    paginator = Paginator(all_vulns_query, 25) # 25 per page
+    page_number = request.GET.get('page')
+    all_vulns = paginator.get_page(page_number)
 
     ai = {
         "model": "DeepSeek V4 Flash",
@@ -820,11 +845,16 @@ def ki_dashboard(request):
         "selected_vuln": selected_vuln
     }
     return render(request, "vuln_manager/ki_dashboard.html", context)
-
 @login_required
 def extensions_view(request):
     # Metadata for active modules
     module_metadata = {
+        "agent_api": {
+            "name": "Inventory API",
+            "description": "Core API for external agents to report software inventory. Requires X-API-Key header.",
+            "icon": "api",
+            "color": "tertiary",
+        },
         "wazuh": {
             "name": "Wazuh Connector",
             "description": "Real-time vulnerability streaming via webhooks. Automatically creates hosts and manages vulnerability lifecycles.",
@@ -859,6 +889,7 @@ def extensions_view(request):
             "name": meta["name"],
             "description": meta["description"],
             "is_active": ext.is_active,
+            "api_token": ext.api_token,
             "icon": meta["icon"],
             "color": meta["color"],
         })
