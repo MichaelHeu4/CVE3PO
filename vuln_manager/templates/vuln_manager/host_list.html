@@ -127,6 +127,30 @@
         </div>
         {% endif %}
     </div>
+    
+    <!-- Pagination Footer -->
+    <div class="bg-surface-container-highest/20 px-8 py-6 flex items-center justify-between border-t border-outline-variant/10">
+        <p class="text-[10px] font-black text-outline uppercase tracking-widest">
+            Page {{ hosts.number }} of {{ hosts.paginator.num_pages }} ({{ hosts.paginator.count }} total)
+        </p>
+        <div class="flex gap-2">
+            {% if hosts.has_previous %}
+                <a href="?page={{ hosts.previous_page_number }}" class="w-10 h-10 rounded-xl bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5">
+                    <span class="material-symbols-outlined text-base">chevron_left</span>
+                </a>
+            {% endif %}
+            
+            <button class="w-10 h-10 rounded-xl bg-primary text-surface flex items-center justify-center text-xs font-black shadow-lg shadow-primary/20">
+                {{ hosts.number }}
+            </button>
+            
+            {% if hosts.has_next %}
+                <a href="?page={{ hosts.next_page_number }}" class="w-10 h-10 rounded-xl bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5">
+                    <span class="material-symbols-outlined text-base">chevron_right</span>
+                </a>
+            {% endif %}
+        </div>
+    </div>
 </div>
 
 <script>

@@ -61,98 +61,126 @@
     </div>
 </section>
 
-<!-- Main List -->
-<div class="bg-surface-container rounded-[2rem] p-6 md:p-8 mb-12 overflow-hidden shadow-2xl border border-outline-variant/5">
-    <div class="space-y-1">
-        <!-- List Header -->
-        <div class="hidden md:grid grid-cols-12 px-6 py-4 text-[10px] font-black text-outline/40 uppercase tracking-[0.3em] border-b border-outline-variant/10 mb-4 font-headline">
-            <div class="col-span-2">CVE ID</div>
-            <div class="col-span-1 text-center">Priority</div>
-            <div class="col-span-4">Vulnerability Name</div>
-            <div class="col-span-2 text-center">Target Scope</div>
-            <div class="col-span-2 text-center">State</div>
-            <div class="col-span-1 text-right">View</div>
-        </div>
+<!-- Search Bar -->
+<div class="bg-surface-container-low rounded-3xl p-4 mb-6 border border-outline-variant/5">
+    <div class="relative w-full">
+        <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-lg">search</span>
+        <input type="text" id="vulnSearch" placeholder="Search by CVE, name or host..." class="w-full bg-surface-container border-none rounded-2xl pl-12 pr-6 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30 transition-all" onkeyup="filterVulns()">
+    </div>
+</div>
 
-        {% for vuln in vulns %}
-        <div class="grid grid-cols-1 md:grid-cols-12 items-center p-5 bg-surface-container-low rounded-2xl border border-transparent hover:border-primary/20 hover:bg-surface-container-high transition-all group relative">
-            <!-- CVE ID -->
-            <div class="col-span-2 mb-2 md:mb-0">
-                <a href="{% url 'vuln_detail' vuln.id %}" class="font-headline font-black text-primary hover:text-primary-container transition-colors text-sm uppercase tracking-tight flex items-center gap-2">
-                    <span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
-                    {{ vuln.cve_id }}
-                </a>
-            </div>
-
-            <!-- Severity Badge -->
-            <div class="col-span-1 flex justify-center mb-2 md:mb-0">
-                <span class="badge severity-{{ vuln.severity|lower }} rounded-lg px-3 py-1 text-[9px] font-black uppercase tracking-widest shadow-lg shadow-black/20">
-                    {{ vuln.severity|upper }}
-                </span>
-            </div>
-
-            <!-- Name & Info -->
-            <div class="col-span-4 md:pr-10 mb-3 md:mb-0">
-                <p class="font-black text-on-surface text-sm leading-tight mb-1 group-hover:text-primary transition-colors tracking-tight">{{ vuln.name|truncatewords:10 }}</p>
-                <div class="flex items-center gap-2">
-                    <span class="text-[9px] text-outline/50 font-black uppercase tracking-tighter italic">Source: {{ vuln.scan.get_scan_type_display }}</span>
-                    <span class="w-1 h-1 rounded-full bg-outline-variant/30"></span>
-                    <p class="text-[10px] text-outline/60 line-clamp-1 italic max-w-[200px]">{{ vuln.description|default:"No description available." }}</p>
-                </div>
-            </div>
-
-            <!-- Target Scope -->
-            <div class="col-span-2 flex justify-center items-center gap-2 mb-3 md:mb-0">
-                {% if vuln.host %}
-                <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-container-highest border border-outline-variant/10 text-[10px] font-black text-on-surface uppercase tracking-tight shadow-sm">
-                    <span class="material-symbols-outlined text-[14px] text-primary">hub</span>
-                    {{ vuln.host.ip_address }}
-                </div>
-                {% elif vuln.software %}
-                <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/10 border border-primary/20 text-[10px] font-black text-primary uppercase tracking-tight shadow-sm">
-                    <span class="material-symbols-outlined text-[14px]">package_2</span>
-                    {{ vuln.software.name|truncatechars:12 }}
-                </div>
-                {% else %}
-                <span class="text-[9px] text-outline/20 font-black uppercase tracking-widest italic tracking-widest">Global</span>
-                {% endif %}
-            </div>
-
-            <!-- Lifecycle State -->
-            <div class="col-span-2 flex justify-center mb-4 md:mb-0">
-                <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-surface-container-highest/50 border border-outline-variant/10 shadow-inner">
-                    <span class="w-2 h-2 rounded-full {% if vuln.status == 'fixed' %}bg-primary shadow-[0_0_10px_rgba(59,191,250,0.6)]{% elif vuln.status == 'in_progress' %}bg-tertiary shadow-[0_0_10px_rgba(255,111,126,0.6)]{% else %}bg-outline-variant{% endif %}"></span>
-                    <span class="text-[10px] font-black text-on-surface uppercase tracking-widest">{{ vuln.get_status_display }}</span>
-                </div>
-            </div>
-
-            <!-- View Action -->
-            <div class="col-span-1 text-right">
-                <a href="{% url 'vuln_detail' vuln.id %}" class="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-surface-container-highest border border-outline-variant/10 text-outline group-hover:text-primary group-hover:border-primary/30 group-hover:scale-105 transition-all shadow-xl">
-                    <span class="material-symbols-outlined">chevron_right</span>
-                </a>
-            </div>
-        </div>
-        {% empty %}
-        <div class="text-center py-32 bg-surface-container-low rounded-3xl border-2 border-dashed border-outline-variant/10">
-            <div class="w-20 h-20 bg-surface-container-highest rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
-                <span class="material-symbols-outlined text-outline-variant text-4xl">verified</span>
-            </div>
-            <h3 class="text-on-surface font-headline font-black text-xl tracking-tight uppercase tracking-[0.2em]">All Systems Clear</h3>
-            <p class="text-outline text-xs mt-2 uppercase tracking-[0.1em]">No vulnerabilities detected in your environment.</p>
-        </div>
-        {% endfor %}
+<!-- Main Table -->
+<div class="bg-surface-container rounded-[2rem] overflow-hidden shadow-2xl border border-outline-variant/5">
+    <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse" id="vulnTable">
+            <thead>
+                <tr class="bg-surface-container-highest/30 border-b border-outline-variant/10">
+                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline">CVE ID</th>
+                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Priority</th>
+                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline">Vulnerability Name</th>
+                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Target</th>
+                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">State</th>
+                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-right">Action</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-outline-variant/5">
+                {% for vuln in vulns %}
+                <tr class="hover:bg-primary/5 transition-colors group">
+                    <td class="px-6 py-4">
+                        <a href="{% url 'vuln_detail' vuln.id %}" class="font-headline font-black text-primary hover:text-primary-container transition-colors text-sm uppercase tracking-tight flex items-center gap-2">
+                            <span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+                            {{ vuln.cve_id }}
+                        </a>
+                    </td>
+                    <td class="px-6 py-4 text-center">
+                        <span class="badge severity-{{ vuln.severity|lower }} rounded-lg px-3 py-1 text-[9px] font-black uppercase tracking-widest">
+                            {{ vuln.severity|upper }}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4">
+                        <p class="font-black text-on-surface text-sm leading-tight mb-1 group-hover:text-primary transition-colors tracking-tight">{{ vuln.name|truncatewords:8 }}</p>
+                        <p class="text-[9px] text-outline/50 font-black uppercase tracking-tighter italic">{{ vuln.scan.get_scan_type_display }}</p>
+                    </td>
+                    <td class="px-6 py-4 text-center">
+                        {% if vuln.host %}
+                        <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-container-highest border border-outline-variant/10 text-[10px] font-black text-on-surface uppercase tracking-tight">
+                            {{ vuln.host.ip_address }}
+                        </div>
+                        {% elif vuln.software %}
+                        <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/10 border border-primary/20 text-[10px] font-black text-primary uppercase tracking-tight">
+                            {{ vuln.software.name|truncatechars:12 }}
+                        </div>
+                        {% else %}
+                        <span class="text-[9px] text-outline/20 font-black uppercase tracking-widest italic">Global</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 text-center">
+                        <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-surface-container-highest/50 border border-outline-variant/10">
+                            <span class="w-2 h-2 rounded-full {% if vuln.status == 'fixed' %}bg-primary{% elif vuln.status == 'in_progress' %}bg-tertiary{% else %}bg-outline-variant{% endif %}"></span>
+                            <span class="text-[10px] font-black text-on-surface uppercase tracking-widest">{{ vuln.get_status_display }}</span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 text-right">
+                        <a href="{% url 'vuln_detail' vuln.id %}" class="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-surface-container-highest border border-outline-variant/10 text-outline group-hover:text-primary group-hover:border-primary/30 transition-all">
+                            <span class="material-symbols-outlined">chevron_right</span>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center py-32 bg-surface-container-low">
+                        <div class="w-20 h-20 bg-surface-container-highest rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
+                            <span class="material-symbols-outlined text-outline-variant text-4xl">verified</span>
+                        </div>
+                        <h3 class="text-on-surface font-headline font-black text-xl tracking-tight uppercase tracking-[0.2em]">All Systems Clear</h3>
+                        <p class="text-outline text-xs mt-2 uppercase tracking-[0.1em]">No vulnerabilities detected in your environment.</p>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
     
     <!-- Pagination Footer -->
-    <div class="mt-8 flex items-center justify-between px-6 pt-8 border-t border-outline-variant/10">
-        <p class="text-[10px] font-black text-outline uppercase tracking-widest">Displaying {{ vulns|length }} entries</p>
+    <div class="bg-surface-container-highest/20 px-8 py-6 flex items-center justify-between border-t border-outline-variant/10">
+        <p class="text-[10px] font-black text-outline uppercase tracking-widest">
+            Page {{ vulns.number }} of {{ vulns.paginator.num_pages }} ({{ vulns.paginator.count }} total)
+        </p>
         <div class="flex gap-2">
-            <button class="w-10 h-10 rounded-xl bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5"><span class="material-symbols-outlined text-base">chevron_left</span></button>
-            <button class="w-10 h-10 rounded-xl bg-primary text-surface flex items-center justify-center text-xs font-black shadow-lg shadow-primary/20">1</button>
-            <button class="w-10 h-10 rounded-xl bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5"><span class="material-symbols-outlined text-base">chevron_right</span></button>
+            {% if vulns.has_previous %}
+                <a href="?page={{ vulns.previous_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if severity %}&severity={{ severity }}{% endif %}" class="w-10 h-10 rounded-xl bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5">
+                    <span class="material-symbols-outlined text-base">chevron_left</span>
+                </a>
+            {% endif %}
+            
+            <button class="w-10 h-10 rounded-xl bg-primary text-surface flex items-center justify-center text-xs font-black shadow-lg shadow-primary/20">
+                {{ vulns.number }}
+            </button>
+            
+            {% if vulns.has_next %}
+                <a href="?page={{ vulns.next_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if severity %}&severity={{ severity }}{% endif %}" class="w-10 h-10 rounded-xl bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5">
+                    <span class="material-symbols-outlined text-base">chevron_right</span>
+                </a>
+            {% endif %}
         </div>
     </div>
 </div>
 
+<script>
+function filterVulns() {
+    let input = document.getElementById("vulnSearch");
+    let filter = input.value.toUpperCase();
+    let table = document.getElementById("vulnTable");
+    let tr = table.getElementsByTagName("tr");
+
+    for (let i = 1; i < tr.length; i++) {
+        let textContent = tr[i].textContent || tr[i].innerText;
+        if (textContent.toUpperCase().indexOf(filter) > -1) {
+            tr[i].style.display = "";
+        } else {
+            tr[i].style.display = "none";
+        }
+    }
+}
+</script>
 {% endblock %}

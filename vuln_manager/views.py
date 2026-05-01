@@ -1,3 +1,4 @@
+from django.core.paginator import Paginator
 from django.views.decorators.http import require_POST
 from django.shortcuts import render, redirect, get_object_or_404
 from django.db.models import Count, Q, Max, Case, When, Value, IntegerField, Avg
@@ -322,7 +323,13 @@ def dashboard(request):
 
 @login_required
 def host_list(request):
-    hosts = Host.objects.all().order_by("ip_address")
+    hosts_query = Host.objects.all().order_by("ip_address")
+    
+    # Pagination
+    paginator = Paginator(hosts_query, 25) # 25 per page
+    page_number = request.GET.get('page')
+    hosts = paginator.get_page(page_number)
+
     for host in hosts:
         latest_scan = host.ports.aggregate(latest=Max("scan_id"))["latest"]
         host.current_port_count = (
@@ -401,7 +408,12 @@ def host_detail(request, pk):
 
 @login_required
 def software_list(request):
-    software = Software.objects.annotate(num_hosts=Count("hosts")).order_by("name")
+    software_query = Software.objects.annotate(num_hosts=Count("hosts")).order_by("name")
+    
+    paginator = Paginator(software_query, 25)
+    page_number = request.GET.get('page')
+    software = paginator.get_page(page_number)
+    
     return render(request, "vuln_manager/software_list.html", {"software": software})
 
 
@@ -681,15 +693,24 @@ def vuln_list(request):
     severity = request.GET.get("severity")
     status_filter = request.GET.get("status", "active")
     active_vulns = Vulnerability.objects.exclude(status="false_positive")
+    
     if status_filter == "resolved":
-        vulns = active_vulns.filter(status="fixed")
+        vulns_query = active_vulns.filter(status="fixed")
     elif status_filter == "ignored":
-        vulns = active_vulns.filter(status="risk_accepted")
+        vulns_query = active_vulns.filter(status="risk_accepted")
     else:
-        vulns = active_vulns.exclude(status="fixed")
+        vulns_query = active_vulns.exclude(status="fixed")
+        
     if severity:
-        vulns = vulns.filter(severity=severity.lower())
-    vulns = vulns.order_by("-severity", "cve_id")
+        vulns_query = vulns_query.filter(severity=severity.lower())
+        
+    vulns_query = vulns_query.order_by("-severity", "cve_id")
+    
+    # Pagination
+    paginator = Paginator(vulns_query, 50) # 50 per page for vulns
+    page_number = request.GET.get('page')
+    vulns = paginator.get_page(page_number)
+
     metrics = {
         "critical": active_vulns.filter(severity="critical").count(),
         "high": active_vulns.filter(severity="high").count(),
