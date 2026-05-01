@@ -1,6 +1,6 @@
 {% extends 'vuln_manager/base.html' %}
 
-{% block title %}{% if software %}Edit{% else %}Register{% endif %} Artifact{% endblock %}
+{% block title %}{% if software %}Edit{% else %}Register{% endif %} Software{% endblock %}
 
 {% block header_title %}Inventory <span class="text-primary">Management</span>{% endblock %}
 
@@ -8,9 +8,9 @@
 <div class="max-w-4xl mx-auto">
     <section class="mb-12">
         <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight mb-2">
-            {% if software %}Update <span class="text-primary">Software Artifact</span>{% else %}Register <span class="text-primary">Software Artifact</span>{% endif %}
+            {% if software %}Update <span class="text-primary">Software</span>{% else %}Register <span class="text-primary">Software</span>{% endif %}
         </h1>
-        <p class="text-on-surface-variant text-sm">Define or modify architectural components to track their security posture across the infrastructure.</p>
+        <p class="text-on-surface-variant text-sm">Define or modify software components to track their security status across your systems.</p>
     </section>
 
     <div class="bg-surface-container rounded-3xl p-10 shadow-2xl shadow-black/40">
@@ -20,7 +20,7 @@
                 <!-- Basic Specs -->
                 <div class="grid grid-cols-1 md:grid-cols-12 gap-8">
                     <div class="md:col-span-12">
-                        <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline mb-3">Artifact Identity (Name)</label>
+                        <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline mb-3">Software Name</label>
                         <input type="text" name="name" value="{{ software.name|default:'' }}" class="w-full bg-surface-container-lowest border-none rounded-xl px-5 py-4 text-on-surface text-sm focus:ring-2 focus:ring-primary/30 transition-all" placeholder="e.g. Nginx Edge Proxy" required>
                     </div>
                     
@@ -57,7 +57,7 @@
 
                 <!-- Host Assignment -->
                 <div>
-                    <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline mb-4">Architectural Deployment Nodes</label>
+                    <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline mb-4">Deployment Systems (Hosts)</label>
                     <div class="bg-surface-container-low rounded-2xl p-6 max-h-64 overflow-y-auto custom-scrollbar">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {% for host in hosts %}
@@ -82,7 +82,7 @@
                 <div class="pt-6 flex items-center justify-end gap-6">
                     <a href="{% url 'software_list' %}" class="text-[10px] font-black text-outline uppercase tracking-widest hover:text-on-surface transition-colors">Cancel</a>
                     <button type="submit" class="bg-gradient-to-r from-primary to-primary-container text-surface px-10 py-4 rounded-2xl font-headline font-black uppercase tracking-[0.2em] text-xs shadow-lg shadow-primary/20 hover:brightness-110 active:scale-95 transition-all">
-                        {% if software %}Apply Artifact Updates{% else %}Commit Artifact to Registry{% endif %}
+                        {% if software %}Save Changes{% else %}Add to Inventory{% endif %}
                     </button>
                 </div>
             </div>

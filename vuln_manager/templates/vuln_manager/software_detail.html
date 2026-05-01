@@ -70,14 +70,14 @@
                       </div>
                       <div>
                           <a href="{% url 'host_detail' host.id %}" class="font-black text-on-surface hover:text-primary transition-colors block">{{ host.ip_address }}</a>
-                          <p class="text-[10px] text-outline uppercase tracking-widest mt-0.5">{{ host.hostname|default:"Anonymous Architectural Node" }}</p>
+                          <p class="text-[10px] text-outline uppercase tracking-widest mt-0.5">{{ host.hostname|default:"Anonymous Host" }}</p>
                       </div>
                   </div>
                   <div class="flex items-center gap-4">
                       <a href="{% url 'host_detail' host.id %}" class="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center text-outline hover:text-primary hover:bg-primary/10 transition-all">
                           <span class="material-symbols-outlined text-sm">visibility</span>
                       </a>
-                      <form action="{% url 'remove_host_from_software' software.id host.id %}" method="POST" onsubmit="return confirm('Sever node association with this artifact?')">
+                      <form action="{% url 'remove_host_from_software' software.id host.id %}" method="POST" onsubmit="return confirm('Remove host association with this software?')">
                           {% csrf_token %}
                           <button type="submit" class="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center text-error/50 hover:text-error hover:bg-error/10 transition-all">
                               <span class="material-symbols-outlined text-sm">link_off</span>
@@ -88,7 +88,7 @@
               {% empty %}
               <div class="text-center py-20">
                   <span class="material-symbols-outlined text-outline-variant text-6xl mb-4 opacity-20">inventory</span>
-                  <p class="text-outline text-[10px] font-black uppercase tracking-widest">No Node Deployments Registered</p>
+                  <p class="text-outline text-[10px] font-black uppercase tracking-widest">No Host Deployments Found</p>
               </div>
               {% endfor %}
           </div>

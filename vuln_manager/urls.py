@@ -7,6 +7,8 @@ urlpatterns = [
     path("register/", views.register_view, name="register"),
     path("logout/", views.logout_view, name="logout"),
     path("hosts/", views.host_list, name="host_list"),
+    path("hosts/add/", views.host_form, name="host_add"),
+    path("hosts/<int:pk>/edit/", views.host_form, name="host_edit"),
     path("ports/", views.port_list, name="port_list"),
     path("hosts/<int:pk>/", views.host_detail, name="host_detail"),
     path("hosts/<int:pk>/delete/", views.delete_host, name="delete_host"),
@@ -53,5 +55,6 @@ urlpatterns = [
         name="remove_host_from_software",
     ),
     path("ai/dashboard/", views.ki_dashboard, name="ai_dashboard"),
-    path("ai/triage", views.do_triage, name="do_triage")
+    path("ai/triage", views.do_triage, name="do_triage"),
+    path("dashboard/export/", views.export_dashboard_pdf, name="export_dashboard_pdf"),
 ]

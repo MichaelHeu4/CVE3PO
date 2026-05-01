@@ -1,112 +1,149 @@
 {% extends 'vuln_manager/base.html' %}
 
-{% block title %}Asset Inventory{% endblock %}
+{% block title %}Systems{% endblock %}
 
 {% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
 
 {% block content %}
-<section class="mb-8 flex justify-between items-end">
+<section class="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
     <div>
-        <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight">Asset <span class="text-primary">Overview</span></h1>
-        <p class="text-on-surface-variant text-sm mt-1">Registry of all endpoints and identified assets.</p>
+        <h1 class="font-headline font-black text-4xl text-on-surface tracking-tighter mb-1">All <span class="text-primary">Systems</span></h1>
+        <p class="text-on-surface-variant text-sm font-medium">Overview of all identified computers and servers in your network.</p>
     </div>
-    <a href="{% url 'scan_import' %}" class="bg-gradient-to-r from-primary to-primary-container text-surface px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg shadow-primary/20 hover:brightness-110 transition-all flex items-center gap-2">
-        <span class="material-symbols-outlined text-sm">add_circle</span> Import Scan
-    </a>
+    <div class="flex flex-wrap gap-3">
+        <a href="{% url 'host_add' %}" class="bg-surface-container-highest border border-outline-variant/10 text-on-surface px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-surface-variant transition-all flex items-center gap-2">
+            <span class="material-symbols-outlined text-sm">add_circle</span> Add Host
+        </a>
+        <a href="{% url 'scan_import' %}" class="bg-primary text-surface px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20 hover:brightness-110 transition-all flex items-center gap-2">
+            <span class="material-symbols-outlined text-sm">upload_file</span> Import Scan
+        </a>
+    </div>
 </section>
 
-<div class="bg-surface-container rounded-3xl p-8 overflow-hidden">
-    <div class="space-y-4">
-        <!-- List Header (No borders, just spacing and type) -->
-        <div class="grid grid-cols-12 px-6 py-2 text-[10px] font-bold text-outline uppercase tracking-[0.2em]">
-            <div class="col-span-3">Asset Intelligence</div>
-            <div class="col-span-2 text-center">Criticality</div>
-            <div class="col-span-1 text-center">Open Ports</div>
-            <div class="col-span-2 text-center">Vulnerabilities</div>
-            <div class="col-span-2 text-center">Info</div>
-            <div class="col-span-2 text-right">Added Date / Actions</div>
-        </div>
-
-        {% for host in hosts %}
-        <div class="grid grid-cols-12 items-center p-6 bg-surface-container-low rounded-2xl hover:bg-surface-container-high transition-all group">
-            <!-- Asset Info -->
-            <div class="col-span-3 flex items-center gap-4">
-                <div class="w-12 h-12 rounded-2xl bg-surface-container-highest flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
-                    <span class="material-symbols-outlined">dns</span>
-                </div>
-                <div>
-                    <a href="{% url 'host_detail' host.id %}" class="font-bold text-on-surface hover:text-primary transition-colors block">{{ host.ip_address }}</a>
-                    <p class="text-[10px] text-outline uppercase tracking-widest mt-0.5">{{ host.hostname|default:"Anonymous Architectural Node" }}</p>
-                </div>
-            </div>
-
-            <!-- Criticality -->
-            <div class="col-span-2 text-center">
-                {% if host.criticality %}
-                <span class="px-3 py-1 rounded-lg text-[9px] font-black tracking-widest {% if host.criticality == 'Critical' %}bg-error/10 text-error border border-error/20{% elif host.criticality == 'High' %}bg-tertiary/10 text-tertiary border border-tertiary/20{% else %}bg-primary/10 text-primary border border-primary/20{% endif %}">
-                    {{ host.criticality|upper }}
-                </span>
-                {% else %}
-                <span class="text-outline-variant text-[9px] font-bold uppercase tracking-widest opacity-30">Undefined</span>
-                {% endif %}
-            </div>
-
-            <!-- Ports -->
-            <div class="col-span-1 text-center">
-
-                <span class="px-3 py-1 rounded-full bg-primary/5 text-primary text-[10px] font-black tracking-widest border border-primary/10">
-                    {{ host.current_port_count }} ACTIVE
-                </span>
-            </div>
-
-            <!-- Vulns -->
-            <div class="col-span-2 text-center">
-                {% if host.num_vulns > 0 %}
-                <span class="w-8 h-8 rounded-full bg-error-container/20 text-error flex items-center justify-center text-xs font-black mx-auto shadow-inner">
-                    {{ host.num_vulns }}
-                </span>
-                {% else %}
-                <span class="text-outline-variant text-[10px] font-bold uppercase tracking-widest">—</span>
-                {% endif %}
-            </div>
-
-            <!-- Info -->
-            <div class="col-span-2 text-center">
-                {% if host.num_info > 0 %}
-                <span class="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-black mx-auto">
-                    {{ host.num_info }}
-                </span>
-                {% else %}
-                <span class="text-outline-variant text-[10px] font-bold uppercase tracking-widest">—</span>
-                {% endif %}
-            </div>
-
-            <!-- Last Scanned -->
-            <div class="col-span-2 text-right flex items-center justify-end gap-4">
-                <div class="text-right">
-                    <p class="text-on-surface font-bold text-[10px]">{{ host.last_scanned|date:"d M Y" }}</p>
-                    <p class="text-outline text-[9px] uppercase tracking-tighter">{{ host.last_scanned|date:"H:i" }} UTC</p>
-                </div>
-                <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <a href="{% url 'host_detail' host.id %}" class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-on-surface hover:bg-primary hover:text-surface transition-all">
-                        <span class="material-symbols-outlined text-sm">visibility</span>
-                    </a>
-                    <form action="{% url 'delete_host' host.id %}" method="POST" onsubmit="return confirm('Expunge node from registry?')">
-                        {% csrf_token %}
-                        <button type="submit" class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-error hover:bg-error hover:text-surface transition-all">
-                            <span class="material-symbols-outlined text-sm">delete</span>
-                        </button>
-                    </form>
-                </div>
-            </div>
-        </div>
-        {% empty %}
-        <div class="text-center py-20 bg-surface-container-low rounded-3xl">
-            <span class="material-symbols-outlined text-outline-variant text-6xl mb-4">analytics</span>
-            <p class="text-on-surface-variant font-headline font-bold">No Architectural Nodes Detected</p>
-            <p class="text-outline text-xs mt-2 uppercase tracking-widest">Awaiting system intelligence import</p>
-        </div>
-        {% endfor %}
+<!-- Search Bar -->
+<div class="bg-surface-container-low rounded-3xl p-4 mb-6 border border-outline-variant/5 flex flex-col md:flex-row gap-4 items-center">
+    <div class="relative flex-grow w-full">
+        <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-lg">search</span>
+        <input type="text" id="hostSearch" placeholder="Search by IP, name or priority..." class="w-full bg-surface-container border-none rounded-2xl pl-12 pr-6 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30 transition-all" onkeyup="filterHosts()">
+    </div>
+    <div class="flex gap-2 w-full md:w-auto">
+        <a href="{% url 'export_dashboard_pdf' %}" class="flex-grow md:flex-none px-6 py-3 rounded-2xl bg-surface-container text-outline text-[10px] font-black uppercase tracking-widest hover:text-on-surface transition-colors border border-outline-variant/5 text-center flex items-center justify-center gap-2">
+            <span class="material-symbols-outlined text-sm">download</span> Export Report
+        </a>
     </div>
 </div>
+
+<div class="bg-surface-container rounded-3xl overflow-hidden border border-outline-variant/5 shadow-2xl">
+    <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse" id="hostTable">
+            <thead>
+                <tr class="bg-surface-container-highest/30 border-b border-outline-variant/10">
+                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline">Name / IP</th>
+                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Priority</th>
+                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Ports</th>
+                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Vulnerabilities</th>
+                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Last Seen</th>
+                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-outline-variant/5">
+                {% for host in hosts %}
+                <tr class="hover:bg-primary/5 transition-colors group">
+                    <td class="px-6 py-4">
+                        <div class="flex items-center gap-4">
+                            <div class="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center text-primary border border-outline-variant/5">
+                                <span class="material-symbols-outlined text-xl">dns</span>
+                            </div>
+                            <div>
+                                <a href="{% url 'host_detail' host.id %}" class="font-headline font-black text-on-surface hover:text-primary transition-colors block text-sm tracking-tight">{{ host.ip_address }}</a>
+                                <p class="text-[10px] text-outline uppercase tracking-widest font-bold truncate max-w-[150px]">{{ host.hostname|default:"n/a" }}</p>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 text-center">
+                        {% if host.criticality %}
+                        <span class="inline-flex px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest {% if host.criticality == 'Critical' %}bg-error/10 text-error border border-error/20 shadow-[0_0_10px_rgba(255,69,99,0.1)]{% elif host.criticality == 'High' %}bg-tertiary/10 text-tertiary border border-tertiary/20{% else %}bg-primary/10 text-primary border border-primary/20{% endif %}">
+                            {{ host.criticality }}
+                        </span>
+                        {% else %}
+                        <span class="text-outline/30 text-[9px] font-black uppercase tracking-widest italic">Not set</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 text-center">
+                        <span class="text-sm font-black text-on-surface">{{ host.current_port_count }}</span>
+                        <span class="text-[9px] text-outline uppercase font-bold ml-1">Ports</span>
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="flex justify-center gap-2">
+                            {% if host.num_vulns > 0 %}
+                            <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-error/5 border border-error/10 text-error">
+                                <span class="text-xs font-black">{{ host.num_vulns }}</span>
+                                <span class="material-symbols-outlined text-[12px]">pest_control</span>
+                            </div>
+                            {% endif %}
+                            {% if host.num_info > 0 %}
+                            <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-primary/5 border border-primary/10 text-primary">
+                                <span class="text-xs font-black">{{ host.num_info }}</span>
+                                <span class="material-symbols-outlined text-[12px]">info</span>
+                            </div>
+                            {% endif %}
+                            {% if host.num_vulns == 0 and host.num_info == 0 %}
+                            <span class="text-[9px] text-primary-container font-black uppercase tracking-widest">Safe</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 text-center">
+                        <p class="text-[11px] font-black text-on-surface">{{ host.last_scanned|date:"d M Y" }}</p>
+                        <p class="text-[9px] text-outline/50 uppercase tracking-tighter">Scan</p>
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <a href="{% url 'host_detail' host.id %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-on-surface hover:bg-primary hover:text-surface transition-all flex items-center justify-center shadow-md">
+                                <span class="material-symbols-outlined text-base">visibility</span>
+                            </a>
+                            <a href="{% url 'host_edit' host.id %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-primary hover:bg-primary hover:text-surface transition-all flex items-center justify-center shadow-md">
+                                <span class="material-symbols-outlined text-base">edit</span>
+                            </a>
+                            <form action="{% url 'delete_host' host.id %}" method="POST" onsubmit="return confirm('Delete this system and its data?')">
+                                {% csrf_token %}
+                                <button type="submit" class="w-8 h-8 rounded-lg bg-surface-container-highest text-error hover:bg-error hover:text-surface transition-all flex items-center justify-center shadow-md">
+                                    <span class="material-symbols-outlined text-base">delete</span>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        {% if not hosts %}
+        <div class="text-center py-24 bg-surface-container-low">
+            <div class="w-16 h-16 bg-surface-container-highest rounded-full flex items-center justify-center mx-auto mb-4">
+                <span class="material-symbols-outlined text-outline-variant text-3xl">dns</span>
+            </div>
+            <h3 class="text-on-surface font-headline font-black text-xl">No systems found</h3>
+            <p class="text-outline text-xs mt-2 uppercase tracking-widest">Import a scan or add a host manually to start.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function filterHosts() {
+    let input = document.getElementById("hostSearch");
+    let filter = input.value.toUpperCase();
+    let table = document.getElementById("hostTable");
+    let tr = table.getElementsByTagName("tr");
+
+    for (let i = 1; i < tr.length; i++) {
+        let textContent = tr[i].textContent || tr[i].innerText;
+        if (textContent.toUpperCase().indexOf(filter) > -1) {
+            tr[i].style.display = "";
+        } else {
+            tr[i].style.display = "none";
+        }
+    }
+}
+</script>
 {% endblock %}

@@ -115,57 +115,57 @@
             <span class="material-symbols-outlined text-3xl">robot_2</span> CVE3PO
         </div>
         
-        <nav class="flex-grow flex flex-col gap-1 px-4">
-            <a href="{% url 'dashboard' %}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all {% if request.resolver_match.url_name == 'dashboard' %}bg-gradient-to-r from-primary to-primary-container text-surface shadow-lg shadow-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant hover:text-on-surface{% endif %}">
-                <span class="material-symbols-outlined" style="{% if request.resolver_match.url_name == 'dashboard' %}font-variation-settings: 'FILL' 1;{% endif %}">dashboard</span>
-                <span class="font-semibold text-sm uppercase tracking-widest">Dashboard</span>
+        <nav class="flex-grow flex flex-col gap-1.5 px-4 overflow-y-auto custom-scrollbar">
+            <a href="{% url 'dashboard' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.resolver_match.url_name == 'dashboard' %}bg-primary/10 text-primary shadow-[0_0_20px_rgba(59,191,250,0.1)] border border-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface{% endif %}">
+                <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'dashboard' %}font-variation-settings: 'FILL' 1;{% endif %}">dashboard</span>
+                <span class="font-bold text-xs uppercase tracking-[0.2em]">Dashboard</span>
             </a>
             
-            <a href="{% url 'host_list' %}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all {% if request.resolver_match.url_name == 'host_list' %}bg-gradient-to-r from-primary to-primary-container text-surface shadow-lg shadow-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant hover:text-on-surface{% endif %}">
-                <span class="material-symbols-outlined" style="{% if request.resolver_match.url_name == 'host_list' %}font-variation-settings: 'FILL' 1;{% endif %}">inventory_2</span>
-                <span class="font-semibold text-sm uppercase tracking-widest">Assets</span>
+            <a href="{% url 'host_list' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.resolver_match.url_name == 'host_list' %}bg-primary/10 text-primary shadow-[0_0_20px_rgba(59,191,250,0.1)] border border-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface{% endif %}">
+                <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'host_list' %}font-variation-settings: 'FILL' 1;{% endif %}">inventory_2</span>
+                <span class="font-bold text-xs uppercase tracking-[0.2em]">Assets</span>
             </a>
 
-            <a href="{% url 'software_list' %}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all {% if request.resolver_match.url_name == 'software_list' %}bg-gradient-to-r from-primary to-primary-container text-surface shadow-lg shadow-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant hover:text-on-surface{% endif %}">
-                <span class="material-symbols-outlined">package_2</span>
-                <span class="font-semibold text-sm uppercase tracking-widest">Software</span>
+            <a href="{% url 'software_list' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.resolver_match.url_name == 'software_list' %}bg-primary/10 text-primary shadow-[0_0_20px_rgba(59,191,250,0.1)] border border-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface{% endif %}">
+                <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'software_list' %}font-variation-settings: 'FILL' 1;{% endif %}">package_2</span>
+                <span class="font-bold text-xs uppercase tracking-[0.2em]">Software</span>
             </a>
 
-            <a href="{% url 'port_list' %}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all {% if request.resolver_match.url_name == 'port_list' %}bg-gradient-to-r from-primary to-primary-container text-surface shadow-lg shadow-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant hover:text-on-surface{% endif %}">
-                <span class="material-symbols-outlined">settings_input_component</span>
-                <span class="font-semibold text-sm uppercase tracking-widest">Ports</span>
+            <a href="{% url 'port_list' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.resolver_match.url_name == 'port_list' %}bg-primary/10 text-primary shadow-[0_0_20px_rgba(59,191,250,0.1)] border border-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface{% endif %}">
+                <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'port_list' %}font-variation-settings: 'FILL' 1;{% endif %}">settings_input_component</span>
+                <span class="font-bold text-xs uppercase tracking-[0.2em]">Ports</span>
             </a>
 
-            <a href="{% url 'vuln_list' %}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all {% if request.resolver_match.url_name == 'vuln_list' %}bg-gradient-to-r from-primary to-primary-container text-surface shadow-lg shadow-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant hover:text-on-surface{% endif %}">
-                <span class="material-symbols-outlined">security</span>
-                <span class="font-semibold text-sm uppercase tracking-widest">Vulnerabilities</span>
+            <a href="{% url 'vuln_list' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.resolver_match.url_name == 'vuln_list' %}bg-primary/10 text-primary shadow-[0_0_20px_rgba(59,191,250,0.1)] border border-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface{% endif %}">
+                <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'vuln_list' %}font-variation-settings: 'FILL' 1;{% endif %}">security</span>
+                <span class="font-bold text-xs uppercase tracking-[0.2em]">Vulnerabilities</span>
             </a>
 
-            <a href="{% url 'ai_dashboard' %}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all {% if request.resolver_match.url_name == 'ai_dashboard' %}bg-gradient-to-r from-primary to-primary-container text-surface shadow-lg shadow-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant hover:text-on-surface{% endif %}">
-                <span class="material-symbols-outlined">automation</span>
-                <span class="font-semibold text-sm uppercase tracking-widest">AI Dashboard</span>
+            <a href="{% url 'ai_dashboard' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.resolver_match.url_name == 'ai_dashboard' %}bg-primary/10 text-primary shadow-[0_0_20px_rgba(59,191,250,0.1)] border border-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface{% endif %}">
+                <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'ai_dashboard' %}font-variation-settings: 'FILL' 1;{% endif %}">automation</span>
+                <span class="font-bold text-xs uppercase tracking-[0.2em]">AI Dashboard</span>
             </a>
 
-            <a href="{% url 'kanban_board' %}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all {% if request.resolver_match.url_name == 'kanban_board' %}bg-gradient-to-r from-primary to-primary-container text-surface shadow-lg shadow-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant hover:text-on-surface{% endif %}">
-                <span class="material-symbols-outlined">view_kanban</span>
-                <span class="font-semibold text-sm uppercase tracking-widest">Board</span>
+            <a href="{% url 'kanban_board' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.resolver_match.url_name == 'kanban_board' %}bg-primary/10 text-primary shadow-[0_0_20px_rgba(59,191,250,0.1)] border border-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface{% endif %}">
+                <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'kanban_board' %}font-variation-settings: 'FILL' 1;{% endif %}">view_kanban</span>
+                <span class="font-bold text-xs uppercase tracking-[0.2em]">Board</span>
             </a>
 
-            <a href="{% url 'scan_list' %}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all {% if request.resolver_match.url_name == 'scan_list' %}bg-gradient-to-r from-primary to-primary-container text-surface shadow-lg shadow-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant hover:text-on-surface{% endif %}">
-                <span class="material-symbols-outlined">history</span>
-                <span class="font-semibold text-sm uppercase tracking-widest">History</span>
+            <a href="{% url 'scan_list' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.resolver_match.url_name == 'scan_list' %}bg-primary/10 text-primary shadow-[0_0_20px_rgba(59,191,250,0.1)] border border-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface{% endif %}">
+                <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'scan_list' %}font-variation-settings: 'FILL' 1;{% endif %}">history</span>
+                <span class="font-bold text-xs uppercase tracking-[0.2em]">History</span>
             </a>
 
-            <div class="mt-8 mb-2 px-4 text-outline font-bold text-[10px] uppercase tracking-[0.2em]">Actions</div>
+            <div class="mt-8 mb-2 px-4 text-outline/50 font-black text-[9px] uppercase tracking-[0.3em]">Actions</div>
             
-            <a href="{% url 'scan_import' %}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-on-surface-variant hover:bg-surface-variant hover:text-on-surface">
-                <span class="material-symbols-outlined">upload_file</span>
-                <span class="font-semibold text-sm uppercase tracking-widest">Import Scan</span>
+            <a href="{% url 'scan_import' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface border border-transparent hover:border-outline-variant/20">
+                <span class="material-symbols-outlined transition-transform group-hover:scale-110">upload_file</span>
+                <span class="font-bold text-xs uppercase tracking-[0.2em]">Import Scan</span>
             </a>
 
-            <a href="{% url 'vuln_add' %}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-on-surface-variant hover:bg-surface-variant hover:text-on-surface">
-                <span class="material-symbols-outlined">add_circle</span>
-                <span class="font-semibold text-sm uppercase tracking-widest">Manual Entry</span>
+            <a href="{% url 'vuln_add' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface border border-transparent hover:border-outline-variant/20">
+                <span class="material-symbols-outlined transition-transform group-hover:scale-110">add_circle</span>
+                <span class="font-bold text-xs uppercase tracking-[0.2em]">Manual Entry</span>
             </a>
         </nav>
 

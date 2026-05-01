@@ -44,7 +44,7 @@
                     <span class="font-headline text-4xl font-bold text-on-surface">{{ ai.model }}</span>
                 </div>
                 <div class="mt-4 pt-4 border-t border-outline-variant/20 flex items-center justify-between">
-                    <span class="text-xs font-body text-on-surface-variant">Avg. processing time: {{ ai.proc_time }}ms/alert</span>
+                    <span class="text-xs font-body text-on-surface-variant">Avg. processing time: {{ ai.proc_time }}s/alert</span>
                     <div class="flex items-center gap-1 text-xs text-primary">
                         <span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
                         System Active
@@ -181,7 +181,7 @@
                             <div class="flex items-start gap-3 p-2 rounded-md hover:bg-primary-container/10 transition-colors">
                                 <span class="material-symbols-outlined text-primary text-[18px]">hub</span>
                                 <div>
-                                    <span class="block text-xs font-bold text-on-surface">Asset Intelligence</span>
+                                    <span class="block text-xs font-bold text-on-surface">System Details</span>
                                     <span class="block text-[10px] text-on-surface-variant">
                                         {% if selected_vuln.most_critical_host.criticality == "Critical" or selected_vuln.most_critical_host.criticality == "High" %}
                                             High-Value Asset detected

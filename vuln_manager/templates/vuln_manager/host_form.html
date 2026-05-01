@@ -1,0 +1,72 @@
+{% extends 'vuln_manager/base.html' %}
+
+{% block title %}{% if host_obj %}Edit{% else %}Register{% endif %} Host{% endblock %}
+
+{% block header_title %}Asset <span class="text-primary">Details</span>{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <section class="mb-12">
+        <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight mb-2">
+            {% if host_obj %}Update <span class="text-primary">Host</span>{% else %}Register <span class="text-primary">Manual Host</span>{% endif %}
+        </h1>
+        <p class="text-on-surface-variant text-sm">Define a new endpoint in the infrastructure to track its security state and associated vulnerabilities.</p>
+    </section>
+
+    <div class="bg-surface-container rounded-3xl p-10 shadow-2xl shadow-black/40 border border-outline-variant/5">
+        <form action="{% if host_obj %}{% url 'host_edit' host_obj.id %}{% else %}{% url 'host_add' %}{% endif %}" method="POST">
+            {% csrf_token %}
+            <div class="space-y-10">
+                <!-- Host Specs -->
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-8">
+                    <div class="md:col-span-8">
+                        <label class="block text-[10px] font-black uppercase tracking-[0.3em] text-outline/50 mb-3">IP Address (V4/V6)</label>
+                        <input type="text" name="ip_address" value="{{ host_obj.ip_address|default:'' }}" 
+                               class="w-full bg-surface-container-lowest border border-outline-variant/10 rounded-xl px-5 py-4 text-on-surface text-sm font-bold focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-outline/20" 
+                               placeholder="e.g. 192.168.1.100" required>
+                    </div>
+                    
+                    <div class="md:col-span-4">
+                        <label class="block text-[10px] font-black uppercase tracking-[0.3em] text-outline/50 mb-3">Host Criticality</label>
+                        <div class="relative group">
+                            <select name="criticality" class="w-full bg-surface-container-lowest border border-outline-variant/10 rounded-xl px-5 py-4 text-on-surface text-sm font-black uppercase tracking-widest focus:ring-2 focus:ring-primary/30 transition-all appearance-none cursor-pointer">
+                                <option value="">NOT DEFINED</option>
+                                {% for val, label in criticality_choices %}
+                                <option value="{{ val }}" {% if host_obj.criticality == val %}selected{% endif %}>{{ label|upper }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-primary">
+                                <span class="material-symbols-outlined text-sm">stat_3</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="md:col-span-12">
+                        <label class="block text-[10px] font-black uppercase tracking-[0.3em] text-outline/50 mb-3">Hostname (DNS Alias)</label>
+                        <input type="text" name="hostname" value="{{ host_obj.hostname|default:'' }}" 
+                               class="w-full bg-surface-container-lowest border border-outline-variant/10 rounded-xl px-5 py-4 text-on-surface text-sm font-bold focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-outline/20" 
+                               placeholder="e.g. srv-prod-db-01.internal.net">
+                    </div>
+                </div>
+
+                <!-- Guidance Info -->
+                <div class="p-6 rounded-2xl bg-primary/5 border border-primary/10 flex gap-4 items-start">
+                    <span class="material-symbols-outlined text-primary">info</span>
+                    <div>
+                        <p class="text-xs font-bold text-on-surface mb-1">Manual Host Registration</p>
+                        <p class="text-[10px] text-on-surface-variant leading-relaxed uppercase tracking-tight">Manually registered hosts will appear in the Asset Inventory and can be linked to software components or vulnerabilities. Scan discovery will update these hosts automatically if the IP matches.</p>
+                    </div>
+                </div>
+
+                <div class="pt-6 flex items-center justify-end gap-8 border-t border-outline-variant/5">
+                    <a href="{% url 'host_list' %}" class="text-[10px] font-black text-outline uppercase tracking-[0.2em] hover:text-on-surface transition-colors">Cancel</a>
+                    <button type="submit" class="bg-gradient-to-r from-primary to-primary-container text-surface px-10 py-4 rounded-2xl font-headline font-black uppercase tracking-[0.2em] text-xs shadow-xl shadow-primary/20 hover:brightness-110 active:scale-95 transition-all flex items-center gap-3">
+                        <span class="material-symbols-outlined text-sm">save</span>
+                        {% if host_obj %}Apply Host Updates{% else %}Save Host to Inventory{% endif %}
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
