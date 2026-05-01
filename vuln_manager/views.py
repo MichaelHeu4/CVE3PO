@@ -1,7 +1,8 @@
+from django.views.decorators.http import require_POST
 from django.shortcuts import render, redirect, get_object_or_404
 from django.db.models import Count, Q, Max, Case, When, Value, IntegerField
 from django.db.models.functions import TruncDate
-from .models import Host, Port, Vulnerability, Scan, Software
+from .models import Host, Port, Vulnerability, Scan, Software, Extension
 from .parser import nmap
 from .parser import nuclei
 from .parser import openvas
@@ -728,6 +729,59 @@ def ki_dashboard(request):
         "selected_vuln": selected_vuln
     }
     return render(request, "vuln_manager/ki_dashboard.html", context)
+
+@login_required
+def extensions_view(request):
+    # Metadata for active modules
+    module_metadata = {
+        "wazuh": {
+            "name": "Wazuh Connector",
+            "description": "Real-time vulnerability streaming via webhooks. Automatically creates hosts and manages vulnerability lifecycles.",
+            "icon": "webhook",
+            "color": "primary",
+        },
+        "cloud_sentinel": {
+            "name": "Cloud Sentinel",
+            "description": "Continuous posture monitoring and threat detection across AWS, GCP, and Azure environments.",
+            "icon": "cloud_sync",
+            "color": "primary",
+        },
+        "docker_auditor": {
+            "name": "Docker Auditor",
+            "description": "Automated vulnerability scanning for container images and runtime security policy enforcement.",
+            "icon": "view_in_ar",
+            "color": "tertiary",
+        },
+        "slack_notifier": {
+            "name": "Slack Notifier",
+            "description": "Direct integration for instant critical vulnerability alerts and weekly security reports.",
+            "icon": "chat_bubble",
+            "color": "on-surface",
+        },
+    }
+
+    modules = []
+    for mid, meta in module_metadata.items():
+        ext, _ = Extension.objects.get_or_create(name_id=mid)
+        modules.append({
+            "id": mid,
+            "name": meta["name"],
+            "description": meta["description"],
+            "is_active": ext.is_active,
+            "icon": meta["icon"],
+            "color": meta["color"],
+        })
+        
+    return render(request, "vuln_manager/extensions.html", {"modules": modules})
+
+@login_required
+@require_POST
+def toggle_extension(request, name_id):
+    ext = get_object_or_404(Extension, name_id=name_id)
+    ext.is_active = not ext.is_active
+    ext.save()
+    return redirect("extensions")
+
 
 def run_triage_background():
     # 1. Alle unbewerteten (tbd)

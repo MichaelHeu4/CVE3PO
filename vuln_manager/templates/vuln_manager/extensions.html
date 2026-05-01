@@ -1,0 +1,85 @@
+{% extends 'vuln_manager/base.html' %}
+
+{% block title %}Modules{% endblock %}
+
+{% block header_title %}Module <span class="text-primary">Ecosystem</span>{% endblock %}
+
+{% block content %}
+<!-- Simple Hero Section -->
+<section class="mb-12 relative overflow-hidden rounded-[2rem] p-10 bg-surface-container-low border border-outline-variant/5 shadow-2xl">
+    <div class="absolute -right-20 -top-20 w-80 h-80 bg-primary/5 rounded-full blur-[100px]"></div>
+    <div class="relative z-10 max-w-2xl">
+        <h1 class="text-4xl lg:text-5xl font-black font-headline text-on-surface mb-4 leading-tight tracking-tighter">
+            Manage your<br/>
+            <span class="text-primary">Capabilities.</span>
+        </h1>
+        <p class="text-on-surface-variant text-sm font-body leading-relaxed max-w-lg">
+            Enable or disable specialized modules to extend your vulnerability management workflows.
+        </p>
+    </div>
+</section>
+
+<!-- Module Grid (Clean & Functional) -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+    {% for mod in modules %}
+    <div class="group bg-surface-container hover:bg-surface-container-high transition-all duration-300 p-8 rounded-[2rem] flex flex-col justify-between relative overflow-hidden shadow-xl border border-outline-variant/5">
+        <!-- Status Glow -->
+        {% if mod.is_active %}
+        <div class="absolute -right-8 -top-8 w-32 h-32 bg-primary/10 rounded-full blur-3xl group-hover:bg-primary/20 transition-all duration-500"></div>
+        {% endif %}
+        
+        <div>
+            <div class="flex justify-between items-start mb-8">
+                <div class="w-14 h-14 bg-{{ mod.color|default:'primary' }}/10 rounded-2xl flex items-center justify-center text-{{ mod.color|default:'primary' }} shadow-inner">
+                    <span class="material-symbols-outlined text-3xl" style="font-variation-settings: 'FILL' 1;">{{ mod.icon }}</span>
+                </div>
+                
+                <!-- Toggle Form -->
+                <form action="{% url 'toggle_extension' mod.id %}" method="POST">
+                    {% csrf_token %}
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" class="sr-only peer" {% if mod.is_active %}checked{% endif %} onchange="this.form.submit()">
+                        <div class="w-14 h-7 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full after:content-[''] after:absolute after:top-[4px] after:start-[4px] after:bg-on-surface after:rounded-full after:h-[1.3rem] after:w-[1.3rem] after:transition-all peer-checked:bg-primary shadow-lg"></div>
+                    </label>
+                </form>
+            </div>
+            
+            <h3 class="text-xl font-headline font-black text-on-surface mb-3 tracking-tight group-hover:text-primary transition-colors">{{ mod.name }}</h3>
+            <p class="text-xs text-on-surface-variant font-body leading-relaxed mb-8">
+                {{ mod.description }}
+            </p>
+        </div>
+        
+        <div class="flex items-center justify-between pt-6 border-t border-outline-variant/10">
+            <div class="flex flex-col">
+                <span class="text-[9px] font-black uppercase tracking-[0.2em] text-outline/50">Status</span>
+                <span class="text-[10px] font-black uppercase tracking-widest {% if mod.is_active %}text-primary{% else %}text-outline{% endif %}">
+                    {% if mod.is_active %}
+                    <span class="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse mr-1 shadow-[0_0_5px_rgba(59,191,250,0.5)]"></span>
+                    ACTIVE
+                    {% else %}
+                    DISABLED
+                    {% endif %}
+                </span>
+            </div>
+            {% if mod.is_active %}
+            <button class="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center text-outline hover:text-primary hover:bg-surface-bright transition-all shadow-md">
+                <span class="material-symbols-outlined text-lg">settings</span>
+            </button>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Simplified Developer Note -->
+<section class="mt-16 bg-surface-container rounded-[2rem] p-10 flex flex-col md:flex-row items-center gap-10 border border-outline-variant/10 opacity-60">
+    <div class="flex-grow">
+        <h4 class="text-on-surface font-headline font-bold text-lg mb-2">Custom Modules</h4>
+        <p class="text-xs text-on-surface-variant max-w-lg">New integrations can be added by placing specialized logic in the <code class="bg-surface-container-lowest px-2 py-0.5 rounded text-primary">vuln_manager/extensions/</code> directory.</p>
+    </div>
+    <div class="w-16 h-16 bg-surface-container-highest rounded-2xl flex items-center justify-center text-outline/30">
+        <span class="material-symbols-outlined text-3xl">developer_board</span>
+    </div>
+</section>
+{% endblock %}

@@ -146,6 +146,11 @@
                 <span class="font-bold text-xs uppercase tracking-[0.2em]">AI Dashboard</span>
             </a>
 
+            <a href="{% url 'extensions' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.resolver_match.url_name == 'extensions' %}bg-primary/10 text-primary shadow-[0_0_20px_rgba(59,191,250,0.1)] border border-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface{% endif %}">
+                <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'extensions' %}font-variation-settings: 'FILL' 1;{% endif %}">extension</span>
+                <span class="font-bold text-xs uppercase tracking-[0.2em]">Modules</span>
+            </a>
+
             <a href="{% url 'kanban_board' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.resolver_match.url_name == 'kanban_board' %}bg-primary/10 text-primary shadow-[0_0_20px_rgba(59,191,250,0.1)] border border-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface{% endif %}">
                 <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'kanban_board' %}font-variation-settings: 'FILL' 1;{% endif %}">view_kanban</span>
                 <span class="font-bold text-xs uppercase tracking-[0.2em]">Board</span>
