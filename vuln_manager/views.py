@@ -2,8 +2,14 @@ from django.core.paginator import Paginator
 from django.views.decorators.http import require_POST
 from django.shortcuts import render, redirect, get_object_or_404
 from django.db.models import Count, Q, Max, Case, When, Value, IntegerField, Avg
-from django.db.models.functions import TruncDate
-from .models import Host, Port, Vulnerability, Scan, Software, Extension, HostSoftwareRelationship
+from .models import (
+    Host,
+    Port,
+    Vulnerability,
+    Scan,
+    Software,
+    Extension,
+)
 from .parser import nmap
 from .parser import nuclei
 from .parser import openvas
@@ -11,14 +17,18 @@ from .parser import osvscanner
 from .parser import semgrep
 from .utils import ai_triage
 from django.conf import settings
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
 from django.utils.http import url_has_allowed_host_and_scheme
+import io
+from django.http import FileResponse
+from django.utils.timezone import now
+
+from xhtml2pdf import pisa
+from django.template.loader import render_to_string
 import json
-import os
+import threading
 
 CRITICALITY_WEIGHTS = {
     "Critical": 4,
@@ -83,52 +93,34 @@ def recalculate_host_criticality(host):
     host.save()
 
 
-@csrf_exempt
-@login_required
-def api_update_vuln_status(request, pk):
-    if request.method == "POST":
-        try:
-            vuln = Vulnerability.objects.get(pk=pk)
-            data = json.loads(request.body)
-            new_status = data.get("status")
-            if new_status in dict(Vulnerability.STATUS_CHOICES):
-                vuln.status = new_status
-                vuln.save()
-                return JsonResponse({"status": "success"})
-        except Exception as e:
-            return JsonResponse({"status": "error"}, status=400)
-    return JsonResponse({"status": "invalid method"}, status=405)
-
-
-import io
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
-from django.http import FileResponse
-from django.utils.timezone import now
-
-from xhtml2pdf import pisa
-from django.template.loader import render_to_string
-
 @login_required
 def export_dashboard_pdf(request):
     all_vulns = Vulnerability.objects.exclude(status__in=["fixed", "false_positive"])
     critical_count = all_vulns.filter(severity="critical").count()
     high_count = all_vulns.filter(severity="high").count()
     host_count = Host.objects.count()
-    vuln_hosts_count = Host.objects.filter(vulnerabilities__in=all_vulns).distinct().count()
-    avg_proc_time_ms = Vulnerability.objects.filter(ai_proc_time__gt=0).aggregate(Avg('ai_proc_time'))['ai_proc_time__avg'] or 0
+    vuln_hosts_count = (
+        Host.objects.filter(vulnerabilities__in=all_vulns).distinct().count()
+    )
+    avg_proc_time_ms = (
+        Vulnerability.objects.filter(ai_proc_time__gt=0).aggregate(Avg("ai_proc_time"))[
+            "ai_proc_time__avg"
+        ]
+        or 0
+    )
 
     top_hosts = Host.objects.annotate(
         num_vulns=Count(
             "vulnerabilities",
-            filter=~Q(vulnerabilities__status__in=["fixed", "false_positive"])
+            filter=~Q(vulnerabilities__status__in=["fixed", "false_positive"]),
         )
     ).order_by("-num_vulns")[:5]
 
-    recent_vulns = Vulnerability.objects.filter(
-        severity__in=["critical", "high"]
-    ).exclude(status__in=["fixed", "false_positive"]).order_by("-id")[:5]
+    recent_vulns = (
+        Vulnerability.objects.filter(severity__in=["critical", "high"])
+        .exclude(status__in=["fixed", "false_positive"])
+        .order_by("-id")[:5]
+    )
 
     context = {
         "report_date": now(),
@@ -152,71 +144,11 @@ def export_dashboard_pdf(request):
         return HttpResponse("Fehler bei der PDF-Erstellung", status=500)
 
     buffer.seek(0)
-    return FileResponse(buffer, as_attachment=True, filename=f"cve3po_report_{now().strftime('%Y%m%d')}.pdf")
-
-
-@csrf_exempt
-@require_POST
-def update_inventory_api(request):
-    """
-    API endpoint for agents to report software inventory (Strategy A).
-    Payload must include 'X-API-Key' header.
-    """
-    try:
-        # 1. Authentication Check
-        api_ext, _ = Extension.objects.get_or_create(name_id="agent_api")
-        provided_token = request.headers.get("X-API-Key")
-        if not provided_token or provided_token != api_ext.api_token:
-            return JsonResponse({"status": "error", "message": "unauthorized"}, status=401)
-
-        data = json.loads(request.body)
-        host_ip = data.get("host_ip")
-        hostname = data.get("hostname")
-        software_list = data.get("software", [])
-
-        if not host_ip:
-            return JsonResponse({"status": "error", "message": "host_ip is required"}, status=400)
-
-        # 1. Host sicherstellen
-        host, _ = Host.objects.get_or_create(ip_address=host_ip)
-        if hostname and not host.hostname:
-            host.hostname = hostname
-            host.save()
-
-        # 2. Strategy A: Alle bisherigen "agent" Einträge für diesen Host löschen
-        HostSoftwareRelationship.objects.filter(host=host, source="agent").delete()
-
-        added_count = 0
-        for sw_item in software_list:
-            name = sw_item.get("name")
-            version = sw_item.get("version")
-            vendor = sw_item.get("vendor")
-            port = sw_item.get("port")
-
-            if name:
-                sw_obj, _ = Software.objects.get_or_create(
-                    name=name,
-                    version=version,
-                    vendor=vendor,
-                    listening_port=port
-                )
-                
-                # Gezielt als "agent" Verknüpfung anlegen
-                HostSoftwareRelationship.objects.get_or_create(
-                    host=host,
-                    software=sw_obj,
-                    source="agent"
-                )
-                added_count += 1
-
-        return JsonResponse({
-            "status": "success", 
-            "host": host.ip_address,
-            "agent_software_synced": added_count
-        }, status=200)
-
-    except Exception as e:
-        return JsonResponse({"status": "error", "message": str(e)}, status=400)
+    return FileResponse(
+        buffer,
+        as_attachment=True,
+        filename=f"cve3po_report_{now().strftime('%Y%m%d')}.pdf",
+    )
 
 
 @login_required
@@ -230,79 +162,100 @@ def dashboard(request):
             item["latest_scan_id"] for item in latest_port_ids if item["latest_scan_id"]
         ]
     ).count()
-    
+
     # Open vulnerabilities (excluding fixed/fp/info)
-    all_open_vulns = Vulnerability.objects.exclude(status__in=["fixed", "false_positive"])
+    all_open_vulns = Vulnerability.objects.exclude(
+        status__in=["fixed", "false_positive"]
+    )
     vuln_count = all_open_vulns.exclude(severity="info").count()
-    
+
     # Severity distribution
     vuln_stats = all_open_vulns.values("severity").annotate(count=Count("id"))
     severity_map = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
     for stat in vuln_stats:
         severity_map[stat["severity"].lower()] = stat["count"]
-        
+
     # Security Score Calculation
     # Critical=10, High=5, Medium=2, Low=1
-    risk_points = (severity_map["critical"] * 10 + 
-                   severity_map["high"] * 5 + 
-                   severity_map["medium"] * 2 + 
-                   severity_map["low"] * 1)
-    
+    risk_points = (
+        severity_map["critical"] * 10
+        + severity_map["high"] * 5
+        + severity_map["medium"] * 2
+        + severity_map["low"] * 1
+    )
+
     if host_count > 0:
-        # Score starts at 100, drops based on risk density. 
-        score = max(0, 100 - (risk_points / (host_count * 0.5))) 
+        # Score starts at 100, drops based on risk density.
+        score = max(0, 100 - (risk_points / (host_count * 0.5)))
     else:
         score = 100
-    
+
     # Vulnerability Trend (Last 14 days)
     # We want to show "Active" vs "Fixed"
     trend_labels = []
     trend_open = []
     trend_fixed = []
-    
+
     import datetime
+
     today = datetime.date.today()
     for i in range(13, -1, -1):
         day = today - datetime.timedelta(days=i)
         trend_labels.append(day.strftime("%d.%m"))
-        
+
         # Open on that day (created before or on that day, and not fixed or fixed AFTER that day)
-        open_count = Vulnerability.objects.filter(
-            scan__uploaded_at__date__lte=day
-        ).exclude(
-            status__in=["fixed", "false_positive"],
-        ).count()
-        
+        open_count = (
+            Vulnerability.objects.filter(scan__uploaded_at__date__lte=day)
+            .exclude(
+                status__in=["fixed", "false_positive"],
+            )
+            .count()
+        )
+
         fixed_count = Vulnerability.objects.filter(
-            status="fixed",
-            scan__uploaded_at__date__lte=day
+            status="fixed", scan__uploaded_at__date__lte=day
         ).count()
-        
+
         trend_open.append(open_count)
         trend_fixed.append(fixed_count)
 
     # Top Risky Assets (Weighted)
     top_hosts = (
         Host.objects.annotate(
-            risk_score=Count('vulnerabilities', filter=Q(vulnerabilities__severity='critical')) * 10 +
-                       Count('vulnerabilities', filter=Q(vulnerabilities__severity='high')) * 5 +
-                       Count('vulnerabilities', filter=Q(vulnerabilities__severity='medium')) * 2
-        ).filter(risk_score__gt=0).order_by('-risk_score')[:5]
+            risk_score=Count(
+                "vulnerabilities", filter=Q(vulnerabilities__severity="critical")
+            )
+            * 10
+            + Count("vulnerabilities", filter=Q(vulnerabilities__severity="high")) * 5
+            + Count("vulnerabilities", filter=Q(vulnerabilities__severity="medium")) * 2
+        )
+        .filter(risk_score__gt=0)
+        .order_by("-risk_score")[:5]
     )
 
     recent_vulns = all_open_vulns.select_related("host").order_by("-id")[:5]
-    
+
     top_ports = (
-        Port.objects.filter(scan_id__in=[item["latest_scan_id"] for item in latest_port_ids if item["latest_scan_id"]])
+        Port.objects.filter(
+            scan_id__in=[
+                item["latest_scan_id"]
+                for item in latest_port_ids
+                if item["latest_scan_id"]
+            ]
+        )
         .values("port_number", "service_name")
         .annotate(count=Count("id"))
         .order_by("-count")[:5]
     )
-    
+
     software_count = Software.objects.count()
 
-    # AI Stats (MTTT)
-    avg_proc_time_ms = Vulnerability.objects.filter(ai_proc_time__gt=0).aggregate(Avg('ai_proc_time'))['ai_proc_time__avg'] or 0
+    avg_proc_time_ms = (
+        Vulnerability.objects.filter(ai_proc_time__gt=0).aggregate(Avg("ai_proc_time"))[
+            "ai_proc_time__avg"
+        ]
+        or 0
+    )
     ai_context = {
         "proc_time": round(avg_proc_time_ms / 1000, 2),
     }
@@ -329,10 +282,10 @@ def dashboard(request):
 @login_required
 def host_list(request):
     hosts_query = Host.objects.all().order_by("ip_address")
-    
+
     # Pagination
-    paginator = Paginator(hosts_query, 25) # 25 per page
-    page_number = request.GET.get('page')
+    paginator = Paginator(hosts_query, 25)  # 25 per page
+    page_number = request.GET.get("page")
     hosts = paginator.get_page(page_number)
 
     for host in hosts:
@@ -376,10 +329,10 @@ def host_detail(request, pk):
             .distinct()
             .order_by("-severity")
         )
-    
+
     # Paginate Threats
     vuln_paginator = Paginator(vulns_query, 20)
-    vuln_page_number = request.GET.get('vuln_page')
+    vuln_page_number = request.GET.get("vuln_page")
     vulns = vuln_paginator.get_page(vuln_page_number)
     host_timeline_raw = (
         host.vulnerabilities.exclude(status="false_positive")
@@ -391,21 +344,23 @@ def host_detail(request, pk):
         item["scan__uploaded_at"].strftime("%d.%m %H:%M") for item in host_timeline_raw
     ]
     host_timeline_values = [item["count"] for item in host_timeline_raw]
-    
+
     # Software Inventory with Pagination
     sw_query = host.software_inventory.annotate(
         active_vulns=Count(
             "vulnerabilities",
-            filter=(Q(vulnerabilities__host=host) | Q(vulnerabilities__software__hosts=host))
+            filter=(
+                Q(vulnerabilities__host=host) | Q(vulnerabilities__software__hosts=host)
+            )
             & ~Q(vulnerabilities__status__in=["fixed", "false_positive"]),
         )
     ).order_by("name")
-    
+
     sw_paginator = Paginator(sw_query, 20)
-    sw_page_number = request.GET.get('sw_page')
+    sw_page_number = request.GET.get("sw_page")
     installed_software = sw_paginator.get_page(sw_page_number)
-    
-    active_tab = request.GET.get('tab', 'threats')
+
+    active_tab = request.GET.get("tab", "threats")
 
     return render(
         request,
@@ -427,12 +382,14 @@ def host_detail(request, pk):
 
 @login_required
 def software_list(request):
-    software_query = Software.objects.annotate(num_hosts=Count("hosts")).order_by("name")
-    
+    software_query = Software.objects.annotate(num_hosts=Count("hosts")).order_by(
+        "name"
+    )
+
     paginator = Paginator(software_query, 25)
-    page_number = request.GET.get('page')
+    page_number = request.GET.get("page")
     software = paginator.get_page(page_number)
-    
+
     return render(request, "vuln_manager/software_list.html", {"software": software})
 
 
@@ -712,22 +669,22 @@ def vuln_list(request):
     severity = request.GET.get("severity")
     status_filter = request.GET.get("status", "active")
     active_vulns = Vulnerability.objects.exclude(status="false_positive")
-    
+
     if status_filter == "resolved":
         vulns_query = active_vulns.filter(status="fixed")
     elif status_filter == "ignored":
         vulns_query = active_vulns.filter(status="risk_accepted")
     else:
         vulns_query = active_vulns.exclude(status="fixed")
-        
+
     if severity:
         vulns_query = vulns_query.filter(severity=severity.lower())
-        
+
     vulns_query = vulns_query.order_by("-severity", "cve_id")
-    
+
     # Pagination
-    paginator = Paginator(vulns_query, 50) # 50 per page for vulns
-    page_number = request.GET.get('page')
+    paginator = Paginator(vulns_query, 50)  # 50 per page for vulns
+    page_number = request.GET.get("page")
     vulns = paginator.get_page(page_number)
 
     metrics = {
@@ -811,9 +768,6 @@ def delete_scan(request, pk):
     return redirect("scan_list")
 
 
-import threading
-from django.db.models import Avg
-
 @login_required
 def ki_dashboard(request):
     selected_vuln_id = request.GET.get("selected_vuln")
@@ -821,16 +775,25 @@ def ki_dashboard(request):
     if selected_vuln_id:
         selected_vuln = get_object_or_404(Vulnerability, pk=selected_vuln_id)
 
-    all_vulns_query = Vulnerability.objects.exclude(status="false_positive").order_by("-severity", "cve_id").distinct()
+    all_vulns_query = (
+        Vulnerability.objects.exclude(status="false_positive")
+        .order_by("-severity", "cve_id")
+        .distinct()
+    )
 
     # AI Stats
     triaged_vulns = all_vulns_query.exclude(ai_result="tbd").count()
     action_required = all_vulns_query.filter(ai_result="Act").count()
-    avg_proc_time_ms = Vulnerability.objects.filter(ai_proc_time__gt=0).aggregate(Avg('ai_proc_time'))['ai_proc_time__avg'] or 0
+    avg_proc_time_ms = (
+        Vulnerability.objects.filter(ai_proc_time__gt=0).aggregate(Avg("ai_proc_time"))[
+            "ai_proc_time__avg"
+        ]
+        or 0
+    )
 
     # Pagination
-    paginator = Paginator(all_vulns_query, 25) # 25 per page
-    page_number = request.GET.get('page')
+    paginator = Paginator(all_vulns_query, 25)  # 25 per page
+    page_number = request.GET.get("page")
     all_vulns = paginator.get_page(page_number)
 
     ai = {
@@ -842,16 +805,18 @@ def ki_dashboard(request):
         "all_vulns": all_vulns,
         "action_required": action_required,
         "ai": ai,
-        "selected_vuln": selected_vuln
+        "selected_vuln": selected_vuln,
     }
     return render(request, "vuln_manager/ki_dashboard.html", context)
+
+
 @login_required
 def extensions_view(request):
     # Metadata for active modules
     module_metadata = {
         "agent_api": {
-            "name": "Inventory API",
-            "description": "Core API for external agents to report software inventory. Requires X-API-Key header.",
+            "name": "CVE3PO Agent",
+            "description": "Activates the CVE3PO Agent API and lets you use the CVE3PO Agent to retrieve the SBOM of Server",
             "icon": "api",
             "color": "tertiary",
         },
@@ -861,40 +826,25 @@ def extensions_view(request):
             "icon": "webhook",
             "color": "primary",
         },
-        "cloud_sentinel": {
-            "name": "Cloud Sentinel",
-            "description": "Continuous posture monitoring and threat detection across AWS, GCP, and Azure environments.",
-            "icon": "cloud_sync",
-            "color": "primary",
-        },
-        "docker_auditor": {
-            "name": "Docker Auditor",
-            "description": "Automated vulnerability scanning for container images and runtime security policy enforcement.",
-            "icon": "view_in_ar",
-            "color": "tertiary",
-        },
-        "slack_notifier": {
-            "name": "Slack Notifier",
-            "description": "Direct integration for instant critical vulnerability alerts and weekly security reports.",
-            "icon": "chat_bubble",
-            "color": "on-surface",
-        },
     }
 
     modules = []
     for mid, meta in module_metadata.items():
         ext, _ = Extension.objects.get_or_create(name_id=mid)
-        modules.append({
-            "id": mid,
-            "name": meta["name"],
-            "description": meta["description"],
-            "is_active": ext.is_active,
-            "api_token": ext.api_token,
-            "icon": meta["icon"],
-            "color": meta["color"],
-        })
-        
+        modules.append(
+            {
+                "id": mid,
+                "name": meta["name"],
+                "description": meta["description"],
+                "is_active": ext.is_active,
+                "api_token": ext.api_token,
+                "icon": meta["icon"],
+                "color": meta["color"],
+            }
+        )
+
     return render(request, "vuln_manager/extensions.html", {"modules": modules})
+
 
 @login_required
 @require_POST
@@ -910,23 +860,26 @@ def run_triage_background():
     pending = Vulnerability.objects.exclude(
         status__in=["fixed", "false_positive", "risk_accepted"]
     ).filter(ai_result="tbd")
-    
+
     for vuln in pending:
         ai_triage.triage(vuln)
-        
+
     # 2. Bereits bewertete, bei denen sich die Asset-Kritikalität geändert hat
     triaged = Vulnerability.objects.exclude(
         status__in=["fixed", "false_positive", "risk_accepted"]
     ).exclude(ai_result="tbd")
-    
+
     for vuln in triaged:
         current_crit = "Low"
         if vuln.most_critical_host:
             current_crit = vuln.most_critical_host.criticality or "Low"
-            
+
         if vuln.ai_last_criticality != current_crit:
-            print(f"[AI] Re-triaging {vuln.cve_id} due to criticality change: {vuln.ai_last_criticality} -> {current_crit}")
+            print(
+                f"[AI] Re-triaging {vuln.cve_id} due to criticality change: {vuln.ai_last_criticality} -> {current_crit}"
+            )
             ai_triage.triage(vuln)
+
 
 @login_required
 def do_triage(request):

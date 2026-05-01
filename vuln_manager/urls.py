@@ -1,12 +1,13 @@
 from django.views.decorators.csrf import csrf_exempt
 from django.urls import path
 from . import views
-from .extensions import wazuh
+from .extensions import wazuh, agent
 
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
-    path("api/inventory/update/", views.update_inventory_api, name="api_update_inventory"),
-
+    path(
+        "api/inventory/update/", agent.update_inventory_api, name="api_update_inventory"
+    ),
     path("login/", views.login_view, name="login"),
     path("register/", views.register_view, name="register"),
     path("logout/", views.logout_view, name="logout"),
@@ -33,11 +34,6 @@ urlpatterns = [
         views.update_vuln_status,
         name="update_vuln_status",
     ),
-    path(
-        "api/vulnerabilities/<int:pk>/status/",
-        views.api_update_vuln_status,
-        name="api_update_vuln_status",
-    ),
     path("board/", views.kanban_board, name="kanban_board"),
     path("vulnerabilities/add/", views.vuln_add, name="vuln_add"),
     path("import/", views.scan_import, name="scan_import"),
@@ -61,7 +57,9 @@ urlpatterns = [
     path("ai/dashboard/", views.ki_dashboard, name="ai_dashboard"),
     path("ai/triage", views.do_triage, name="do_triage"),
     path("modules/", views.extensions_view, name="extensions"),
-    path("modules/toggle/<str:name_id>/", views.toggle_extension, name="toggle_extension"),
+    path(
+        "modules/toggle/<str:name_id>/", views.toggle_extension, name="toggle_extension"
+    ),
     path("api/webhooks/wazuh/", wazuh.webhook, name="wazuh_webhook"),
     path("dashboard/export/", views.export_dashboard_pdf, name="export_dashboard_pdf"),
 ]
