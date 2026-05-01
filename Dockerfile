@@ -27,8 +27,11 @@ WORKDIR /app
 RUN mkdir -p /app/data && chown -R appuser:appuser /app/data
 COPY --chown=appuser:appuser . .
 
+RUN chmod +x /app/entrypoint.sh
+
 USER appuser
 
 EXPOSE 8000
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "cve3po.wsgi:application"]
 

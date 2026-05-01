@@ -1,6 +1,6 @@
 from django.views.decorators.http import require_POST
 from django.shortcuts import render, redirect, get_object_or_404
-from django.db.models import Count, Q, Max, Case, When, Value, IntegerField
+from django.db.models import Count, Q, Max, Case, When, Value, IntegerField, Avg
 from django.db.models.functions import TruncDate
 from .models import Host, Port, Vulnerability, Scan, Software, Extension, HostSoftwareRelationship
 from .parser import nmap
@@ -224,64 +224,75 @@ def dashboard(request):
             item["latest_scan_id"] for item in latest_port_ids if item["latest_scan_id"]
         ]
     ).count()
-    vuln_count = (
-        Vulnerability.objects.exclude(status__in=["fixed", "false_positive"])
-        .exclude(severity="info")
-        .count()
-    )
-    vuln_stats = (
-        Vulnerability.objects.exclude(status__in=["fixed", "false_positive"])
-        .values("severity")
-        .annotate(count=Count("id"))
-    )
+    
+    # Open vulnerabilities (excluding fixed/fp/info)
+    all_open_vulns = Vulnerability.objects.exclude(status__in=["fixed", "false_positive"])
+    vuln_count = all_open_vulns.exclude(severity="info").count()
+    
+    # Severity distribution
+    vuln_stats = all_open_vulns.values("severity").annotate(count=Count("id"))
     severity_map = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
     for stat in vuln_stats:
         severity_map[stat["severity"].lower()] = stat["count"]
-    timeline_raw = (
-        Vulnerability.objects.exclude(status__in=["fixed", "false_positive"])
-        .annotate(date=TruncDate("scan__uploaded_at"))
-        .values("date")
-        .annotate(count=Count("id"))
-        .order_by("date")
-    )
-    timeline_labels = [item["date"].strftime("%d.%m.%Y") for item in timeline_raw]
-    timeline_values = [item["count"] for item in timeline_raw]
+        
+    # Security Score Calculation
+    # Critical=10, High=5, Medium=2, Low=1
+    risk_points = (severity_map["critical"] * 10 + 
+                   severity_map["high"] * 5 + 
+                   severity_map["medium"] * 2 + 
+                   severity_map["low"] * 1)
+    
+    if host_count > 0:
+        # Score starts at 100, drops based on risk density. 
+        score = max(0, 100 - (risk_points / (host_count * 0.5))) 
+    else:
+        score = 100
+    
+    # Vulnerability Trend (Last 14 days)
+    # We want to show "Active" vs "Fixed"
+    trend_labels = []
+    trend_open = []
+    trend_fixed = []
+    
+    import datetime
+    today = datetime.date.today()
+    for i in range(13, -1, -1):
+        day = today - datetime.timedelta(days=i)
+        trend_labels.append(day.strftime("%d.%m"))
+        
+        # Open on that day (created before or on that day, and not fixed or fixed AFTER that day)
+        open_count = Vulnerability.objects.filter(
+            scan__uploaded_at__date__lte=day
+        ).exclude(
+            status__in=["fixed", "false_positive"],
+        ).count()
+        
+        fixed_count = Vulnerability.objects.filter(
+            status="fixed",
+            scan__uploaded_at__date__lte=day
+        ).count()
+        
+        trend_open.append(open_count)
+        trend_fixed.append(fixed_count)
+
+    # Top Risky Assets (Weighted)
     top_hosts = (
         Host.objects.annotate(
-            num_vulns=Count(
-                "vulnerabilities",
-                filter=~Q(vulnerabilities__status__in=["fixed", "false_positive"])
-                & ~Q(vulnerabilities__severity="info"),
-            )
-        )
-        .filter(num_vulns__gt=0)
-        .order_by("-num_vulns")[:5]
+            risk_score=Count('vulnerabilities', filter=Q(vulnerabilities__severity='critical')) * 10 +
+                       Count('vulnerabilities', filter=Q(vulnerabilities__severity='high')) * 5 +
+                       Count('vulnerabilities', filter=Q(vulnerabilities__severity='medium')) * 2
+        ).filter(risk_score__gt=0).order_by('-risk_score')[:5]
     )
-    recent_vulns = (
-        Vulnerability.objects.select_related("host")
-        .exclude(status__in=["fixed", "false_positive"])
-        .order_by("-id")[:5]
-    )
+
+    recent_vulns = all_open_vulns.select_related("host").order_by("-id")[:5]
+    
     top_ports = (
-        Port.objects.filter(
-            scan_id__in=[
-                item["latest_scan_id"]
-                for item in latest_port_ids
-                if item["latest_scan_id"]
-            ]
-        )
+        Port.objects.filter(scan_id__in=[item["latest_scan_id"] for item in latest_port_ids if item["latest_scan_id"]])
         .values("port_number", "service_name")
         .annotate(count=Count("id"))
         .order_by("-count")[:5]
     )
-    top_vuln_types = (
-        Vulnerability.objects.exclude(status__in=["fixed", "false_positive"])
-        .exclude(severity="info")
-        .values("cve_id", "name")
-        .annotate(count=Count("id"))
-        .order_by("-count")[:5]
-    )
-    last_scans = Scan.objects.all().order_by("-uploaded_at")[:5]
+    
     software_count = Software.objects.count()
 
     # AI Stats (MTTT)
@@ -295,13 +306,13 @@ def dashboard(request):
         "port_count": port_count,
         "vuln_count": vuln_count,
         "severity_map": severity_map,
-        "last_scans": last_scans,
+        "score": round(score),
+        "trend_labels": json.dumps(trend_labels),
+        "trend_open": json.dumps(trend_open),
+        "trend_fixed": json.dumps(trend_fixed),
         "top_hosts": top_hosts,
         "recent_vulns": recent_vulns,
         "top_ports": top_ports,
-        "top_vuln_types": top_vuln_types,
-        "timeline_labels": json.dumps(timeline_labels),
-        "timeline_values": json.dumps(timeline_values),
         "software_count": software_count,
         "ai": ai_context,
         "user": User.objects.get(pk=request.user.id),
