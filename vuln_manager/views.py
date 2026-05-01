@@ -154,6 +154,66 @@ def export_dashboard_pdf(request):
     return FileResponse(buffer, as_attachment=True, filename=f"cve3po_report_{now().strftime('%Y%m%d')}.pdf")
 
 
+@csrf_exempt
+@require_POST
+def update_inventory_api(request):
+    """
+    API endpoint for agents to report software inventory.
+    Payload: {
+        "host_ip": "192.168.1.5",
+        "hostname": "optional-name",
+        "software": [
+            {"name": "openssl", "version": "1.1.1", "vendor": "openssl"},
+            ...
+        ]
+    }
+    """
+    try:
+        data = json.loads(request.body)
+        host_ip = data.get("host_ip")
+        hostname = data.get("hostname")
+        software_list = data.get("software", [])
+
+        if not host_ip:
+            return JsonResponse({"status": "error", "message": "host_ip is required"}, status=400)
+
+        # 1. Host sicherstellen
+        host, _ = Host.objects.get_or_create(ip_address=host_ip)
+        if hostname and not host.hostname:
+            host.hostname = hostname
+            host.save()
+
+        # 2. Software verknüpfen
+        # Optional: Hier könnte man alte Software-Links löschen, wenn man einen Full-Snapshot möchte
+        # host.software_inventory.clear() 
+
+        added_count = 0
+        for sw_item in software_list:
+            name = sw_item.get("name")
+            version = sw_item.get("version")
+            vendor = sw_item.get("vendor")
+            port = sw_item.get("port") # optional
+
+            if name:
+                sw_obj, _ = Software.objects.get_or_create(
+                    name=name,
+                    version=version,
+                    vendor=vendor,
+                    listening_port=port
+                )
+                sw_obj.hosts.add(host)
+                added_count += 1
+
+        return JsonResponse({
+            "status": "success", 
+            "host": host.ip_address,
+            "software_added": added_count
+        }, status=200)
+
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=400)
+
+
 @login_required
 def dashboard(request):
     host_count = Host.objects.count()

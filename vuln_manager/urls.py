@@ -1,10 +1,12 @@
+from django.views.decorators.csrf import csrf_exempt
 from django.urls import path
 from . import views
-
 from .extensions import wazuh
 
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
+    path("api/inventory/update/", views.update_inventory_api, name="api_update_inventory"),
+
     path("login/", views.login_view, name="login"),
     path("register/", views.register_view, name="register"),
     path("logout/", views.logout_view, name="logout"),

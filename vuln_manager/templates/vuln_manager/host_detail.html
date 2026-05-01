@@ -61,6 +61,63 @@
             </div>
         </div>
 
+        <div class="bg-surface-container rounded-3xl p-8 mb-8">
+            <div class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+                <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline">Software Inventory</h5>
+                <span class="px-3 py-1 rounded-full bg-surface-container-highest text-[10px] font-black text-outline uppercase tracking-widest border border-outline-variant/10">
+                    Agent Monitoring: <span class="text-primary">Live</span>
+                </span>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-separate border-spacing-y-2">
+                    <thead>
+                        <tr class="text-[9px] font-black uppercase tracking-[0.2em] text-outline/50">
+                            <th class="px-4 pb-4">Component</th>
+                            <th class="px-4 pb-4">Version</th>
+                            <th class="px-4 pb-4">Vendor</th>
+                            <th class="px-4 pb-4 text-right">Security</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sw in installed_software %}
+                        <tr class="group bg-surface-container-low hover:bg-surface-container-high transition-all cursor-pointer" onclick="window.location='{% url 'software_detail' sw.id %}'">
+                            <td class="px-4 py-4 rounded-l-2xl border-l-2 {% if sw.active_vulns > 0 %}border-error/50{% else %}border-primary/30{% endif %}">
+                                <div class="flex items-center gap-3">
+                                    <span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors">deployed_code</span>
+                                    <span class="text-xs font-bold text-on-surface">{{ sw.name }}</span>
+                                </div>
+                            </td>
+                            <td class="px-4 py-4 text-[10px] font-black text-on-surface-variant uppercase tracking-widest">{{ sw.version|default:"-" }}</td>
+                            <td class="px-4 py-4 text-[10px] text-outline uppercase">{{ sw.vendor|default:"Unknown" }}</td>
+                            <td class="px-4 py-4 rounded-r-2xl text-right">
+                                {% if sw.active_vulns > 0 %}
+                                <div class="inline-flex items-center gap-2 bg-error/10 text-error px-3 py-1 rounded-full border border-error/20">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-error animate-pulse"></span>
+                                    <span class="text-[9px] font-black uppercase tracking-widest">{{ sw.active_vulns }} Vulnerabilities</span>
+                                </div>
+                                {% else %}
+                                <span class="text-[9px] font-black text-outline/40 uppercase tracking-widest">Secure</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" class="text-center py-12 text-outline text-[10px] font-black uppercase tracking-widest opacity-30">
+                                <span class="material-symbols-outlined text-4xl block mb-2">inventory_2</span>
+                                No Software Data Collected
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <a href="{% url 'software_add' %}" class="inline-flex items-center gap-2 mt-8 text-[9px] font-black uppercase tracking-widest text-primary hover:underline">
+                <span class="material-symbols-outlined text-xs">add_circle</span>
+                Manual Entry
+            </a>
+        </div>
+
         <div class="bg-surface-container rounded-3xl p-8">
             <div class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
                 <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline">Detected Threats</h5>
@@ -149,36 +206,6 @@
                 <p class="text-[10px] text-outline text-center py-4 uppercase font-bold tracking-widest">No Active Ports</p>
                 {% endfor %}
             </div>
-        </div>
-
-        <!-- Software -->
-        <div class="bg-surface-container rounded-3xl p-8 border border-outline-variant/5">
-            <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-6">Associated Software</h5>
-            <div class="space-y-4">
-                {% for sw in installed_software %}
-                <a href="{% url 'software_detail' sw.id %}" class="flex items-center justify-between p-4 bg-surface-container-low rounded-2xl hover:bg-surface-container-high transition-all group">
-                    <div class="flex items-center gap-4 overflow-hidden">
-                        <div class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-outline group-hover:text-primary transition-colors">
-                            <span class="material-symbols-outlined text-sm">deployed_code</span>
-                        </div>
-                        <div class="overflow-hidden">
-                            <p class="text-xs font-bold text-on-surface truncate mb-0.5">{{ sw.name }}</p>
-                            <p class="text-[9px] text-outline uppercase tracking-tighter">{{ sw.version|default:"v. unknown" }}</p>
-                        </div>
-                    </div>
-                    {% if sw.active_vulns > 0 %}
-                    <span class="w-5 h-5 rounded-full bg-error text-surface flex items-center justify-center text-[9px] font-black">{{ sw.active_vulns }}</span>
-                    {% else %}
-                    <span class="material-symbols-outlined text-sm text-outline-variant">chevron_right</span>
-                    {% endif %}
-                </a>
-                {% empty %}
-                <p class="text-[10px] text-outline text-center py-4 uppercase font-bold tracking-widest">No Software Registered</p>
-                {% endfor %}
-            </div>
-            <a href="{% url 'software_add' %}" class="w-full mt-6 py-3 rounded-xl bg-primary/5 text-primary text-[10px] font-black tracking-widest uppercase hover:bg-primary/10 transition-all block text-center">
-                Assign Software
-            </a>
         </div>
     </div>
 </div>
