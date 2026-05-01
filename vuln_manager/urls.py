@@ -59,6 +59,7 @@ urlpatterns = [
     path("ai/dashboard/", views.ki_dashboard, name="ai_dashboard"),
     path("ai/triage", views.do_triage, name="do_triage"),
     path("modules/", views.extensions_view, name="extensions"),
+    path("modules/toggle/<str:name_id>/", views.toggle_extension, name="toggle_extension"),
     path("api/webhooks/wazuh/", wazuh.webhook, name="wazuh_webhook"),
     path("dashboard/export/", views.export_dashboard_pdf, name="export_dashboard_pdf"),
 ]

@@ -1,7 +1,8 @@
+from django.views.decorators.http import require_POST
 from django.shortcuts import render, redirect, get_object_or_404
 from django.db.models import Count, Q, Max, Case, When, Value, IntegerField
 from django.db.models.functions import TruncDate
-from .models import Host, Port, Vulnerability, Scan, Software
+from .models import Host, Port, Vulnerability, Scan, Software, Extension
 from .parser import nmap
 from .parser import nuclei
 from .parser import openvas
@@ -731,58 +732,55 @@ def ki_dashboard(request):
 
 @login_required
 def extensions_view(request):
-    # Hardcoded modules for the prototype UI
-    modules = [
-        {
-            "id": "wazuh",
+    # Metadata for active modules
+    module_metadata = {
+        "wazuh": {
             "name": "Wazuh Connector",
             "description": "Real-time vulnerability streaming via webhooks. Automatically creates hosts and manages vulnerability lifecycles.",
-            "status": "Active",
             "icon": "webhook",
             "color": "primary",
-            "updated": "Just now"
         },
-        {
-            "id": "cloud_sentinel",
+        "cloud_sentinel": {
             "name": "Cloud Sentinel",
             "description": "Continuous posture monitoring and threat detection across AWS, GCP, and Azure environments.",
-            "version": "v2.4.0",
-            "status": "Active",
             "icon": "cloud_sync",
             "color": "primary",
-            "updated": "2d ago"
         },
-        {
-            "id": "docker_auditor",
+        "docker_auditor": {
             "name": "Docker Auditor",
             "description": "Automated vulnerability scanning for container images and runtime security policy enforcement.",
-            "version": "v1.8.2",
-            "status": "Active",
             "icon": "view_in_ar",
             "color": "tertiary",
-            "updated": "5h ago"
         },
-        {
-            "id": "slack_notifier",
+        "slack_notifier": {
             "name": "Slack Notifier",
             "description": "Direct integration for instant critical vulnerability alerts and weekly security reports.",
-            "version": "v3.0.1",
-            "status": "Inactive",
             "icon": "chat_bubble",
             "color": "on-surface",
-            "updated": "N/A"
         },
-        {
-            "id": "ghost_inspector",
-            "name": "Ghost Inspector",
-            "description": "Deep packet inspection and stealth reconnaissance for unknown network entry points.",
-            "status": "Live Monitoring",
-            "icon": "visibility_lock",
-            "color": "primary-fixed",
-            "updated": "Live"
-        },
-    ]
+    }
+
+    modules = []
+    for mid, meta in module_metadata.items():
+        ext, _ = Extension.objects.get_or_create(name_id=mid)
+        modules.append({
+            "id": mid,
+            "name": meta["name"],
+            "description": meta["description"],
+            "is_active": ext.is_active,
+            "icon": meta["icon"],
+            "color": meta["color"],
+        })
+        
     return render(request, "vuln_manager/extensions.html", {"modules": modules})
+
+@login_required
+@require_POST
+def toggle_extension(request, name_id):
+    ext = get_object_or_404(Extension, name_id=name_id)
+    ext.is_active = not ext.is_active
+    ext.save()
+    return redirect("extensions")
 
 
 def run_triage_background():

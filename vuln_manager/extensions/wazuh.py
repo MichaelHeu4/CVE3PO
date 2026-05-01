@@ -2,16 +2,21 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.http import JsonResponse
 import json
-from vuln_manager.models import Host, Scan, Vulnerability
+from vuln_manager.models import Host, Scan, Vulnerability, Extension
 
 @csrf_exempt
 @require_POST
 def webhook(request):
     """
     Wazuh Webhook Integration.
-    Receives vulnerability alerts and syncs them with the local database.
+    Only processes data if the 'wazuh' extension is marked as active.
     """
     try:
+        # Check if extension is enabled
+        wazuh_ext, _ = Extension.objects.get_or_create(name_id="wazuh")
+        if not wazuh_ext.is_active:
+            return JsonResponse({"status": "ignored", "reason": "extension disabled"}, status=200)
+
         data = json.loads(request.body)
         
         # Wazuh Alert Parsing
