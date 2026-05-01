@@ -2,7 +2,10 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.http import JsonResponse
 import json
+import logging
 from vuln_manager.models import Host, Scan, Vulnerability, Extension
+
+logger = logging.getLogger(__name__)
 
 @csrf_exempt
 @require_POST
@@ -75,4 +78,5 @@ def webhook(request):
         return JsonResponse({"status": "skipped", "reason": "already exists"}, status=200)
 
     except Exception as e:
-        return JsonResponse({"status": "error", "message": str(e)}, status=400)
+        logger.exception("Unhandled exception while processing Wazuh webhook")
+        return JsonResponse({"status": "error", "message": "An internal error has occurred."}, status=400)
