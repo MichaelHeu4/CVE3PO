@@ -10,6 +10,9 @@ from vuln_manager.utils.vuln_dedup import create_or_update_vulnerability
 logger = logging.getLogger(__name__)
 
 
+logger = logging.getLogger(__name__)
+
+
 @csrf_exempt
 @require_POST
 def webhook(request):
@@ -89,9 +92,9 @@ def webhook(request):
             actor="wazuh_webhook",
         )
         return JsonResponse({"status": "upserted"}, status=200)
-
-    except Exception:
-        logger.exception("Wazuh webhook processing failed")
+    except Exception as e:
+        logger.exception("Unhandled exception while processing Wazuh webhook")
         return JsonResponse(
-            {"status": "error", "message": "internal_error"}, status=500
+            {"status": "error", "message": "An internal error has occurred."},
+            status=400,
         )
