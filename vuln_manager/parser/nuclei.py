@@ -1,7 +1,9 @@
 import json
 import re
+from collections import Counter
 
-from vuln_manager.models import Host, Port, Vulnerability, Software
+from vuln_manager.models import Host, Port, Software
+from vuln_manager.utils.vuln_dedup import create_or_update_vulnerability
 
 
 def parse_nuclei_jsonl(file_path, scan_obj):
@@ -16,7 +18,7 @@ def parse_nuclei_jsonl(file_path, scan_obj):
                     if h not in hostname_ips:
                         hostname_ips[h] = []
                     hostname_ips[h].append(ip)
-            except:
+            except (json.JSONDecodeError, TypeError):
                 continue
 
     stable_map = {}
@@ -65,7 +67,7 @@ def parse_nuclei_jsonl(file_path, scan_obj):
                     or str(data.get("extracted-results", ""))
                 )
 
-                Vulnerability.objects.create(
+                create_or_update_vulnerability(
                     host=host_obj,
                     scan=scan_obj,
                     software=sw_obj,
@@ -75,6 +77,7 @@ def parse_nuclei_jsonl(file_path, scan_obj):
                     name=data.get("info", {}).get("name", "Nuclei Finding"),
                     description=data.get("info", {}).get("description", ""),
                     nuclei_poc=poc,
+                    actor="nuclei_parser",
                 )
-            except:
+            except (json.JSONDecodeError, TypeError, ValueError):
                 continue

@@ -1,5 +1,7 @@
 from django.http import JsonResponse, HttpResponseNotFound
 from django.views.decorators.csrf import csrf_exempt
+from django.db import transaction
+import logging
 from vuln_manager.models import (
     HostSoftwareRelationship,
     Extension,
@@ -8,6 +10,8 @@ from vuln_manager.models import (
 )
 import json
 from django.views.decorators.http import require_POST
+
+logger = logging.getLogger(__name__)
 
 
 @csrf_exempt
@@ -31,6 +35,7 @@ def update_inventory_api(request):
         data = json.loads(request.body)
         host_ip = data.get("host_ip")
         hostname = data.get("hostname")
+        operating_system = data.get("operating_system") or data.get("os")
         software_list = data.get("software", [])
 
         if not host_ip:
@@ -38,51 +43,82 @@ def update_inventory_api(request):
                 {"status": "error", "message": "host_ip is required"}, status=400
             )
 
-        host, _ = Host.objects.get_or_create(ip_address=host_ip)
-        if hostname and not host.hostname:
-            host.hostname = hostname
-            host.save()
+        with transaction.atomic():
+            host, _ = Host.objects.get_or_create(ip_address=host_ip)
+            host_update_fields = []
+            if hostname and not host.hostname:
+                host.hostname = hostname
+                host_update_fields.append("hostname")
+            if operating_system and host.operating_system != operating_system:
+                host.operating_system = operating_system
+                host_update_fields.append("operating_system")
+            if host_update_fields:
+                host.save(update_fields=host_update_fields)
 
-        host_software_rel = HostSoftwareRelationship.objects.filter(
-            host=host, source="agent"
-        )
+            existing_agent_sw_ids = set(
+                HostSoftwareRelationship.objects.filter(host=host, source="agent")
+                .values_list("software_id", flat=True)
+            )
 
-        for hsr in host_software_rel:
-            hsr.software.delete()
-            hsr.delete()
+            synced_sw_ids = set()
+            added_count = 0
+            for sw_item in software_list:
+                name = sw_item.get("name")
+                version = sw_item.get("version")
+                vendor = sw_item.get("vendor")
+                port = sw_item.get("port")
 
-        added_count = 0
-        for sw_item in software_list:
-            name = sw_item.get("name")
-            version = sw_item.get("version")
-            vendor = sw_item.get("vendor")
-            port = sw_item.get("port")
+                if name:
+                    sw_obj, _ = Software.objects.get_or_create(
+                        name=name,
+                        version=version,
+                        vendor=vendor,
+                        listening_port=port,
+                    )
 
-            if name:
-                sw_obj, _ = Software.objects.get_or_create(
-                    name=name,
-                    version=version,
-                    vendor=vendor,
-                    listening_port=port,
+                    sw_obj.hosts.add(host)
+
+                    HostSoftwareRelationship.objects.get_or_create(
+                        host=host, software=sw_obj, source="agent"
+                    )
+
+                    synced_sw_ids.add(sw_obj.id)
+                    added_count += 1
+
+            stale_agent_sw_ids = existing_agent_sw_ids - synced_sw_ids
+            if stale_agent_sw_ids:
+                HostSoftwareRelationship.objects.filter(
+                    host=host, source="agent", software_id__in=stale_agent_sw_ids
+                ).delete()
+
+                still_related_sw_ids = set(
+                    HostSoftwareRelationship.objects.filter(
+                        host=host, software_id__in=stale_agent_sw_ids
+                    ).values_list("software_id", flat=True)
                 )
+                detach_sw_ids = stale_agent_sw_ids - still_related_sw_ids
 
-                sw_obj.hosts.add(host)
-                sw_obj.save()
+                if detach_sw_ids:
+                    Software.hosts.through.objects.filter(
+                        host_id=host.id, software_id__in=detach_sw_ids
+                    ).delete()
 
-                HostSoftwareRelationship.objects.get_or_create(
-                    host=host, software=sw_obj, source="agent"
-                )
-
-                added_count += 1
+                    Software.objects.filter(
+                        id__in=detach_sw_ids, hosts__isnull=True
+                    ).delete()
 
         return JsonResponse(
             {
                 "status": "success",
                 "host": host.ip_address,
+                "operating_system": host.operating_system,
                 "agent_software_synced": added_count,
             },
             status=200,
         )
 
-    except Exception as e:
-        return JsonResponse({"status": "error", "message": str(e)}, status=400)
+    except Exception:
+        logger.exception("Agent inventory sync failed")
+        return JsonResponse(
+            {"status": "error", "message": "internal_error"}, status=500
+        )

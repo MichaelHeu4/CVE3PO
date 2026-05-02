@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Scan, Host, Port, Vulnerability
+from .models import Scan, Host, Port, Vulnerability, VulnerabilityAuditEvent
 
 @admin.register(Scan)
 class ScanAdmin(admin.ModelAdmin):
@@ -7,7 +7,7 @@ class ScanAdmin(admin.ModelAdmin):
 
 @admin.register(Host)
 class HostAdmin(admin.ModelAdmin):
-    list_display = ('ip_address', 'hostname', 'last_scanned')
+    list_display = ('ip_address', 'hostname', 'operating_system', 'last_scanned')
 
 @admin.register(Port)
 class PortAdmin(admin.ModelAdmin):
@@ -17,3 +17,9 @@ class PortAdmin(admin.ModelAdmin):
 class VulnerabilityAdmin(admin.ModelAdmin):
     list_display = ('cve_id', 'host', 'severity', 'name')
     list_filter = ('severity',)
+
+
+@admin.register(VulnerabilityAuditEvent)
+class VulnerabilityAuditEventAdmin(admin.ModelAdmin):
+    list_display = ("created_at", "action", "vulnerability", "user", "actor")
+    list_filter = ("action",)

@@ -6,9 +6,11 @@ from .models import (
     Host,
     Port,
     Vulnerability,
+    VulnerabilityAuditEvent,
     Scan,
     Software,
     Extension,
+    SystemSettings,
 )
 from .parser import nmap
 from .parser import nuclei
@@ -16,13 +18,17 @@ from .parser import openvas
 from .parser import osvscanner
 from .parser import semgrep
 from .utils import ai_triage
+from .utils.audit import log_vulnerability_event
+from .utils.vuln_dedup import create_or_update_vulnerability
+from .utils.osv_auto import enrich_software_with_osv
+from .extensions import wrike as wrike_ext
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
 from django.utils.http import url_has_allowed_host_and_scheme
 import io
-from django.http import FileResponse
+from django.http import FileResponse, HttpResponseForbidden, JsonResponse
 from django.utils.timezone import now
 
 from xhtml2pdf import pisa
@@ -40,8 +46,23 @@ CRITICALITY_WEIGHTS = {
 }
 
 
+def get_system_settings():
+    settings_obj, _ = SystemSettings.objects.get_or_create(
+        pk=1, defaults={"disable_register": settings.DISABLE_REGISTER}
+    )
+    return settings_obj
+
+
+def get_wrike_config():
+    settings_obj = get_system_settings()
+    wrike_extension, _ = Extension.objects.get_or_create(name_id="wrike")
+    return wrike_extension, settings_obj
+
+
 def login_view(request):
     next_url = request.GET.get("next", "dashboard")
+    error_message = None
+    login_identifier = ""
     if not url_has_allowed_host_and_scheme(
         url=next_url,
         allowed_hosts={request.get_host()},
@@ -51,18 +72,46 @@ def login_view(request):
     if request.user.is_authenticated:
         return redirect(next_url)
     if request.method == "POST":
-        username = request.POST.get("email")
-        password = request.POST.get("password")
-        user = authenticate(request, username=username, password=password)
+        login_identifier = (
+            request.POST.get("identifier") or request.POST.get("email") or ""
+        ).strip()
+        password = request.POST.get("password") or ""
+
+        if not login_identifier or not password:
+            error_message = "Please provide username/email and password."
+            return render(
+                request,
+                "vuln_manager/login.html",
+                {
+                    "login_error": error_message,
+                    "login_identifier": login_identifier,
+                },
+            )
+
+        user = authenticate(request, username=login_identifier, password=password)
+        if user is None and "@" in login_identifier:
+            user_by_email = User.objects.filter(email__iexact=login_identifier).first()
+            if user_by_email:
+                user = authenticate(
+                    request, username=user_by_email.username, password=password
+                )
         if user is not None:
             login(request, user)
-            print(next_url)
             return redirect(next_url)
-    return render(request, "vuln_manager/login.html")
+        error_message = "Invalid credentials. Please check username/email and password."
+    return render(
+        request,
+        "vuln_manager/login.html",
+        {
+            "login_error": error_message,
+            "login_identifier": login_identifier,
+        },
+    )
 
 
 def register_view(request):
-    if settings.DISABLE_REGISTER:
+    system_settings = get_system_settings()
+    if system_settings.disable_register:
         print("[*] Someone tried to register...")
         return redirect("login")
     if request.user.is_authenticated:
@@ -410,8 +459,23 @@ def software_detail(request, pk):
             "hosts": hosts,
             "vulns": vulns,
             "criticality_choices": Software.CRITICALITY_CHOICES,
+            "osv_rescan_possible": bool(item.version),
         },
     )
+
+
+@login_required
+@require_POST
+def software_rescan_osv(request, pk):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+    sw = get_object_or_404(Software, pk=pk)
+    if not sw.version:
+        return HttpResponseForbidden("missing_version")
+
+    worker = threading.Thread(target=enrich_software_with_osv, args=(sw.id,), daemon=True)
+    worker.start()
+    return redirect("software_detail", pk=pk)
 
 
 @login_required
@@ -525,7 +589,7 @@ def vuln_add(request):
         if not manual_scan:
             manual_scan = Scan.objects.create(scan_type="MANUAL")
         sw_obj = Software.objects.get(pk=software_id) if software_id else None
-        Vulnerability.objects.create(
+        vuln = create_or_update_vulnerability(
             host=host_obj,
             scan=manual_scan,
             software=sw_obj,
@@ -534,6 +598,10 @@ def vuln_add(request):
             name=name,
             description=description,
             nuclei_poc=poc,
+            actor=f"user:{request.user.username}",
+        )
+        log_vulnerability_event(
+            vuln, "updated", user=request.user, details={"source": "manual_entry"}
         )
         if host_obj:
             return redirect("host_detail", pk=host_obj.id)
@@ -555,6 +623,12 @@ def delete_vulnerability(request, pk):
     if request.method == "POST":
         vuln = get_object_or_404(Vulnerability, pk=pk)
         host_id = vuln.host.id if vuln.host else None
+        log_vulnerability_event(
+            vuln,
+            "deleted",
+            user=request.user,
+            details={"cve_id": vuln.cve_id, "name": vuln.name},
+        )
         vuln.delete()
         if host_id:
             return redirect("host_detail", pk=host_id)
@@ -570,6 +644,7 @@ def host_form(request, pk=None):
     if request.method == "POST":
         ip_address = request.POST.get("ip_address")
         hostname = request.POST.get("hostname")
+        operating_system = request.POST.get("operating_system")
         criticality = request.POST.get("criticality")
 
         if not host_obj:
@@ -578,6 +653,7 @@ def host_form(request, pk=None):
             host_obj.ip_address = ip_address
 
         host_obj.hostname = hostname
+        host_obj.operating_system = operating_system
         host_obj.criticality = criticality
         host_obj.save()
         return redirect("host_list")
@@ -651,9 +727,25 @@ def update_vuln_status(request, pk):
     if request.method == "POST":
         vuln = get_object_or_404(Vulnerability, pk=pk)
         new_status = request.POST.get("status")
+        if not new_status and request.content_type == "application/json":
+            try:
+                payload = json.loads(request.body or "{}")
+                new_status = payload.get("status")
+            except json.JSONDecodeError:
+                new_status = None
         if new_status in dict(Vulnerability.STATUS_CHOICES):
+            old_status = vuln.status
             vuln.status = new_status
             vuln.save()
+            if old_status != new_status:
+                log_vulnerability_event(
+                    vuln,
+                    "status_changed",
+                    user=request.user,
+                    details={"from_status": old_status, "to_status": new_status},
+                )
+        if request.content_type == "application/json":
+            return JsonResponse({"status": "ok"}, status=200)
         referer = request.META.get("HTTP_REFERER")
         if referer and url_has_allowed_host_and_scheme(
             url=referer,
@@ -716,7 +808,22 @@ def vuln_detail(request, pk):
     vuln = get_object_or_404(
         Vulnerability.objects.select_related("host", "scan"), pk=pk
     )
-    return render(request, "vuln_manager/vuln_detail.html", {"vuln": vuln})
+    wrike_extension, settings_obj = get_wrike_config()
+    wrike_ready = (
+        wrike_extension.is_active
+        and bool(wrike_extension.api_token)
+        and bool(settings_obj.wrike_folder_id)
+    )
+    return render(
+        request,
+        "vuln_manager/vuln_detail.html",
+        {
+            "vuln": vuln,
+            "wrike_ready": wrike_ready,
+            "audit_events": VulnerabilityAuditEvent.objects.filter(vulnerability=vuln)
+            .order_by("-created_at")[:20],
+        },
+    )
 
 
 @login_required
@@ -826,9 +933,16 @@ def extensions_view(request):
             "icon": "webhook",
             "color": "primary",
         },
+        "wrike": {
+            "name": "Wrike Ticketing",
+            "description": "Creates Wrike tasks from vulnerabilities and syncs completion status.",
+            "icon": "assignment",
+            "color": "secondary",
+        },
     }
 
     modules = []
+    system_settings = get_system_settings()
     for mid, meta in module_metadata.items():
         ext, _ = Extension.objects.get_or_create(name_id=mid)
         modules.append(
@@ -837,7 +951,10 @@ def extensions_view(request):
                 "name": meta["name"],
                 "description": meta["description"],
                 "is_active": ext.is_active,
-                "api_token": ext.api_token,
+                "api_token": ext.api_token if request.user.is_staff else None,
+                "wrike_folder_id": (
+                    system_settings.wrike_folder_id if mid == "wrike" else None
+                ),
                 "icon": meta["icon"],
                 "color": meta["color"],
             }
@@ -849,10 +966,160 @@ def extensions_view(request):
 @login_required
 @require_POST
 def toggle_extension(request, name_id):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
     ext = get_object_or_404(Extension, name_id=name_id)
     ext.is_active = not ext.is_active
     ext.save()
     return redirect("extensions")
+
+
+@login_required
+def user_admin(request):
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("forbidden")
+    managed_users = User.objects.all().order_by("username")
+    system_settings = get_system_settings()
+    return render(
+        request,
+        "vuln_manager/user_admin.html",
+        {
+            "managed_users": managed_users,
+            "registration_disabled": system_settings.disable_register,
+        },
+    )
+
+
+@login_required
+@require_POST
+def set_user_staff(request, pk):
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("forbidden")
+    target_user = get_object_or_404(User, pk=pk)
+    target_user.is_staff = request.POST.get("is_staff") == "1"
+    target_user.save(update_fields=["is_staff"])
+    return redirect("user_admin")
+
+
+@login_required
+@require_POST
+def delete_user(request, pk):
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("forbidden")
+    target_user = get_object_or_404(User, pk=pk)
+    if target_user.pk == request.user.pk:
+        return HttpResponseForbidden("cannot_delete_current_user")
+    if target_user.is_superuser and User.objects.filter(is_superuser=True).count() <= 1:
+        return HttpResponseForbidden("cannot_delete_last_superuser")
+    target_user.delete()
+    return redirect("user_admin")
+
+
+@login_required
+@require_POST
+def save_wrike_config(request):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+    wrike_api_token = (request.POST.get("wrike_api_token") or "").strip()
+    folder_id = (request.POST.get("wrike_folder_id") or "").strip()
+    wrike_extension, settings_obj = get_wrike_config()
+    if wrike_api_token:
+        wrike_extension.api_token = wrike_api_token
+        wrike_extension.save(update_fields=["api_token"])
+    settings_obj.wrike_folder_id = folder_id or None
+    settings_obj.save(update_fields=["wrike_folder_id"])
+    return redirect("extensions")
+
+
+@login_required
+@require_POST
+def create_wrike_ticket(request, pk):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+    vuln = get_object_or_404(Vulnerability, pk=pk)
+    wrike_extension, settings_obj = get_wrike_config()
+    if (
+        not wrike_extension.is_active
+        or not wrike_extension.api_token
+        or not settings_obj.wrike_folder_id
+    ):
+        return HttpResponseForbidden("wrike_not_configured")
+    if vuln.wrike_task_id:
+        return redirect("vuln_detail", pk=pk)
+    try:
+        task_id, task_url = wrike_ext.create_task(
+            vuln, wrike_extension.api_token, settings_obj.wrike_folder_id
+        )
+        vuln.wrike_task_id = task_id
+        vuln.wrike_task_url = task_url
+        vuln.save(update_fields=["wrike_task_id", "wrike_task_url"])
+        log_vulnerability_event(
+            vuln,
+            "ticket_synced",
+            user=request.user,
+            details={"wrike_task_id": task_id, "direction": "cve3po_to_wrike"},
+        )
+    except Exception:
+        return HttpResponseForbidden("wrike_create_failed")
+    return redirect("vuln_detail", pk=pk)
+
+
+@login_required
+@require_POST
+def sync_wrike_ticket(request, pk):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+    vuln = get_object_or_404(Vulnerability, pk=pk)
+    wrike_extension, _ = get_wrike_config()
+    if not wrike_extension.is_active or not wrike_extension.api_token:
+        return HttpResponseForbidden("wrike_not_configured")
+    if not vuln.wrike_task_id:
+        return HttpResponseForbidden("wrike_ticket_missing")
+    try:
+        task = wrike_ext.get_task(wrike_extension.api_token, vuln.wrike_task_id)
+        if task.get("completed"):
+            if vuln.status != "fixed":
+                old_status = vuln.status
+                vuln.status = "fixed"
+                vuln.save(update_fields=["status"])
+                log_vulnerability_event(
+                    vuln,
+                    "ticket_synced",
+                    user=request.user,
+                    details={
+                        "from_status": old_status,
+                        "to_status": "fixed",
+                        "direction": "wrike_to_cve3po",
+                    },
+                )
+        else:
+            should_complete = vuln.status in {"fixed", "false_positive", "risk_accepted"}
+            wrike_ext.mark_task_completed(
+                wrike_extension.api_token, vuln.wrike_task_id, should_complete
+            )
+            log_vulnerability_event(
+                vuln,
+                "ticket_synced",
+                user=request.user,
+                details={
+                    "wrike_completed": should_complete,
+                    "direction": "cve3po_to_wrike",
+                },
+            )
+    except Exception:
+        return HttpResponseForbidden("wrike_sync_failed")
+    return redirect("vuln_detail", pk=pk)
+
+
+@login_required
+@require_POST
+def toggle_register(request):
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("forbidden")
+    system_settings = get_system_settings()
+    system_settings.disable_register = not system_settings.disable_register
+    system_settings.save(update_fields=["disable_register"])
+    return redirect("user_admin")
 
 
 def run_triage_background():

@@ -1,6 +1,7 @@
 import xml.etree.ElementTree as ET
 
-from vuln_manager.models import Host, Port, Vulnerability, Software
+from vuln_manager.models import Host, Port, Software
+from vuln_manager.utils.vuln_dedup import create_or_update_vulnerability
 
 
 def parse_openvas_xml(file_path, scan_obj):
@@ -33,7 +34,7 @@ def parse_openvas_xml(file_path, scan_obj):
         elif cvss > 0.0:
             severity = "low"
 
-        Vulnerability.objects.create(
+        create_or_update_vulnerability(
             host=host_obj,
             scan=scan_obj,
             software=sw_obj,
@@ -42,4 +43,5 @@ def parse_openvas_xml(file_path, scan_obj):
             severity=severity,
             name=result.find("name").text,
             description=result.find("description").text,
+            actor="openvas_parser",
         )

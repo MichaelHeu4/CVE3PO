@@ -39,6 +39,7 @@
             <thead>
                 <tr class="bg-surface-container-highest/30 border-b border-outline-variant/10">
                     <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline">Name / IP</th>
+                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline">OS</th>
                     <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Priority</th>
                     <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Ports</th>
                     <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Vulnerabilities</th>
@@ -59,6 +60,11 @@
                                 <p class="text-[10px] text-outline uppercase tracking-widest font-bold truncate max-w-[150px]">{{ host.hostname|default:"n/a" }}</p>
                             </div>
                         </div>
+                    </td>
+                    <td class="px-6 py-4">
+                        <span class="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider">
+                            {{ host.operating_system|default:"n/a" }}
+                        </span>
                     </td>
                     <td class="px-6 py-4 text-center">
                         {% if host.criticality %}

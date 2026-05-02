@@ -119,15 +119,20 @@
             <header class="mb-10">
                <h2 class="font-headline text-2xl font-bold text-on-surface leading-tight">Sign In</h2>
             </header>
+            {% if login_error %}
+            <div class="mb-6 rounded-lg border border-error/30 bg-error-container/30 px-4 py-3 text-xs text-on-error-container">
+               {{ login_error }}
+            </div>
+            {% endif %}
             <form class="space-y-6" method="POST" action="{% url 'login' %}?next={{ request.GET.next|urlencode }}">
                {% csrf_token %}
                <div class="space-y-2">
-                  <label class="font-label text-[0.6875rem] uppercase tracking-wider text-on-surface-variant font-semibold" for="email">Email Address</label>
+                  <label class="font-label text-[0.6875rem] uppercase tracking-wider text-on-surface-variant font-semibold" for="identifier">Username or Email</label>
                   <div class="relative group">
                      <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                         <span class="material-symbols-outlined text-outline text-lg group-focus-within:text-primary transition-colors">alternate_email</span>
                      </div>
-                     <input class="block w-full bg-surface-container-lowest border-0 rounded-lg py-3.5 pl-11 pr-4 text-on-surface placeholder:text-outline/50 focus:ring-2 focus:ring-primary/30 transition-all font-body text-sm" id="email" name="email" placeholder="architect@cve3po.io" required="" type="email"/>
+                     <input class="block w-full bg-surface-container-lowest border-0 rounded-lg py-3.5 pl-11 pr-4 text-on-surface placeholder:text-outline/50 focus:ring-2 focus:ring-primary/30 transition-all font-body text-sm" id="identifier" name="identifier" placeholder="architect or architect@cve3po.io" value="{{ login_identifier|default:'' }}" required="" type="text"/>
                   </div>
                </div>
                <div class="space-y-2">
@@ -162,4 +167,3 @@
       <div class="fixed bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/20 to-transparent"></div>
    </body>
 </html>
-

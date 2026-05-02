@@ -2,7 +2,12 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.http import JsonResponse, HttpResponseNotFound
 import json
+import logging
 from vuln_manager.models import Host, Scan, Vulnerability, Extension
+from vuln_manager.utils.audit import log_vulnerability_event
+from vuln_manager.utils.vuln_dedup import create_or_update_vulnerability
+
+logger = logging.getLogger(__name__)
 
 
 @csrf_exempt
@@ -52,36 +57,41 @@ def webhook(request):
 
         # Wazuh rule 23502 indicates a vulnerability has been removed/solved
         if v_status == "SOLVED" or data.get("rule", {}).get("id") == "23502":
-            Vulnerability.objects.filter(host=host, cve_id=cve_id).update(
-                status="fixed"
-            )
+            for vuln in Vulnerability.objects.filter(host=host, cve_id=cve_id):
+                if vuln.status != "fixed":
+                    old_status = vuln.status
+                    vuln.status = "fixed"
+                    vuln.save(update_fields=["status"])
+                    log_vulnerability_event(
+                        vuln,
+                        "status_changed",
+                        actor="wazuh_webhook",
+                        details={"from_status": old_status, "to_status": "fixed"},
+                    )
             return JsonResponse({"status": "updated", "action": "fixed"}, status=200)
+        sev = "info"
+        if "critical" in severity_raw:
+            sev = "critical"
+        elif "high" in severity_raw:
+            sev = "high"
+        elif "medium" in severity_raw:
+            sev = "medium"
+        elif "low" in severity_raw:
+            sev = "low"
 
-        exists = Vulnerability.objects.filter(host=host, cve_id=cve_id).exists()
-        if not exists:
-            sev = "info"
-            if "critical" in severity_raw:
-                sev = "critical"
-            elif "high" in severity_raw:
-                sev = "high"
-            elif "medium" in severity_raw:
-                sev = "medium"
-            elif "low" in severity_raw:
-                sev = "low"
-
-            Vulnerability.objects.create(
-                host=host,
-                scan=scan,
-                cve_id=cve_id,
-                severity=sev,
-                name=title,
-                status="open",
-            )
-            return JsonResponse({"status": "created"}, status=201)
-
-        return JsonResponse(
-            {"status": "skipped", "reason": "already exists"}, status=200
+        create_or_update_vulnerability(
+            host=host,
+            scan=scan,
+            cve_id=cve_id,
+            severity=sev,
+            name=title,
+            description="Created from Wazuh webhook",
+            actor="wazuh_webhook",
         )
+        return JsonResponse({"status": "upserted"}, status=200)
 
-    except Exception as e:
-        return JsonResponse({"status": "error", "message": str(e)}, status=400)
+    except Exception:
+        logger.exception("Wazuh webhook processing failed")
+        return JsonResponse(
+            {"status": "error", "message": "internal_error"}, status=500
+        )

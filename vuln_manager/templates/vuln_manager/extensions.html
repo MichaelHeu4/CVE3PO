@@ -35,13 +35,15 @@
                 </div>
                 
                 <!-- Toggle Form -->
-                <form action="{% url 'toggle_extension' mod.id %}" method="POST">
-                    {% csrf_token %}
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" class="sr-only peer" {% if mod.is_active %}checked{% endif %} onchange="this.form.submit()">
-                        <div class="w-14 h-7 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full after:content-[''] after:absolute after:top-[4px] after:start-[4px] after:bg-on-surface after:rounded-full after:h-[1.3rem] after:w-[1.3rem] after:transition-all peer-checked:bg-primary shadow-lg"></div>
-                    </label>
-                </form>
+                {% if request.user.is_staff %}
+                    <form action="{% url 'toggle_extension' mod.id %}" method="POST">
+                        {% csrf_token %}
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" class="sr-only peer" {% if mod.is_active %}checked{% endif %} onchange="this.form.submit()">
+                            <div class="w-14 h-7 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full after:content-[''] after:absolute after:top-[4px] after:start-[4px] after:bg-on-surface after:rounded-full after:h-[1.3rem] after:w-[1.3rem] after:transition-all peer-checked:bg-primary shadow-lg"></div>
+                        </label>
+                    </form>
+                {% endif %}
             </div>
             
             <h3 class="text-xl font-headline font-black text-on-surface mb-3 tracking-tight group-hover:text-primary transition-colors">{{ mod.name }}</h3>
@@ -49,14 +51,29 @@
                 {{ mod.description }}
             </p>
 
-            <!-- API Key Display -->
-            <div class="mb-8 p-3 rounded-xl bg-surface-container-lowest border border-outline-variant/10">
-                <p class="text-[8px] font-black uppercase tracking-widest text-outline/50 mb-2">Access Token (X-API-Key)</p>
-                <div class="flex items-center justify-between gap-2 overflow-hidden">
-                    <code class="text-[10px] font-mono text-primary truncate filter blur-[4px] hover:blur-none transition-all cursor-help" id="token-{{ mod.id }}">{{ mod.api_token }}</code>
-                    <button onclick="copyToClipboard('{{ mod.api_token }}')" class="material-symbols-outlined text-xs text-outline hover:text-primary transition-colors">content_copy</button>
+            {% if request.user.is_staff %}
+                <div id="config-{{ mod.id }}" class="hidden mb-8 p-3 rounded-xl bg-surface-container-lowest border border-outline-variant/10">
+                    <div class="flex items-center justify-between mb-2">
+                        <p class="text-[8px] font-black uppercase tracking-widest text-outline/50">
+                            {% if mod.id == "wrike" %}Wrike Configuration{% else %}Access Token (X-API-Key){% endif %}
+                        </p>
+                        <button type="button" onclick="toggleModuleConfig('{{ mod.id }}')" class="material-symbols-outlined text-xs text-outline hover:text-primary transition-colors">close</button>
+                    </div>
+                    {% if mod.id == "wrike" %}
+                        <form action="{% url 'save_wrike_config' %}" method="POST" class="space-y-3">
+                            {% csrf_token %}
+                            <input name="wrike_api_token" type="password" placeholder="Wrike API Token (optional to update)" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant/20 px-3 py-2 text-[11px] text-on-surface"/>
+                            <input name="wrike_folder_id" type="text" placeholder="Wrike Folder/Project ID" value="{{ mod.wrike_folder_id|default:'' }}" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant/20 px-3 py-2 text-[11px] text-on-surface"/>
+                            <button class="w-full rounded-lg px-3 py-2 border border-outline-variant/30 hover:border-primary/40 text-on-surface-variant hover:text-primary transition-all text-[10px] uppercase tracking-wider">Save Wrike Config</button>
+                        </form>
+                    {% else %}
+                        <div class="flex items-center justify-between gap-2 overflow-hidden">
+                            <code class="text-[10px] font-mono text-primary truncate" id="token-{{ mod.id }}">{{ mod.api_token }}</code>
+                            <button type="button" onclick="copyToken('{{ mod.id }}')" class="material-symbols-outlined text-xs text-outline hover:text-primary transition-colors">content_copy</button>
+                        </div>
+                    {% endif %}
                 </div>
-            </div>
+            {% endif %}
         </div>
         
         <div class="flex items-center justify-between pt-6 border-t border-outline-variant/10">
@@ -71,10 +88,10 @@
                     {% endif %}
                 </span>
             </div>
-            {% if mod.is_active %}
-            <button class="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center text-outline hover:text-primary hover:bg-surface-bright transition-all shadow-md">
-                <span class="material-symbols-outlined text-lg">settings</span>
-            </button>
+            {% if request.user.is_staff %}
+                <button type="button" onclick="toggleModuleConfig('{{ mod.id }}')" class="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center text-outline hover:text-primary hover:bg-surface-bright transition-all shadow-md">
+                    <span class="material-symbols-outlined text-lg">settings</span>
+                </button>
             {% endif %}
         </div>
     </div>
@@ -93,8 +110,10 @@
 </section>
 
 <script>
-function copyToClipboard(text) {
-    navigator.clipboard.writeText(text).then(() => {
+function copyToken(moduleId) {
+    const tokenNode = document.getElementById(`token-${moduleId}`);
+    if (!tokenNode) return;
+    navigator.clipboard.writeText(tokenNode.textContent.trim()).then(() => {
         // Optional: Replace alert with a more subtle toast later
         const toast = document.createElement('div');
         toast.className = 'fixed bottom-8 right-8 bg-primary text-surface px-6 py-3 rounded-xl shadow-2xl text-[10px] font-black uppercase tracking-widest z-[100] animate-bounce';
@@ -102,6 +121,12 @@ function copyToClipboard(text) {
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), 3000);
     });
+}
+
+function toggleModuleConfig(moduleId) {
+    const panel = document.getElementById(`config-${moduleId}`);
+    if (!panel) return;
+    panel.classList.toggle('hidden');
 }
 </script>
 {% endblock %}

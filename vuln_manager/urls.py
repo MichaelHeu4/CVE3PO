@@ -34,6 +34,11 @@ urlpatterns = [
         views.update_vuln_status,
         name="update_vuln_status",
     ),
+    path(
+        "api/vulnerabilities/<int:pk>/status/",
+        views.update_vuln_status,
+        name="api_update_vuln_status",
+    ),
     path("board/", views.kanban_board, name="kanban_board"),
     path("vulnerabilities/add/", views.vuln_add, name="vuln_add"),
     path("import/", views.scan_import, name="scan_import"),
@@ -43,6 +48,11 @@ urlpatterns = [
     path("software/add/", views.software_form, name="software_add"),
     path("software/<int:pk>/edit/", views.software_form, name="software_edit"),
     path("software/<int:pk>/", views.software_detail, name="software_detail"),
+    path(
+        "software/<int:pk>/rescan-osv/",
+        views.software_rescan_osv,
+        name="software_rescan_osv",
+    ),
     path("software/<int:pk>/delete/", views.delete_software, name="delete_software"),
     path(
         "software/<int:pk>/criticality/",
@@ -59,6 +69,21 @@ urlpatterns = [
     path("modules/", views.extensions_view, name="extensions"),
     path(
         "modules/toggle/<str:name_id>/", views.toggle_extension, name="toggle_extension"
+    ),
+    path("modules/wrike/config/", views.save_wrike_config, name="save_wrike_config"),
+    path("users/", views.user_admin, name="user_admin"),
+    path("users/<int:pk>/staff/", views.set_user_staff, name="set_user_staff"),
+    path("users/<int:pk>/delete/", views.delete_user, name="delete_user"),
+    path("users/register/toggle/", views.toggle_register, name="toggle_register"),
+    path(
+        "vulnerabilities/<int:pk>/wrike/create/",
+        views.create_wrike_ticket,
+        name="create_wrike_ticket",
+    ),
+    path(
+        "vulnerabilities/<int:pk>/wrike/sync/",
+        views.sync_wrike_ticket,
+        name="sync_wrike_ticket",
     ),
     path("api/webhooks/wazuh/", wazuh.webhook, name="wazuh_webhook"),
     path("dashboard/export/", views.export_dashboard_pdf, name="export_dashboard_pdf"),

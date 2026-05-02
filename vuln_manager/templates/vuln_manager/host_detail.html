@@ -26,6 +26,10 @@
                 <span class="px-2 py-0.5 rounded bg-primary/10 text-primary text-[9px] font-black uppercase tracking-widest border border-primary/20">Managed Asset</span>
                 <span class="w-1.5 h-1.5 rounded-full bg-outline-variant/30"></span>
                 <span class="text-[10px] text-outline font-black uppercase tracking-[0.1em]">{{ host.hostname|default:"Unidentified Host" }}</span>
+                {% if host.operating_system %}
+                <span class="w-1.5 h-1.5 rounded-full bg-outline-variant/30"></span>
+                <span class="text-[10px] text-primary font-black uppercase tracking-[0.1em]">{{ host.operating_system }}</span>
+                {% endif %}
             </div>
             <h1 class="font-headline font-black text-4xl md:text-5xl text-on-surface tracking-tighter">{{ host.ip_address }}</h1>
         </div>
@@ -251,6 +255,10 @@
                 <div class="flex justify-between items-center">
                     <span class="text-[10px] text-outline uppercase font-bold">Inventory Items</span>
                     <span class="text-[10px] text-on-surface font-black">{{ installed_software.paginator.count }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-[10px] text-outline uppercase font-bold">Operating System</span>
+                    <span class="text-[10px] text-on-surface font-black">{{ host.operating_system|default:"N/A" }}</span>
                 </div>
             </div>
         </div>
