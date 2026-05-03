@@ -30,6 +30,7 @@ Ingest and parse technical manifests from industry-standard security tools:
 ### 📊 Visual Analytics
 - **Risk Over Time**: Global trend analysis of active vulnerabilities.
 - **Finding History**: Host-specific bar charts tracking detection counts across multiple scans.
+- **PDF Export + Email Reporting Module**: Generate dashboard reports and optionally send them to configured recipients.
 
 ## 🛠️ Technical Stack
 - **Backend**: Python 3.11+, Django 5.2
@@ -50,6 +51,7 @@ docker compose up -d
 ### 2. Change Settings
 Before running the server, ensure you set the `SECRET_KEY` Environment variable (using a .env file) to a secure random value for production use. Futhermore make sure to adjust the `ALLOWED_HOSTS` setting to include your server's domain or IP address when deploying. Last but not least, check if DEBUG is set to `False` for production environments to enhance security.  
 Optional: set `NVD_API_KEY` to increase NVD API lookup limits for software enrichment.
+Optional (for password reset and email reporting): configure SMTP via `EMAIL_BACKEND`, `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`, and `DEFAULT_FROM_EMAIL`.
 
 ### 3. Create a user
 Navigate to http://localhost:8000/register/ to create a new user account.

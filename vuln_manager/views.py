@@ -26,11 +26,13 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
+from django.core.mail import EmailMessage
 from django.utils.http import url_has_allowed_host_and_scheme
 import io
 from django.http import FileResponse, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.utils.timezone import now
 from datetime import timedelta
+import re
 
 from xhtml2pdf import pisa
 from django.template.loader import render_to_string
@@ -143,8 +145,7 @@ def recalculate_host_criticality(host):
     host.save()
 
 
-@login_required
-def export_dashboard_pdf(request):
+def _build_dashboard_report_context():
     all_vulns = Vulnerability.objects.exclude(status__in=["fixed", "false_positive"])
     critical_count = all_vulns.filter(severity="critical").count()
     high_count = all_vulns.filter(severity="high").count()
@@ -190,12 +191,16 @@ def export_dashboard_pdf(request):
             filter=~Q(vulnerabilities__status__in=["fixed", "false_positive"]),
         )
     ).order_by("-num_vulns")[:5]
-    top_software = Software.objects.annotate(
-        num_vulns=Count(
-            "vulnerabilities",
-            filter=~Q(vulnerabilities__status__in=["fixed", "false_positive"]),
+    top_software = (
+        Software.objects.annotate(
+            num_vulns=Count(
+                "vulnerabilities",
+                filter=~Q(vulnerabilities__status__in=["fixed", "false_positive"]),
+            )
         )
-    ).filter(num_vulns__gt=0).order_by("-num_vulns", "name")[:5]
+        .filter(num_vulns__gt=0)
+        .order_by("-num_vulns", "name")[:5]
+    )
 
     recent_vulns = (
         Vulnerability.objects.filter(severity__in=["critical", "high"])
@@ -203,7 +208,7 @@ def export_dashboard_pdf(request):
         .order_by("-id")[:5]
     )
 
-    context = {
+    return {
         "report_date": now(),
         "metrics": {
             "host_count": host_count,
@@ -225,14 +230,23 @@ def export_dashboard_pdf(request):
         "recent_vulns": recent_vulns,
     }
 
+
+def _render_dashboard_pdf_buffer():
+    context = _build_dashboard_report_context()
     html = render_to_string("vuln_manager/report_pdf.html", context)
     buffer = io.BytesIO()
     pisa_status = pisa.CreatePDF(html, dest=buffer)
-
     if pisa_status.err:
-        return HttpResponse("Fehler bei der PDF-Erstellung", status=500)
-
+        return None
     buffer.seek(0)
+    return buffer
+
+
+@login_required
+def export_dashboard_pdf(request):
+    buffer = _render_dashboard_pdf_buffer()
+    if buffer is None:
+        return HttpResponse("Fehler bei der PDF-Erstellung", status=500)
     return FileResponse(
         buffer,
         as_attachment=True,
@@ -1157,6 +1171,12 @@ def extensions_view(request):
             "icon": "assignment",
             "color": "secondary",
         },
+        "email_reporting": {
+            "name": "Email Reporting",
+            "description": "Sends PDF dashboard reports to configured recipients.",
+            "icon": "mail",
+            "color": "primary",
+        },
     }
 
     modules = []
@@ -1172,6 +1192,11 @@ def extensions_view(request):
                 "api_token": ext.api_token if request.user.is_staff else None,
                 "wrike_folder_id": (
                     system_settings.wrike_folder_id if mid == "wrike" else None
+                ),
+                "email_report_recipients": (
+                    system_settings.email_report_recipients
+                    if mid == "email_reporting"
+                    else None
                 ),
                 "icon": meta["icon"],
                 "color": meta["color"],
@@ -1246,6 +1271,49 @@ def save_wrike_config(request):
         wrike_extension.save(update_fields=["api_token"])
     settings_obj.wrike_folder_id = folder_id or None
     settings_obj.save(update_fields=["wrike_folder_id"])
+    return redirect("extensions")
+
+
+@login_required
+@require_POST
+def save_email_reporting_config(request):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+    recipients = (request.POST.get("email_report_recipients") or "").strip()
+    settings_obj = get_system_settings()
+    settings_obj.email_report_recipients = recipients or None
+    settings_obj.save(update_fields=["email_report_recipients"])
+    return redirect("extensions")
+
+
+@login_required
+@require_POST
+def send_email_report_now(request):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+    extension, _ = Extension.objects.get_or_create(name_id="email_reporting")
+    if not extension.is_active:
+        return HttpResponseForbidden("email_reporting_disabled")
+    recipients_raw = get_system_settings().email_report_recipients or ""
+    recipients = [
+        email.strip()
+        for email in re.split(r"[,;\n]", recipients_raw)
+        if email.strip()
+    ]
+    if not recipients:
+        return HttpResponseForbidden("email_reporting_not_configured")
+    pdf_buffer = _render_dashboard_pdf_buffer()
+    if pdf_buffer is None:
+        return HttpResponseForbidden("report_generation_failed")
+    subject = f"CVE3PO Report {now().strftime('%Y-%m-%d')}"
+    body = "Attached is the latest CVE3PO dashboard report."
+    email = EmailMessage(subject=subject, body=body, to=recipients)
+    email.attach(
+        f"cve3po_report_{now().strftime('%Y%m%d')}.pdf",
+        pdf_buffer.getvalue(),
+        "application/pdf",
+    )
+    email.send(fail_silently=False)
     return redirect("extensions")
 
 

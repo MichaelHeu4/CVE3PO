@@ -1,5 +1,6 @@
 from django.views.decorators.csrf import csrf_exempt
 from django.urls import path
+from django.contrib.auth import views as auth_views
 from . import views
 from .extensions import wazuh, agent
 
@@ -9,6 +10,38 @@ urlpatterns = [
         "api/inventory/update/", agent.update_inventory_api, name="api_update_inventory"
     ),
     path("login/", views.login_view, name="login"),
+    path(
+        "password-reset/",
+        auth_views.PasswordResetView.as_view(
+            template_name="registration/password_reset_form.html",
+            email_template_name="registration/password_reset_email.txt",
+            subject_template_name="registration/password_reset_subject.txt",
+            success_url="/password-reset/done/",
+        ),
+        name="password_reset",
+    ),
+    path(
+        "password-reset/done/",
+        auth_views.PasswordResetDoneView.as_view(
+            template_name="registration/password_reset_done.html"
+        ),
+        name="password_reset_done",
+    ),
+    path(
+        "reset/<uidb64>/<token>/",
+        auth_views.PasswordResetConfirmView.as_view(
+            template_name="registration/password_reset_confirm.html",
+            success_url="/reset/done/",
+        ),
+        name="password_reset_confirm",
+    ),
+    path(
+        "reset/done/",
+        auth_views.PasswordResetCompleteView.as_view(
+            template_name="registration/password_reset_complete.html"
+        ),
+        name="password_reset_complete",
+    ),
     path("register/", views.register_view, name="register"),
     path("logout/", views.logout_view, name="logout"),
     path("hosts/", views.host_list, name="host_list"),
@@ -77,6 +110,16 @@ urlpatterns = [
         "modules/toggle/<str:name_id>/", views.toggle_extension, name="toggle_extension"
     ),
     path("modules/wrike/config/", views.save_wrike_config, name="save_wrike_config"),
+    path(
+        "modules/email-reporting/config/",
+        views.save_email_reporting_config,
+        name="save_email_reporting_config",
+    ),
+    path(
+        "modules/email-reporting/send/",
+        views.send_email_report_now,
+        name="send_email_report_now",
+    ),
     path("users/", views.user_admin, name="user_admin"),
     path("users/<int:pk>/staff/", views.set_user_staff, name="set_user_staff"),
     path("users/<int:pk>/delete/", views.delete_user, name="delete_user"),

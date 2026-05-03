@@ -21,6 +21,7 @@ class Extension(models.Model):
 class SystemSettings(models.Model):
     disable_register = models.BooleanField(default=True)
     wrike_folder_id = models.CharField(max_length=100, blank=True, null=True)
+    email_report_recipients = models.TextField(blank=True, null=True)
 
     def __str__(self):
         return f"SystemSettings(disable_register={self.disable_register})"

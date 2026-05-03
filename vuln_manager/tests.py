@@ -1,10 +1,12 @@
 from unittest.mock import patch
 
 import json
+import io
 from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.test import TestCase
+from django.test.utils import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -16,6 +18,7 @@ from vuln_manager.models import (
     Software,
     Vulnerability,
     VulnerabilityAuditEvent,
+    SystemSettings,
 )
 from vuln_manager.utils.osv_auto import (
     _extract_nvd_cvss_and_severity,
@@ -522,3 +525,54 @@ class ScanDiffViewTests(TestCase):
         self.assertEqual(response.context["summary"]["reopened_count"], 1)
         self.assertEqual(response.context["summary"]["fixed_count"], 1)
         self.assertEqual(response.context["new_findings"].first().pk, new_vuln.pk)
+
+
+@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+class EmailReportingAndPasswordResetTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="staff-mail", email="staff@example.com", password="pw12345", is_staff=True
+        )
+        self.user = User.objects.create_user(
+            username="user-mail", email="user@example.com", password="pw12345"
+        )
+        Extension.objects.create(name_id="email_reporting", is_active=True)
+        settings_obj, _ = SystemSettings.objects.get_or_create(pk=1)
+        settings_obj.email_report_recipients = "secops@example.com, soc@example.com"
+        settings_obj.save(update_fields=["email_report_recipients"])
+
+    def test_login_page_contains_password_reset_link(self):
+        response = self.client.get(reverse("login"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("password_reset"))
+
+    def test_staff_can_save_email_reporting_recipients(self):
+        self.client.force_login(self.staff)
+        response = self.client.post(
+            reverse("save_email_reporting_config"),
+            {"email_report_recipients": "team@example.com"},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("extensions"))
+        self.assertEqual(SystemSettings.objects.get(pk=1).email_report_recipients, "team@example.com")
+
+    def test_non_staff_cannot_send_email_report(self):
+        self.client.force_login(self.user)
+        response = self.client.post(reverse("send_email_report_now"))
+        self.assertEqual(response.status_code, 403)
+
+    @patch("vuln_manager.views._render_dashboard_pdf_buffer")
+    def test_staff_can_send_email_report(self, render_pdf_mock):
+        from django.core import mail
+
+        render_pdf_mock.return_value = io.BytesIO(b"%PDF-1.4 fake")
+        self.client.force_login(self.staff)
+        response = self.client.post(reverse("send_email_report_now"))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("extensions"))
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["secops@example.com", "soc@example.com"])
+
+    def test_password_reset_form_is_reachable(self):
+        response = self.client.get(reverse("password_reset"))
+        self.assertEqual(response.status_code, 200)

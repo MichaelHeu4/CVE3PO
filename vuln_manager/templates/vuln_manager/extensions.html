@@ -55,7 +55,7 @@
                 <div id="config-{{ mod.id }}" class="hidden mb-8 p-3 rounded-xl bg-surface-container-lowest border border-outline-variant/10">
                     <div class="flex items-center justify-between mb-2">
                         <p class="text-[8px] font-black uppercase tracking-widest text-outline/50">
-                            {% if mod.id == "wrike" %}Wrike Configuration{% else %}Access Token (X-API-Key){% endif %}
+                            {% if mod.id == "wrike" %}Wrike Configuration{% elif mod.id == "email_reporting" %}Email Reporting Configuration{% else %}Access Token (X-API-Key){% endif %}
                         </p>
                         <button type="button" onclick="toggleModuleConfig('{{ mod.id }}')" class="material-symbols-outlined text-xs text-outline hover:text-primary transition-colors">close</button>
                     </div>
@@ -66,6 +66,18 @@
                             <input name="wrike_folder_id" type="text" placeholder="Wrike Folder/Project ID" value="{{ mod.wrike_folder_id|default:'' }}" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant/20 px-3 py-2 text-[11px] text-on-surface"/>
                             <button class="w-full rounded-lg px-3 py-2 border border-outline-variant/30 hover:border-primary/40 text-on-surface-variant hover:text-primary transition-all text-[10px] uppercase tracking-wider">Save Wrike Config</button>
                         </form>
+                    {% elif mod.id == "email_reporting" %}
+                        <form action="{% url 'save_email_reporting_config' %}" method="POST" class="space-y-3">
+                            {% csrf_token %}
+                            <textarea name="email_report_recipients" rows="3" placeholder="security@example.com, soc@example.com" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant/20 px-3 py-2 text-[11px] text-on-surface">{{ mod.email_report_recipients|default:'' }}</textarea>
+                            <button class="w-full rounded-lg px-3 py-2 border border-outline-variant/30 hover:border-primary/40 text-on-surface-variant hover:text-primary transition-all text-[10px] uppercase tracking-wider">Save Email Recipients</button>
+                        </form>
+                        {% if mod.is_active %}
+                        <form action="{% url 'send_email_report_now' %}" method="POST">
+                            {% csrf_token %}
+                            <button class="mt-2 w-full rounded-lg px-3 py-2 border border-primary/40 bg-primary/10 hover:bg-primary/20 text-primary transition-all text-[10px] uppercase tracking-wider">Send Report Now</button>
+                        </form>
+                        {% endif %}
                     {% else %}
                         <div class="flex items-center justify-between gap-2 overflow-hidden">
                             <code class="text-[10px] font-mono text-primary truncate" id="token-{{ mod.id }}">{{ mod.api_token }}</code>
