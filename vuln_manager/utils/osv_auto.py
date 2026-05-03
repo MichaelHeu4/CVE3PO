@@ -3,6 +3,8 @@ import os
 
 import requests
 
+import re
+from packaging import version
 from vuln_manager.models import Scan, Software
 from vuln_manager.parser.osvscanner import (
     extract_cve_id,
@@ -57,7 +59,8 @@ def _candidate_ecosystems(software):
         ecosystems.append("Packagist")
 
     if not ecosystems:
-        ecosystems = ["Debian", "Ubuntu", "PyPI", "npm", "Maven", "Go", "crates.io"]
+        ecosystems = ["Debian", "Ubuntu", "PyPI",
+                      "npm", "Maven", "Go", "crates.io"]
 
     seen = set()
     deduped = []
@@ -113,7 +116,8 @@ def _candidate_nvd_keywords(software):
 def _query_nvd_by_keyword(keyword):
     response = requests.get(
         NVD_QUERY_URL,
-        params={"keywordSearch": keyword, "resultsPerPage": NVD_RESULTS_PER_PAGE},
+        params={"keywordSearch": keyword,
+                "resultsPerPage": NVD_RESULTS_PER_PAGE},
         headers=_nvd_headers(),
         timeout=15,
     )
@@ -130,7 +134,8 @@ def _extract_nvd_description(cve):
 
 
 def _extract_nvd_cvss_and_severity(cve):
-    metric_order = ["cvssMetricV40", "cvssMetricV31", "cvssMetricV30", "cvssMetricV2"]
+    metric_order = ["cvssMetricV40", "cvssMetricV31",
+                    "cvssMetricV30", "cvssMetricV2"]
     metrics = cve.get("metrics", {})
 
     for metric_name in metric_order:
@@ -142,7 +147,8 @@ def _extract_nvd_cvss_and_severity(cve):
 
         vector = cvss_data.get("vectorString")
         base_score = cvss_data.get("baseScore")
-        severity_raw = cvss_data.get("baseSeverity") or metric.get("baseSeverity")
+        severity_raw = cvss_data.get(
+            "baseSeverity") or metric.get("baseSeverity")
 
         if severity_raw:
             normalized = severity_raw.lower()
@@ -155,29 +161,91 @@ def _extract_nvd_cvss_and_severity(cve):
     return None, "info"
 
 
+def _normalize_and_parse_version(v_str):
+    if not v_str:
+        return None
+    # Konvertiert OpenSSL-Styles wie "1.0.1g" in PEP 440-Styles wie "1.0.1+g"
+    normalized = re.sub(r"^([\d\.]+)([a-zA-Z]+)$", r"\1+\2", v_str)
+    try:
+        return version.parse(normalized)
+    except Exception:
+        return None
+
+
 def _cve_matches_software(cve, software):
-    haystack_parts = [_extract_nvd_description(cve).lower()]
-
-    def _collect_node_criteria(node):
-        for cpe in node.get("cpeMatch", []):
-            criteria = cpe.get("criteria")
-            if criteria:
-                haystack_parts.append(str(criteria).lower())
-        for child in node.get("children", []):
-            _collect_node_criteria(child)
-
-    for config in cve.get("configurations", []):
-        for node in config.get("nodes", []):
-            _collect_node_criteria(node)
-
-    haystack = " ".join(haystack_parts)
     name = (software.name or "").lower().strip()
-    version = (software.version or "").lower().strip()
+    version_str = (software.version or "").lower().strip()
 
-    if name and name not in haystack:
+    target_v = _normalize_and_parse_version(
+        version_str) if version_str else None
+
+    configurations = cve.get("configurations", [])
+    has_cpes = False
+
+    def _cpe_matches(node):
+        for cpe in node.get("cpeMatch", []):
+            criteria = str(cpe.get("criteria", "")).lower()
+
+            parts = criteria.split(":")
+            if len(parts) < 6:
+                continue
+
+            cpe_product = parts[4]
+            cpe_version = parts[5]
+
+            if name and name not in cpe_product:
+                continue
+
+            if not version_str:
+                return True
+
+            if cpe_version not in ["*", "-"] and version_str == cpe_version:
+                return True
+
+            if cpe_version in ["*", "-"]:
+                v_start_inc = cpe.get("versionStartIncluding")
+                v_start_exc = cpe.get("versionStartExcluding")
+                v_end_inc = cpe.get("versionEndIncluding")
+                v_end_exc = cpe.get("versionEndExcluding")
+
+                if not any([v_start_inc, v_start_exc, v_end_inc, v_end_exc]):
+                    return True
+
+                if target_v:
+                    try:
+                        if v_start_inc and target_v < version.parse(v_start_inc):
+                            continue  # Version ist zu alt
+                        if v_start_exc and target_v <= version.parse(v_start_exc):
+                            continue  # Version ist zu alt
+                        if v_end_inc and target_v > version.parse(v_end_inc):
+                            continue  # Version ist zu neu
+                        if v_end_exc and target_v >= version.parse(v_end_exc):
+                            continue  # Version ist zu neu
+
+                        return True
+                    except Exception:
+                        pass
+
+        for child in node.get("children", []):
+            if _cpe_matches(child):
+                return True
         return False
-    if version and version not in haystack:
+
+    for config in configurations:
+        for node in config.get("nodes", []):
+            has_cpes = True
+            if _cpe_matches(node):
+                return True
+
+    if has_cpes:
         return False
+
+    description = _extract_nvd_description(cve).lower()
+    if name and name not in description:
+        return False
+    if version_str and version_str not in description:
+        return False
+
     return True
 
 
@@ -212,7 +280,9 @@ def enrich_software_with_feeds(software_id):
     if not software or not software.version:
         return
 
-    scan_obj, _ = Scan.objects.get_or_create(scan_type="OSV", defaults={"raw_file": None})
+    scan_obj, _ = Scan.objects.get_or_create(
+        scan_type="OSV", defaults={"raw_file": None}
+    )
     ecosystems = _candidate_ecosystems(software)
 
     for ecosystem in ecosystems:
