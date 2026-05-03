@@ -125,6 +125,47 @@ class SoftwareDeletionStatusTests(TestCase):
         self.assertIsNone(vuln.software)
 
 
+class HostDeletionOrphanCleanupTests(TestCase):
+    def test_deleting_host_removes_software_only_linked_to_it(self):
+        host = Host.objects.create(ip_address="10.0.1.10")
+        orphan_sw = Software.objects.create(name="orphan-sw", version="1.0", vendor="acme")
+        orphan_sw.hosts.add(host)
+
+        Host.objects.filter(pk=host.pk).delete()
+
+        self.assertFalse(Software.objects.filter(pk=orphan_sw.pk).exists())
+
+    def test_deleting_host_keeps_shared_software(self):
+        host_a = Host.objects.create(ip_address="10.0.1.20")
+        host_b = Host.objects.create(ip_address="10.0.1.21")
+        shared_sw = Software.objects.create(name="shared-sw", version="1.0", vendor="acme")
+        shared_sw.hosts.add(host_a, host_b)
+
+        Host.objects.filter(pk=host_a.pk).delete()
+
+        self.assertTrue(Software.objects.filter(pk=shared_sw.pk).exists())
+        self.assertTrue(Software.objects.get(pk=shared_sw.pk).hosts.filter(pk=host_b.pk).exists())
+
+    def test_deleting_host_removes_orphan_vulnerabilities(self):
+        scan = Scan.objects.create(scan_type="MANUAL")
+        host = Host.objects.create(ip_address="10.0.1.30")
+        orphan_sw = Software.objects.create(name="orphan-vuln-sw", version="2.0", vendor="acme")
+        orphan_sw.hosts.add(host)
+        orphan_vuln = Vulnerability.objects.create(
+            scan=scan,
+            software=orphan_sw,
+            host=None,
+            cve_id="CVE-2026-40001",
+            severity="high",
+            status="open",
+            name="Orphan vulnerability",
+        )
+
+        Host.objects.filter(pk=host.pk).delete()
+
+        self.assertFalse(Vulnerability.objects.filter(pk=orphan_vuln.pk).exists())
+
+
 class AuthAndStatusFlowTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="alice", email="a@example.com", password="pw12345")
