@@ -1,23 +1,43 @@
+from django.core.paginator import Paginator
 from django.views.decorators.http import require_POST
 from django.shortcuts import render, redirect, get_object_or_404
-from django.db.models import Count, Q, Max, Case, When, Value, IntegerField
-from django.db.models.functions import TruncDate
-from .models import Host, Port, Vulnerability, Scan, Software, Extension
+from django.db.models import Count, Q, Max, Case, When, Value, IntegerField, Avg
+from .models import (
+    Host,
+    Port,
+    Vulnerability,
+    VulnerabilityAuditEvent,
+    Scan,
+    Software,
+    Extension,
+    SystemSettings,
+)
 from .parser import nmap
 from .parser import nuclei
 from .parser import openvas
 from .parser import osvscanner
 from .parser import semgrep
 from .utils import ai_triage
+from .utils.audit import log_vulnerability_event
+from .utils.vuln_dedup import create_or_update_vulnerability
+from .utils.osv_auto import enrich_software_with_feeds
+from .extensions import wrike as wrike_ext
 from django.conf import settings
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
+from django.core.mail import EmailMessage
 from django.utils.http import url_has_allowed_host_and_scheme
+import io
+from django.http import FileResponse, HttpResponse, HttpResponseForbidden, JsonResponse
+from django.utils.timezone import now
+from datetime import timedelta
+import re
+
+from xhtml2pdf import pisa
+from django.template.loader import render_to_string
 import json
-import os
+import threading
 
 CRITICALITY_WEIGHTS = {
     "Critical": 4,
@@ -29,8 +49,23 @@ CRITICALITY_WEIGHTS = {
 }
 
 
+def get_system_settings():
+    settings_obj, _ = SystemSettings.objects.get_or_create(
+        pk=1, defaults={"disable_register": settings.DISABLE_REGISTER}
+    )
+    return settings_obj
+
+
+def get_wrike_config():
+    settings_obj = get_system_settings()
+    wrike_extension, _ = Extension.objects.get_or_create(name_id="wrike")
+    return wrike_extension, settings_obj
+
+
 def login_view(request):
     next_url = request.GET.get("next", "dashboard")
+    error_message = None
+    login_identifier = ""
     if not url_has_allowed_host_and_scheme(
         url=next_url,
         allowed_hosts={request.get_host()},
@@ -40,18 +75,46 @@ def login_view(request):
     if request.user.is_authenticated:
         return redirect(next_url)
     if request.method == "POST":
-        username = request.POST.get("email")
-        password = request.POST.get("password")
-        user = authenticate(request, username=username, password=password)
+        login_identifier = (
+            request.POST.get("identifier") or request.POST.get("email") or ""
+        ).strip()
+        password = request.POST.get("password") or ""
+
+        if not login_identifier or not password:
+            error_message = "Please provide username/email and password."
+            return render(
+                request,
+                "vuln_manager/login.html",
+                {
+                    "login_error": error_message,
+                    "login_identifier": login_identifier,
+                },
+            )
+
+        user = authenticate(request, username=login_identifier, password=password)
+        if user is None and "@" in login_identifier:
+            user_by_email = User.objects.filter(email__iexact=login_identifier).first()
+            if user_by_email:
+                user = authenticate(
+                    request, username=user_by_email.username, password=password
+                )
         if user is not None:
             login(request, user)
-            print(next_url)
             return redirect(next_url)
-    return render(request, "vuln_manager/login.html")
+        error_message = "Invalid credentials. Please check username/email and password."
+    return render(
+        request,
+        "vuln_manager/login.html",
+        {
+            "login_error": error_message,
+            "login_identifier": login_identifier,
+        },
+    )
 
 
 def register_view(request):
-    if settings.DISABLE_REGISTER:
+    system_settings = get_system_settings()
+    if system_settings.disable_register:
         print("[*] Someone tried to register...")
         return redirect("login")
     if request.user.is_authenticated:
@@ -82,54 +145,70 @@ def recalculate_host_criticality(host):
     host.save()
 
 
-@csrf_exempt
-@login_required
-def api_update_vuln_status(request, pk):
-    if request.method == "POST":
-        try:
-            vuln = Vulnerability.objects.get(pk=pk)
-            data = json.loads(request.body)
-            new_status = data.get("status")
-            if new_status in dict(Vulnerability.STATUS_CHOICES):
-                vuln.status = new_status
-                vuln.save()
-                return JsonResponse({"status": "success"})
-        except Exception as e:
-            return JsonResponse({"status": "error"}, status=400)
-    return JsonResponse({"status": "invalid method"}, status=405)
-
-
-import io
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
-from django.http import FileResponse
-from django.utils.timezone import now
-
-from xhtml2pdf import pisa
-from django.template.loader import render_to_string
-
-@login_required
-def export_dashboard_pdf(request):
+def _build_dashboard_report_context():
     all_vulns = Vulnerability.objects.exclude(status__in=["fixed", "false_positive"])
     critical_count = all_vulns.filter(severity="critical").count()
     high_count = all_vulns.filter(severity="high").count()
     host_count = Host.objects.count()
-    vuln_hosts_count = Host.objects.filter(vulnerabilities__in=all_vulns).distinct().count()
-    avg_proc_time_ms = Vulnerability.objects.filter(ai_proc_time__gt=0).aggregate(Avg('ai_proc_time'))['ai_proc_time__avg'] or 0
+    vuln_hosts_count = (
+        Host.objects.filter(
+            Q(vulnerabilities__in=all_vulns)
+            | Q(software_inventory__vulnerabilities__in=all_vulns)
+        )
+        .distinct()
+        .count()
+    )
+    avg_proc_time_ms = (
+        Vulnerability.objects.filter(ai_proc_time__gt=0).aggregate(Avg("ai_proc_time"))[
+            "ai_proc_time__avg"
+        ]
+        or 0
+    )
+    resolved_count = Vulnerability.objects.filter(status="fixed").count()
+    total_non_fp = Vulnerability.objects.exclude(status="false_positive").count()
+    remediation_rate = round((resolved_count / total_non_fp) * 100, 1) if total_non_fp else 0
+    exposure_rate = round((vuln_hosts_count / host_count) * 100, 1) if host_count else 0
+    avg_open_age_days = 0
+    open_ages = [
+        max((now() - opened_at).days, 0)
+        for opened_at in all_vulns.values_list("first_seen", flat=True)
+        if opened_at
+    ]
+    if open_ages:
+        avg_open_age_days = round(sum(open_ages) / len(open_ages), 1)
+    oldest_open_days = max(open_ages) if open_ages else 0
+    sla_breach_count = all_vulns.filter(
+        Q(severity="critical", first_seen__lt=now() - timedelta(days=7))
+        | Q(severity="high", first_seen__lt=now() - timedelta(days=30))
+    ).count()
+    reopened_30d = VulnerabilityAuditEvent.objects.filter(
+        action="reopened", created_at__gte=now() - timedelta(days=30)
+    ).count()
 
     top_hosts = Host.objects.annotate(
         num_vulns=Count(
             "vulnerabilities",
-            filter=~Q(vulnerabilities__status__in=["fixed", "false_positive"])
+            filter=~Q(vulnerabilities__status__in=["fixed", "false_positive"]),
         )
     ).order_by("-num_vulns")[:5]
+    top_software = (
+        Software.objects.annotate(
+            num_vulns=Count(
+                "vulnerabilities",
+                filter=~Q(vulnerabilities__status__in=["fixed", "false_positive"]),
+            )
+        )
+        .filter(num_vulns__gt=0)
+        .order_by("-num_vulns", "name")[:5]
+    )
 
-    recent_vulns = Vulnerability.objects.filter(
-        severity__in=["critical", "high"]
-    ).exclude(status__in=["fixed", "false_positive"]).order_by("-id")[:5]
+    recent_vulns = (
+        Vulnerability.objects.filter(severity__in=["critical", "high"])
+        .exclude(status__in=["fixed", "false_positive"])
+        .order_by("-id")[:5]
+    )
 
-    context = {
+    return {
         "report_date": now(),
         "metrics": {
             "host_count": host_count,
@@ -138,20 +217,41 @@ def export_dashboard_pdf(request):
             "high_count": high_count,
             "vuln_hosts_count": vuln_hosts_count,
             "mttt": round(avg_proc_time_ms / 1000, 2),
+            "resolved_count": resolved_count,
+            "remediation_rate": remediation_rate,
+            "exposure_rate": exposure_rate,
+            "avg_open_age_days": avg_open_age_days,
+            "oldest_open_days": oldest_open_days,
+            "sla_breach_count": sla_breach_count,
+            "reopened_30d": reopened_30d,
         },
         "top_hosts": top_hosts,
+        "top_software": top_software,
         "recent_vulns": recent_vulns,
     }
 
+
+def _render_dashboard_pdf_buffer():
+    context = _build_dashboard_report_context()
     html = render_to_string("vuln_manager/report_pdf.html", context)
     buffer = io.BytesIO()
     pisa_status = pisa.CreatePDF(html, dest=buffer)
-
     if pisa_status.err:
-        return HttpResponse("Fehler bei der PDF-Erstellung", status=500)
-
+        return None
     buffer.seek(0)
-    return FileResponse(buffer, as_attachment=True, filename=f"cve3po_report_{now().strftime('%Y%m%d')}.pdf")
+    return buffer
+
+
+@login_required
+def export_dashboard_pdf(request):
+    buffer = _render_dashboard_pdf_buffer()
+    if buffer is None:
+        return HttpResponse("Fehler bei der PDF-Erstellung", status=500)
+    return FileResponse(
+        buffer,
+        as_attachment=True,
+        filename=f"cve3po_report_{now().strftime('%Y%m%d')}.pdf",
+    )
 
 
 @login_required
@@ -165,44 +265,115 @@ def dashboard(request):
             item["latest_scan_id"] for item in latest_port_ids if item["latest_scan_id"]
         ]
     ).count()
-    vuln_count = (
-        Vulnerability.objects.exclude(status__in=["fixed", "false_positive"])
-        .exclude(severity="info")
+
+    # Open vulnerabilities (excluding fixed/fp/info)
+    all_open_vulns = Vulnerability.objects.exclude(
+        status__in=["fixed", "false_positive"]
+    )
+    vuln_count = all_open_vulns.exclude(severity="info").count()
+    resolved_count = Vulnerability.objects.filter(status="fixed").count()
+    ignored_count = Vulnerability.objects.filter(status="risk_accepted").count()
+    total_non_fp = Vulnerability.objects.exclude(status="false_positive").count()
+    remediation_rate = round((resolved_count / total_non_fp) * 100, 1) if total_non_fp else 0
+    impacted_assets_count = (
+        Host.objects.filter(
+            Q(vulnerabilities__in=all_open_vulns)
+            | Q(software_inventory__vulnerabilities__in=all_open_vulns)
+        )
+        .distinct()
         .count()
     )
-    vuln_stats = (
-        Vulnerability.objects.exclude(status__in=["fixed", "false_positive"])
-        .values("severity")
-        .annotate(count=Count("id"))
-    )
+    exposure_rate = round((impacted_assets_count / host_count) * 100, 1) if host_count else 0
+    open_ages = [
+        max((now() - opened_at).days, 0)
+        for opened_at in all_open_vulns.values_list("first_seen", flat=True)
+        if opened_at
+    ]
+    avg_open_age_days = round(sum(open_ages) / len(open_ages), 1) if open_ages else 0
+    oldest_open_days = max(open_ages) if open_ages else 0
+    sla_breach_count = all_open_vulns.filter(
+        Q(severity="critical", first_seen__lt=now() - timedelta(days=7))
+        | Q(severity="high", first_seen__lt=now() - timedelta(days=30))
+    ).count()
+    reopened_30d = VulnerabilityAuditEvent.objects.filter(
+        action="reopened", created_at__gte=now() - timedelta(days=30)
+    ).count()
+
+    # Severity distribution
+    vuln_stats = all_open_vulns.values("severity").annotate(count=Count("id"))
     severity_map = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
     for stat in vuln_stats:
         severity_map[stat["severity"].lower()] = stat["count"]
-    timeline_raw = (
-        Vulnerability.objects.exclude(status__in=["fixed", "false_positive"])
-        .annotate(date=TruncDate("scan__uploaded_at"))
-        .values("date")
-        .annotate(count=Count("id"))
-        .order_by("date")
+
+    # Security Score Calculation
+    # Critical=10, High=5, Medium=2, Low=1
+    risk_points = (
+        severity_map["critical"] * 10
+        + severity_map["high"] * 5
+        + severity_map["medium"] * 2
+        + severity_map["low"] * 1
     )
-    timeline_labels = [item["date"].strftime("%d.%m.%Y") for item in timeline_raw]
-    timeline_values = [item["count"] for item in timeline_raw]
+
+    if host_count > 0:
+        # Score starts at 100, drops based on risk density.
+        score = max(0, 100 - (risk_points / (host_count * 0.5)))
+    else:
+        score = 100
+
+    # Vulnerability Trend (Last 14 days)
+    # We want to show "Active" vs "Fixed"
+    trend_labels = []
+    trend_open = []
+    trend_fixed = []
+
+    import datetime
+    today = datetime.date.today()
+    for i in range(13, -1, -1):
+        day = today - datetime.timedelta(days=i)
+        trend_labels.append(day.strftime("%d.%m"))
+
+        # Open on that day (created before or on that day, and not fixed or fixed AFTER that day)
+        open_count = (
+            Vulnerability.objects.filter(scan__uploaded_at__date__lte=day)
+            .exclude(
+                status__in=["fixed", "false_positive"],
+            )
+            .count()
+        )
+
+        fixed_count = Vulnerability.objects.filter(
+            status="fixed", scan__uploaded_at__date__lte=day
+        ).count()
+
+        trend_open.append(open_count)
+        trend_fixed.append(fixed_count)
+
+    # Top Risky Assets (Weighted)
     top_hosts = (
         Host.objects.annotate(
-            num_vulns=Count(
+            risk_score=Count(
+                "vulnerabilities", filter=Q(vulnerabilities__severity="critical")
+            )
+            * 10
+            + Count("vulnerabilities", filter=Q(vulnerabilities__severity="high")) * 5
+            + Count("vulnerabilities", filter=Q(vulnerabilities__severity="medium")) * 2
+        )
+        .filter(risk_score__gt=0)
+        .order_by("-risk_score")[:5]
+    )
+
+    recent_vulns = all_open_vulns.select_related("host").order_by("-id")[:5]
+    top_software = (
+        Software.objects.annotate(
+            active_vulns=Count(
                 "vulnerabilities",
-                filter=~Q(vulnerabilities__status__in=["fixed", "false_positive"])
-                & ~Q(vulnerabilities__severity="info"),
+                filter=~Q(vulnerabilities__status__in=["fixed", "false_positive"]),
             )
         )
-        .filter(num_vulns__gt=0)
-        .order_by("-num_vulns")[:5]
+        .filter(active_vulns__gt=0)
+        .order_by("-active_vulns", "name")[:5]
     )
-    recent_vulns = (
-        Vulnerability.objects.select_related("host")
-        .exclude(status__in=["fixed", "false_positive"])
-        .order_by("-id")[:5]
-    )
+
     top_ports = (
         Port.objects.filter(
             scan_id__in=[
@@ -215,20 +386,24 @@ def dashboard(request):
         .annotate(count=Count("id"))
         .order_by("-count")[:5]
     )
-    top_vuln_types = (
-        Vulnerability.objects.exclude(status__in=["fixed", "false_positive"])
-        .exclude(severity="info")
-        .values("cve_id", "name")
-        .annotate(count=Count("id"))
-        .order_by("-count")[:5]
-    )
-    last_scans = Scan.objects.all().order_by("-uploaded_at")[:5]
+
     software_count = Software.objects.count()
 
-    # AI Stats (MTTT)
-    avg_proc_time_ms = Vulnerability.objects.filter(ai_proc_time__gt=0).aggregate(Avg('ai_proc_time'))['ai_proc_time__avg'] or 0
+    avg_proc_time_ms = (
+        Vulnerability.objects.filter(ai_proc_time__gt=0).aggregate(Avg("ai_proc_time"))[
+            "ai_proc_time__avg"
+        ]
+        or 0
+    )
     ai_context = {
         "proc_time": round(avg_proc_time_ms / 1000, 2),
+    }
+    status_map = {
+        "open": Vulnerability.objects.filter(status="open").count(),
+        "in_progress": Vulnerability.objects.filter(status="in_progress").count(),
+        "fixed": resolved_count,
+        "risk_accepted": ignored_count,
+        "false_positive": Vulnerability.objects.filter(status="false_positive").count(),
     }
 
     context = {
@@ -236,15 +411,26 @@ def dashboard(request):
         "port_count": port_count,
         "vuln_count": vuln_count,
         "severity_map": severity_map,
-        "last_scans": last_scans,
+        "score": round(score),
+        "trend_labels": json.dumps(trend_labels),
+        "trend_open": json.dumps(trend_open),
+        "trend_fixed": json.dumps(trend_fixed),
         "top_hosts": top_hosts,
+        "top_software": top_software,
         "recent_vulns": recent_vulns,
         "top_ports": top_ports,
-        "top_vuln_types": top_vuln_types,
-        "timeline_labels": json.dumps(timeline_labels),
-        "timeline_values": json.dumps(timeline_values),
         "software_count": software_count,
         "ai": ai_context,
+        "resolved_count": resolved_count,
+        "ignored_count": ignored_count,
+        "impacted_assets_count": impacted_assets_count,
+        "exposure_rate": exposure_rate,
+        "remediation_rate": remediation_rate,
+        "avg_open_age_days": avg_open_age_days,
+        "oldest_open_days": oldest_open_days,
+        "sla_breach_count": sla_breach_count,
+        "reopened_30d": reopened_30d,
+        "status_map": status_map,
         "user": User.objects.get(pk=request.user.id),
     }
     return render(request, "vuln_manager/dashboard.html", context)
@@ -252,7 +438,13 @@ def dashboard(request):
 
 @login_required
 def host_list(request):
-    hosts = Host.objects.all().order_by("ip_address")
+    hosts_query = Host.objects.all().order_by("ip_address")
+
+    # Pagination
+    paginator = Paginator(hosts_query, 25)  # 25 per page
+    page_number = request.GET.get("page")
+    hosts = paginator.get_page(page_number)
+
     for host in hosts:
         latest_scan = host.ports.aggregate(latest=Max("scan_id"))["latest"]
         host.current_port_count = (
@@ -283,17 +475,28 @@ def host_detail(request, pk):
         p for p in historic_ports if p["port_number"] not in active_port_nums
     ]
     show_mode = request.GET.get("mode", "all")
+    severity_filter = (request.GET.get("severity") or "").lower()
+    allowed_severities = {choice[0] for choice in Vulnerability.SEVERITY_CHOICES}
+    if severity_filter and severity_filter not in allowed_severities:
+        severity_filter = ""
     if show_mode == "direct":
-        vulns = host.vulnerabilities.exclude(status="false_positive").order_by(
+        vulns_query = host.vulnerabilities.exclude(status="false_positive").order_by(
             "-severity"
         )
     else:
-        vulns = (
+        vulns_query = (
             Vulnerability.objects.filter(Q(host=host) | Q(software__hosts=host))
             .exclude(status="false_positive")
             .distinct()
             .order_by("-severity")
         )
+    if severity_filter:
+        vulns_query = vulns_query.filter(severity=severity_filter)
+
+    # Paginate Threats
+    vuln_paginator = Paginator(vulns_query, 20)
+    vuln_page_number = request.GET.get("vuln_page")
+    vulns = vuln_paginator.get_page(vuln_page_number)
     host_timeline_raw = (
         host.vulnerabilities.exclude(status="false_positive")
         .values("scan__id", "scan__uploaded_at")
@@ -304,14 +507,24 @@ def host_detail(request, pk):
         item["scan__uploaded_at"].strftime("%d.%m %H:%M") for item in host_timeline_raw
     ]
     host_timeline_values = [item["count"] for item in host_timeline_raw]
-    installed_software = host.software_inventory.annotate(
+
+    # Software Inventory with Pagination
+    sw_query = host.software_inventory.annotate(
         active_vulns=Count(
             "vulnerabilities",
-            filter=Q(vulnerabilities__host=host)
-            | Q(vulnerabilities__software__hosts=host)
+            filter=(
+                Q(vulnerabilities__host=host) | Q(vulnerabilities__software__hosts=host)
+            )
             & ~Q(vulnerabilities__status__in=["fixed", "false_positive"]),
         )
     ).order_by("name")
+
+    sw_paginator = Paginator(sw_query, 20)
+    sw_page_number = request.GET.get("sw_page")
+    installed_software = sw_paginator.get_page(sw_page_number)
+
+    active_tab = request.GET.get("tab", "threats")
+
     return render(
         request,
         "vuln_manager/host_detail.html",
@@ -324,6 +537,9 @@ def host_detail(request, pk):
             "timeline_values": json.dumps(host_timeline_values),
             "installed_software": installed_software,
             "show_mode": show_mode,
+            "severity_filter": severity_filter,
+            "severity_choices": Vulnerability.SEVERITY_CHOICES,
+            "active_tab": active_tab,
             "criticality_choices": Host.CRITICALITY_CHOICES,
         },
     )
@@ -331,7 +547,14 @@ def host_detail(request, pk):
 
 @login_required
 def software_list(request):
-    software = Software.objects.annotate(num_hosts=Count("hosts")).order_by("name")
+    software_query = Software.objects.annotate(num_hosts=Count("hosts")).order_by(
+        "name"
+    )
+
+    paginator = Paginator(software_query, 25)
+    page_number = request.GET.get("page")
+    software = paginator.get_page(page_number)
+
     return render(request, "vuln_manager/software_list.html", {"software": software})
 
 
@@ -339,11 +562,17 @@ def software_list(request):
 def software_detail(request, pk):
     item = get_object_or_404(Software, pk=pk)
     hosts = item.hosts.all()
+    severity_filter = (request.GET.get("severity") or "").lower()
+    allowed_severities = {choice[0] for choice in Vulnerability.SEVERITY_CHOICES}
+    if severity_filter and severity_filter not in allowed_severities:
+        severity_filter = ""
     vulns = (
         Vulnerability.objects.filter(software=item)
         .exclude(status="false_positive")
         .order_by("-severity")
     )
+    if severity_filter:
+        vulns = vulns.filter(severity=severity_filter)
     return render(
         request,
         "vuln_manager/software_detail.html",
@@ -351,9 +580,26 @@ def software_detail(request, pk):
             "software": item,
             "hosts": hosts,
             "vulns": vulns,
+            "severity_filter": severity_filter,
+            "severity_choices": Vulnerability.SEVERITY_CHOICES,
             "criticality_choices": Software.CRITICALITY_CHOICES,
+            "osv_rescan_possible": bool(item.version),
         },
     )
+
+
+@login_required
+@require_POST
+def software_rescan_osv(request, pk):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+    sw = get_object_or_404(Software, pk=pk)
+    if not sw.version:
+        return HttpResponseForbidden("missing_version")
+
+    worker = threading.Thread(target=enrich_software_with_feeds, args=(sw.id,), daemon=True)
+    worker.start()
+    return redirect("software_detail", pk=pk)
 
 
 @login_required
@@ -467,7 +713,7 @@ def vuln_add(request):
         if not manual_scan:
             manual_scan = Scan.objects.create(scan_type="MANUAL")
         sw_obj = Software.objects.get(pk=software_id) if software_id else None
-        Vulnerability.objects.create(
+        vuln = create_or_update_vulnerability(
             host=host_obj,
             scan=manual_scan,
             software=sw_obj,
@@ -476,6 +722,10 @@ def vuln_add(request):
             name=name,
             description=description,
             nuclei_poc=poc,
+            actor=f"user:{request.user.username}",
+        )
+        log_vulnerability_event(
+            vuln, "updated", user=request.user, details={"source": "manual_entry"}
         )
         if host_obj:
             return redirect("host_detail", pk=host_obj.id)
@@ -497,6 +747,12 @@ def delete_vulnerability(request, pk):
     if request.method == "POST":
         vuln = get_object_or_404(Vulnerability, pk=pk)
         host_id = vuln.host.id if vuln.host else None
+        log_vulnerability_event(
+            vuln,
+            "deleted",
+            user=request.user,
+            details={"cve_id": vuln.cve_id, "name": vuln.name},
+        )
         vuln.delete()
         if host_id:
             return redirect("host_detail", pk=host_id)
@@ -512,6 +768,7 @@ def host_form(request, pk=None):
     if request.method == "POST":
         ip_address = request.POST.get("ip_address")
         hostname = request.POST.get("hostname")
+        operating_system = request.POST.get("operating_system")
         criticality = request.POST.get("criticality")
 
         if not host_obj:
@@ -520,6 +777,7 @@ def host_form(request, pk=None):
             host_obj.ip_address = ip_address
 
         host_obj.hostname = hostname
+        host_obj.operating_system = operating_system
         host_obj.criticality = criticality
         host_obj.save()
         return redirect("host_list")
@@ -552,10 +810,100 @@ def port_list(request):
 
 @login_required
 def scan_list(request):
-    scans = Scan.objects.annotate(num_vulns=Count("vulnerabilities")).order_by(
-        "-uploaded_at"
+    scans = list(
+        Scan.objects.annotate(num_vulns=Count("vulnerabilities")).order_by("-uploaded_at")
     )
+    last_by_type = {}
+    for scan in reversed(scans):
+        scan.previous_same_type = last_by_type.get(scan.scan_type)
+        last_by_type[scan.scan_type] = scan
     return render(request, "vuln_manager/scan_list.html", {"scans": scans})
+
+
+@login_required
+def scan_diff(request, pk):
+    severity_order = Case(
+        When(severity__iexact="critical", then=Value(5)),
+        When(severity__iexact="high", then=Value(4)),
+        When(severity__iexact="medium", then=Value(3)),
+        When(severity__iexact="low", then=Value(2)),
+        When(severity__iexact="info", then=Value(1)),
+        default=Value(0),
+        output_field=IntegerField(),
+    )
+
+    current_scan = get_object_or_404(Scan, pk=pk)
+    previous_scan = (
+        Scan.objects.filter(
+            scan_type=current_scan.scan_type, uploaded_at__lt=current_scan.uploaded_at
+        )
+        .order_by("-uploaded_at")
+        .first()
+    )
+    next_scan = (
+        Scan.objects.filter(
+            scan_type=current_scan.scan_type, uploaded_at__gt=current_scan.uploaded_at
+        )
+        .order_by("uploaded_at")
+        .first()
+    )
+
+    window_end = next_scan.uploaded_at if next_scan else now()
+
+    new_findings = Vulnerability.objects.none()
+    reopened_findings = Vulnerability.objects.none()
+    fixed_findings = Vulnerability.objects.none()
+
+    if previous_scan:
+        current_detected = (
+            Vulnerability.objects.filter(scan=current_scan)
+            .exclude(status="false_positive")
+            .annotate(sev_score=severity_order)
+            .select_related("host", "software")
+        )
+
+        new_findings = current_detected.filter(
+            first_seen__gt=previous_scan.uploaded_at
+        ).order_by("-sev_score", "cve_id")
+
+        reopened_findings = (
+            current_detected.filter(
+                audit_events__action="reopened",
+                audit_events__created_at__gt=previous_scan.uploaded_at,
+                audit_events__created_at__lte=window_end,
+            )
+            .distinct()
+            .order_by("-sev_score", "cve_id")
+        )
+
+        fixed_findings = (
+            Vulnerability.objects.filter(
+                audit_events__action="status_changed",
+                audit_events__details__to_status="fixed",
+                audit_events__created_at__gt=previous_scan.uploaded_at,
+                audit_events__created_at__lte=window_end,
+            )
+            .exclude(status="false_positive")
+            .annotate(sev_score=severity_order)
+            .select_related("host", "software")
+            .distinct()
+            .order_by("-sev_score", "cve_id")
+        )
+
+    context = {
+        "current_scan": current_scan,
+        "previous_scan": previous_scan,
+        "next_scan": next_scan,
+        "new_findings": new_findings,
+        "reopened_findings": reopened_findings,
+        "fixed_findings": fixed_findings,
+        "summary": {
+            "new_count": new_findings.count(),
+            "reopened_count": reopened_findings.count(),
+            "fixed_count": fixed_findings.count(),
+        },
+    }
+    return render(request, "vuln_manager/scan_diff.html", context)
 
 
 @login_required
@@ -572,6 +920,12 @@ def kanban_board(request):
     vulns = Vulnerability.objects.select_related("host").annotate(
         sev_score=severity_order
     )
+    severity_filter = (request.GET.get("severity") or "").lower()
+    allowed_severities = {choice[0] for choice in Vulnerability.SEVERITY_CHOICES}
+    if severity_filter and severity_filter not in allowed_severities:
+        severity_filter = ""
+    if severity_filter:
+        vulns = vulns.filter(severity=severity_filter)
     board_data = {
         "open": vulns.filter(status="open").order_by("-sev_score", "cve_id"),
         "in_progress": vulns.filter(status="in_progress").order_by(
@@ -585,7 +939,15 @@ def kanban_board(request):
             "-sev_score", "cve_id"
         ),
     }
-    return render(request, "vuln_manager/kanban_board.html", {"board": board_data})
+    return render(
+        request,
+        "vuln_manager/kanban_board.html",
+        {
+            "board": board_data,
+            "severity_filter": severity_filter,
+            "severity_choices": Vulnerability.SEVERITY_CHOICES,
+        },
+    )
 
 
 @login_required
@@ -593,9 +955,25 @@ def update_vuln_status(request, pk):
     if request.method == "POST":
         vuln = get_object_or_404(Vulnerability, pk=pk)
         new_status = request.POST.get("status")
+        if not new_status and request.content_type == "application/json":
+            try:
+                payload = json.loads(request.body or "{}")
+                new_status = payload.get("status")
+            except json.JSONDecodeError:
+                new_status = None
         if new_status in dict(Vulnerability.STATUS_CHOICES):
+            old_status = vuln.status
             vuln.status = new_status
             vuln.save()
+            if old_status != new_status:
+                log_vulnerability_event(
+                    vuln,
+                    "status_changed",
+                    user=request.user,
+                    details={"from_status": old_status, "to_status": new_status},
+                )
+        if request.content_type == "application/json":
+            return JsonResponse({"status": "ok"}, status=200)
         referer = request.META.get("HTTP_REFERER")
         if referer and url_has_allowed_host_and_scheme(
             url=referer,
@@ -608,18 +986,30 @@ def update_vuln_status(request, pk):
 
 @login_required
 def vuln_list(request):
-    severity = request.GET.get("severity")
+    severity = (request.GET.get("severity") or "").lower()
+    allowed_severities = {choice[0] for choice in Vulnerability.SEVERITY_CHOICES}
+    if severity and severity not in allowed_severities:
+        severity = ""
     status_filter = request.GET.get("status", "active")
     active_vulns = Vulnerability.objects.exclude(status="false_positive")
+
     if status_filter == "resolved":
-        vulns = active_vulns.filter(status="fixed")
+        vulns_query = active_vulns.filter(status="fixed")
     elif status_filter == "ignored":
-        vulns = active_vulns.filter(status="risk_accepted")
+        vulns_query = active_vulns.filter(status="risk_accepted")
     else:
-        vulns = active_vulns.exclude(status="fixed")
+        vulns_query = active_vulns.exclude(status="fixed")
+
     if severity:
-        vulns = vulns.filter(severity=severity.lower())
-    vulns = vulns.order_by("-severity", "cve_id")
+        vulns_query = vulns_query.filter(severity=severity.lower())
+
+    vulns_query = vulns_query.order_by("-severity", "cve_id")
+
+    # Pagination
+    paginator = Paginator(vulns_query, 50)  # 50 per page for vulns
+    page_number = request.GET.get("page")
+    vulns = paginator.get_page(page_number)
+
     metrics = {
         "critical": active_vulns.filter(severity="critical").count(),
         "high": active_vulns.filter(severity="high").count(),
@@ -638,6 +1028,7 @@ def vuln_list(request):
         {
             "vulns": vulns,
             "severity": severity,
+            "severity_choices": Vulnerability.SEVERITY_CHOICES,
             "status_filter": status_filter,
             "metrics": metrics,
         },
@@ -649,7 +1040,22 @@ def vuln_detail(request, pk):
     vuln = get_object_or_404(
         Vulnerability.objects.select_related("host", "scan"), pk=pk
     )
-    return render(request, "vuln_manager/vuln_detail.html", {"vuln": vuln})
+    wrike_extension, settings_obj = get_wrike_config()
+    wrike_ready = (
+        wrike_extension.is_active
+        and bool(wrike_extension.api_token)
+        and bool(settings_obj.wrike_folder_id)
+    )
+    return render(
+        request,
+        "vuln_manager/vuln_detail.html",
+        {
+            "vuln": vuln,
+            "wrike_ready": wrike_ready,
+            "audit_events": VulnerabilityAuditEvent.objects.filter(vulnerability=vuln)
+            .order_by("-created_at")[:20],
+        },
+    )
 
 
 @login_required
@@ -701,21 +1107,33 @@ def delete_scan(request, pk):
     return redirect("scan_list")
 
 
-import threading
-from django.db.models import Avg
-
 @login_required
 def ki_dashboard(request):
     selected_vuln_id = request.GET.get("selected_vuln")
     selected_vuln = None
-    if selected_vuln_id: 
+    if selected_vuln_id:
         selected_vuln = get_object_or_404(Vulnerability, pk=selected_vuln_id)
 
-    all_vulns = Vulnerability.objects.exclude(status="false_positive").distinct()
-    triaged_vulns = all_vulns.exclude(ai_result="tbd").count()
-    action_required = all_vulns.filter(ai_result="Act").count()
+    all_vulns_query = (
+        Vulnerability.objects.exclude(status="false_positive")
+        .order_by("-severity", "cve_id")
+        .distinct()
+    )
 
-    avg_proc_time_ms = Vulnerability.objects.filter(ai_proc_time__gt=0).aggregate(Avg('ai_proc_time'))['ai_proc_time__avg'] or 0
+    # AI Stats
+    triaged_vulns = all_vulns_query.exclude(ai_result="tbd").count()
+    action_required = all_vulns_query.filter(ai_result="Act").count()
+    avg_proc_time_ms = (
+        Vulnerability.objects.filter(ai_proc_time__gt=0).aggregate(Avg("ai_proc_time"))[
+            "ai_proc_time__avg"
+        ]
+        or 0
+    )
+
+    # Pagination
+    paginator = Paginator(all_vulns_query, 25)  # 25 per page
+    page_number = request.GET.get("page")
+    all_vulns = paginator.get_page(page_number)
 
     ai = {
         "model": "DeepSeek V4 Flash",
@@ -726,61 +1144,268 @@ def ki_dashboard(request):
         "all_vulns": all_vulns,
         "action_required": action_required,
         "ai": ai,
-        "selected_vuln": selected_vuln
+        "selected_vuln": selected_vuln,
     }
     return render(request, "vuln_manager/ki_dashboard.html", context)
+
 
 @login_required
 def extensions_view(request):
     # Metadata for active modules
     module_metadata = {
+        "agent_api": {
+            "name": "CVE3PO Agent",
+            "description": "Activates the CVE3PO Agent API and lets you use the CVE3PO Agent to retrieve the SBOM of Server",
+            "icon": "api",
+            "color": "tertiary",
+        },
         "wazuh": {
             "name": "Wazuh Connector",
             "description": "Real-time vulnerability streaming via webhooks. Automatically creates hosts and manages vulnerability lifecycles.",
             "icon": "webhook",
             "color": "primary",
         },
-        "cloud_sentinel": {
-            "name": "Cloud Sentinel",
-            "description": "Continuous posture monitoring and threat detection across AWS, GCP, and Azure environments.",
-            "icon": "cloud_sync",
+        "wrike": {
+            "name": "Wrike Ticketing",
+            "description": "Creates Wrike tasks from vulnerabilities and syncs completion status.",
+            "icon": "assignment",
+            "color": "secondary",
+        },
+        "email_reporting": {
+            "name": "Email Reporting",
+            "description": "Sends PDF dashboard reports to configured recipients.",
+            "icon": "mail",
             "color": "primary",
-        },
-        "docker_auditor": {
-            "name": "Docker Auditor",
-            "description": "Automated vulnerability scanning for container images and runtime security policy enforcement.",
-            "icon": "view_in_ar",
-            "color": "tertiary",
-        },
-        "slack_notifier": {
-            "name": "Slack Notifier",
-            "description": "Direct integration for instant critical vulnerability alerts and weekly security reports.",
-            "icon": "chat_bubble",
-            "color": "on-surface",
         },
     }
 
     modules = []
+    system_settings = get_system_settings()
     for mid, meta in module_metadata.items():
         ext, _ = Extension.objects.get_or_create(name_id=mid)
-        modules.append({
-            "id": mid,
-            "name": meta["name"],
-            "description": meta["description"],
-            "is_active": ext.is_active,
-            "icon": meta["icon"],
-            "color": meta["color"],
-        })
-        
+        modules.append(
+            {
+                "id": mid,
+                "name": meta["name"],
+                "description": meta["description"],
+                "is_active": ext.is_active,
+                "api_token": ext.api_token if request.user.is_staff else None,
+                "wrike_folder_id": (
+                    system_settings.wrike_folder_id if mid == "wrike" else None
+                ),
+                "email_report_recipients": (
+                    system_settings.email_report_recipients
+                    if mid == "email_reporting"
+                    else None
+                ),
+                "icon": meta["icon"],
+                "color": meta["color"],
+            }
+        )
+
     return render(request, "vuln_manager/extensions.html", {"modules": modules})
+
 
 @login_required
 @require_POST
 def toggle_extension(request, name_id):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
     ext = get_object_or_404(Extension, name_id=name_id)
     ext.is_active = not ext.is_active
     ext.save()
     return redirect("extensions")
+
+
+@login_required
+def user_admin(request):
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("forbidden")
+    managed_users = User.objects.all().order_by("username")
+    system_settings = get_system_settings()
+    return render(
+        request,
+        "vuln_manager/user_admin.html",
+        {
+            "managed_users": managed_users,
+            "registration_disabled": system_settings.disable_register,
+        },
+    )
+
+
+@login_required
+@require_POST
+def set_user_staff(request, pk):
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("forbidden")
+    target_user = get_object_or_404(User, pk=pk)
+    target_user.is_staff = request.POST.get("is_staff") == "1"
+    target_user.save(update_fields=["is_staff"])
+    return redirect("user_admin")
+
+
+@login_required
+@require_POST
+def delete_user(request, pk):
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("forbidden")
+    target_user = get_object_or_404(User, pk=pk)
+    if target_user.pk == request.user.pk:
+        return HttpResponseForbidden("cannot_delete_current_user")
+    if target_user.is_superuser and User.objects.filter(is_superuser=True).count() <= 1:
+        return HttpResponseForbidden("cannot_delete_last_superuser")
+    target_user.delete()
+    return redirect("user_admin")
+
+
+@login_required
+@require_POST
+def save_wrike_config(request):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+    wrike_api_token = (request.POST.get("wrike_api_token") or "").strip()
+    folder_id = (request.POST.get("wrike_folder_id") or "").strip()
+    wrike_extension, settings_obj = get_wrike_config()
+    if wrike_api_token:
+        wrike_extension.api_token = wrike_api_token
+        wrike_extension.save(update_fields=["api_token"])
+    settings_obj.wrike_folder_id = folder_id or None
+    settings_obj.save(update_fields=["wrike_folder_id"])
+    return redirect("extensions")
+
+
+@login_required
+@require_POST
+def save_email_reporting_config(request):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+    recipients = (request.POST.get("email_report_recipients") or "").strip()
+    settings_obj = get_system_settings()
+    settings_obj.email_report_recipients = recipients or None
+    settings_obj.save(update_fields=["email_report_recipients"])
+    return redirect("extensions")
+
+
+@login_required
+@require_POST
+def send_email_report_now(request):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+    extension, _ = Extension.objects.get_or_create(name_id="email_reporting")
+    if not extension.is_active:
+        return HttpResponseForbidden("email_reporting_disabled")
+    recipients_raw = get_system_settings().email_report_recipients or ""
+    recipients = [
+        email.strip()
+        for email in re.split(r"[,;\n]", recipients_raw)
+        if email.strip()
+    ]
+    if not recipients:
+        return HttpResponseForbidden("email_reporting_not_configured")
+    pdf_buffer = _render_dashboard_pdf_buffer()
+    if pdf_buffer is None:
+        return HttpResponseForbidden("report_generation_failed")
+    subject = f"CVE3PO Report {now().strftime('%Y-%m-%d')}"
+    body = "Attached is the latest CVE3PO dashboard report."
+    email = EmailMessage(subject=subject, body=body, to=recipients)
+    email.attach(
+        f"cve3po_report_{now().strftime('%Y%m%d')}.pdf",
+        pdf_buffer.getvalue(),
+        "application/pdf",
+    )
+    email.send(fail_silently=False)
+    return redirect("extensions")
+
+
+@login_required
+@require_POST
+def create_wrike_ticket(request, pk):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+    vuln = get_object_or_404(Vulnerability, pk=pk)
+    wrike_extension, settings_obj = get_wrike_config()
+    if (
+        not wrike_extension.is_active
+        or not wrike_extension.api_token
+        or not settings_obj.wrike_folder_id
+    ):
+        return HttpResponseForbidden("wrike_not_configured")
+    if vuln.wrike_task_id:
+        return redirect("vuln_detail", pk=pk)
+    try:
+        task_id, task_url = wrike_ext.create_task(
+            vuln, wrike_extension.api_token, settings_obj.wrike_folder_id
+        )
+        vuln.wrike_task_id = task_id
+        vuln.wrike_task_url = task_url
+        vuln.save(update_fields=["wrike_task_id", "wrike_task_url"])
+        log_vulnerability_event(
+            vuln,
+            "ticket_synced",
+            user=request.user,
+            details={"wrike_task_id": task_id, "direction": "cve3po_to_wrike"},
+        )
+    except Exception:
+        return HttpResponseForbidden("wrike_create_failed")
+    return redirect("vuln_detail", pk=pk)
+
+
+@login_required
+@require_POST
+def sync_wrike_ticket(request, pk):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+    vuln = get_object_or_404(Vulnerability, pk=pk)
+    wrike_extension, _ = get_wrike_config()
+    if not wrike_extension.is_active or not wrike_extension.api_token:
+        return HttpResponseForbidden("wrike_not_configured")
+    if not vuln.wrike_task_id:
+        return HttpResponseForbidden("wrike_ticket_missing")
+    try:
+        task = wrike_ext.get_task(wrike_extension.api_token, vuln.wrike_task_id)
+        if task.get("completed"):
+            if vuln.status != "fixed":
+                old_status = vuln.status
+                vuln.status = "fixed"
+                vuln.save(update_fields=["status"])
+                log_vulnerability_event(
+                    vuln,
+                    "ticket_synced",
+                    user=request.user,
+                    details={
+                        "from_status": old_status,
+                        "to_status": "fixed",
+                        "direction": "wrike_to_cve3po",
+                    },
+                )
+        else:
+            should_complete = vuln.status in {"fixed", "false_positive", "risk_accepted"}
+            wrike_ext.mark_task_completed(
+                wrike_extension.api_token, vuln.wrike_task_id, should_complete
+            )
+            log_vulnerability_event(
+                vuln,
+                "ticket_synced",
+                user=request.user,
+                details={
+                    "wrike_completed": should_complete,
+                    "direction": "cve3po_to_wrike",
+                },
+            )
+    except Exception:
+        return HttpResponseForbidden("wrike_sync_failed")
+    return redirect("vuln_detail", pk=pk)
+
+
+@login_required
+@require_POST
+def toggle_register(request):
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("forbidden")
+    system_settings = get_system_settings()
+    system_settings.disable_register = not system_settings.disable_register
+    system_settings.save(update_fields=["disable_register"])
+    return redirect("user_admin")
 
 
 def run_triage_background():
@@ -788,23 +1413,26 @@ def run_triage_background():
     pending = Vulnerability.objects.exclude(
         status__in=["fixed", "false_positive", "risk_accepted"]
     ).filter(ai_result="tbd")
-    
+
     for vuln in pending:
         ai_triage.triage(vuln)
-        
+
     # 2. Bereits bewertete, bei denen sich die Asset-Kritikalität geändert hat
     triaged = Vulnerability.objects.exclude(
         status__in=["fixed", "false_positive", "risk_accepted"]
     ).exclude(ai_result="tbd")
-    
+
     for vuln in triaged:
         current_crit = "Low"
         if vuln.most_critical_host:
             current_crit = vuln.most_critical_host.criticality or "Low"
-            
+
         if vuln.ai_last_criticality != current_crit:
-            print(f"[AI] Re-triaging {vuln.cve_id} due to criticality change: {vuln.ai_last_criticality} -> {current_crit}")
+            print(
+                f"[AI] Re-triaging {vuln.cve_id} due to criticality change: {vuln.ai_last_criticality} -> {current_crit}"
+            )
             ai_triage.triage(vuln)
+
 
 @login_required
 def do_triage(request):
@@ -814,3 +1442,33 @@ def do_triage(request):
         print("[AI] Background triage started.")
 
     return redirect("ai_dashboard")
+
+
+@login_required
+@require_POST
+def triage_single_vulnerability(request, pk):
+    vuln = get_object_or_404(Vulnerability, pk=pk)
+
+    def _run_single_triage(vuln_id):
+        triage_target = Vulnerability.objects.filter(pk=vuln_id).first()
+        if not triage_target:
+            return
+        try:
+            ai_triage.triage(triage_target)
+        except Exception as exc:
+            print(f"[AI] Single triage failed for vulnerability {vuln_id}: {exc}")
+
+    worker = threading.Thread(
+        target=_run_single_triage,
+        args=(vuln.id,),
+        daemon=True,
+    )
+    worker.start()
+
+    log_vulnerability_event(
+        vuln,
+        "updated",
+        user=request.user,
+        details={"source": "manual_retriage"},
+    )
+    return redirect("vuln_detail", pk=pk)

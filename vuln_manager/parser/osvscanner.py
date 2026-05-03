@@ -1,7 +1,7 @@
 import json
 import re
 from cvss import CVSS2, CVSS3, CVSS4
-from vuln_manager.models import Vulnerability
+from vuln_manager.utils.vuln_dedup import create_or_update_vulnerability
 
 
 POC_REGEX = re.compile(r"(?is)###\s*poc.*?(?=###|$)", re.I)
@@ -142,8 +142,7 @@ def parse_osv_json(file_path, scan_obj, software_obj=None):
         if (cvss_score):
             print(extract_cve_id(vuln) + " CVSS: " + cvss_score)
         
-        Vulnerability.objects.create(
-            host=None,
+        create_or_update_vulnerability(
             scan=scan_obj,
             software=software_obj,
             cve_id=extract_cve_id(vuln),
@@ -153,4 +152,5 @@ def parse_osv_json(file_path, scan_obj, software_obj=None):
             description=description,
             nuclei_poc=poc,
             supply_chain=True,
+            actor="osv_parser",
         )

@@ -1,0 +1,87 @@
+{% extends 'vuln_manager/base.html' %}
+
+{% block title %}User Management{% endblock %}
+{% block header_title %}User <span class="text-primary">Management</span>{% endblock %}
+
+{% block content %}
+<section class="mb-10 rounded-[2rem] p-8 bg-surface-container-low border border-outline-variant/10 shadow-xl">
+    <h1 class="text-3xl font-black font-headline text-on-surface mb-3 tracking-tight">Manage Staff Permissions</h1>
+    <p class="text-xs text-on-surface-variant">Only superusers can manage users and registration behavior.</p>
+</section>
+
+<section class="mb-10 rounded-[2rem] p-6 bg-surface-container border border-outline-variant/10 shadow-xl">
+    <div class="flex items-center justify-between gap-4">
+        <div>
+            <h2 class="text-sm font-bold text-on-surface uppercase tracking-[0.2em]">Public Registration</h2>
+            <p class="text-xs text-on-surface-variant mt-1">
+                {% if registration_disabled %}
+                    Disabled: new users cannot self-register.
+                {% else %}
+                    Enabled: new users can register.
+                {% endif %}
+            </p>
+        </div>
+        <form action="{% url 'toggle_register' %}" method="POST">
+            {% csrf_token %}
+            <button class="rounded-lg px-3 py-2 border border-outline-variant/30 hover:border-primary/40 text-on-surface-variant hover:text-primary transition-all">
+                {% if registration_disabled %}Enable Register{% else %}Disable Register{% endif %}
+            </button>
+        </form>
+    </div>
+</section>
+
+<section class="rounded-[2rem] bg-surface-container border border-outline-variant/10 shadow-xl overflow-hidden">
+    <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+            <thead class="bg-surface-container-high text-outline uppercase tracking-[0.2em]">
+                <tr>
+                    <th class="text-left px-6 py-4">Username</th>
+                    <th class="text-left px-6 py-4">Superuser</th>
+                    <th class="text-left px-6 py-4">Staff</th>
+                    <th class="text-left px-6 py-4">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in managed_users %}
+                <tr class="border-t border-outline-variant/10">
+                    <td class="px-6 py-4 text-on-surface font-semibold">{{ item.username }}</td>
+                    <td class="px-6 py-4 text-on-surface-variant">{{ item.is_superuser|yesno:"Yes,No" }}</td>
+                    <td class="px-6 py-4">
+                        {% if item.is_staff %}
+                            <span class="inline-flex items-center px-2 py-1 rounded-lg bg-primary/15 text-primary font-bold uppercase tracking-wider">Staff</span>
+                        {% else %}
+                            <span class="inline-flex items-center px-2 py-1 rounded-lg bg-surface-container-highest text-outline font-bold uppercase tracking-wider">User</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="flex items-center gap-2">
+                        <form action="{% url 'set_user_staff' item.id %}" method="POST">
+                            {% csrf_token %}
+                            <input type="hidden" name="is_staff" value="{% if item.is_staff %}0{% else %}1{% endif %}">
+                            <button class="rounded-lg px-3 py-2 border border-outline-variant/30 hover:border-primary/40 text-on-surface-variant hover:text-primary transition-all">
+                                {% if item.is_staff %}Remove Staff{% else %}Make Staff{% endif %}
+                            </button>
+                        </form>
+                        {% if item.id != request.user.id %}
+                        <form action="{% url 'delete_user' item.id %}" method="POST" onsubmit="return confirm('Delete user {{ item.username }}?');">
+                            {% csrf_token %}
+                            <button class="rounded-lg px-3 py-2 border border-error/40 text-error hover:bg-error/10 transition-all">
+                                Delete User
+                            </button>
+                        </form>
+                        {% else %}
+                            <span class="text-outline text-[10px] uppercase tracking-wider">Current User</span>
+                        {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" class="px-6 py-8 text-center text-on-surface-variant">No users found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

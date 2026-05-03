@@ -11,6 +11,15 @@
 <section class="mb-12">
     <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight">Kanban <span class="text-primary">Board</span></h1>
     <p class="text-on-surface-variant text-sm mt-1">Manage vulnerabilities through its lifecycle phases.</p>
+    <div class="mt-5 flex flex-wrap items-center gap-2">
+        <span class="text-[9px] text-outline uppercase tracking-widest font-black">Severity</span>
+        <a href="{% url 'kanban_board' %}" class="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all {% if not severity_filter %}bg-surface-variant text-on-surface border-outline-variant/30{% else %}text-outline border-outline-variant/20 hover:text-on-surface{% endif %}">All</a>
+        {% for value, label in severity_choices %}
+        <a href="{% url 'kanban_board' %}?severity={{ value }}" class="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all {% if severity_filter == value %}bg-surface-variant text-on-surface border-outline-variant/30{% else %}text-outline border-outline-variant/20 hover:text-on-surface{% endif %}">
+            {{ label }}
+        </a>
+        {% endfor %}
+    </div>
 </section>
 
 <div class="flex gap-6 overflow-x-auto pb-8 snap-x">

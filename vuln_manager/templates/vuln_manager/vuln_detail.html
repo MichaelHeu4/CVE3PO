@@ -64,6 +64,12 @@
                         </select>
                         <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-primary pointer-events-none text-sm">unfold_more</span>
                     </form>
+                    <form action="{% url 'triage_single_vulnerability' vuln.id %}" method="POST" class="mt-3">
+                        {% csrf_token %}
+                        <button type="submit" class="w-full py-2.5 rounded-xl border border-primary/20 text-primary text-[10px] font-black tracking-[0.2em] uppercase hover:bg-primary/10 transition-all">
+                            Re-Run AI Triage
+                        </button>
+                    </form>
                 </div>
             </div>
 
@@ -180,6 +186,50 @@
                     Delete Finding
                 </button>
             </form>
+        </div>
+        {% if request.user.is_staff %}
+        <div class="bg-surface-container rounded-3xl p-8 border border-outline-variant/5">
+            <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-6">Wrike Ticketing</h5>
+            {% if vuln.wrike_task_id %}
+                <p class="text-xs text-on-surface-variant mb-3">Task ID: <span class="text-primary font-bold">{{ vuln.wrike_task_id }}</span></p>
+                {% if vuln.wrike_task_url %}
+                <a href="{{ vuln.wrike_task_url }}" target="_blank" rel="noopener noreferrer" class="inline-block mb-4 text-[10px] uppercase tracking-widest text-primary hover:text-primary-container">
+                    Open Wrike Task
+                </a>
+                {% endif %}
+                <form action="{% url 'sync_wrike_ticket' vuln.id %}" method="POST">
+                    {% csrf_token %}
+                    <button type="submit" class="w-full py-3 rounded-xl border border-primary/30 text-primary text-[10px] font-black tracking-[0.2em] uppercase hover:bg-primary/10 transition-all">
+                        Sync Wrike Status
+                    </button>
+                </form>
+            {% elif wrike_ready %}
+                <form action="{% url 'create_wrike_ticket' vuln.id %}" method="POST">
+                    {% csrf_token %}
+                    <button type="submit" class="w-full py-3 rounded-xl border border-primary/30 text-primary text-[10px] font-black tracking-[0.2em] uppercase hover:bg-primary/10 transition-all">
+                        Create Wrike Ticket
+                    </button>
+                </form>
+            {% else %}
+                <p class="text-[10px] text-outline uppercase tracking-wider">Wrike is not configured or not active.</p>
+            {% endif %}
+        </div>
+        {% endif %}
+        <div class="bg-surface-container rounded-3xl p-8 border border-outline-variant/5">
+            <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-6">Audit Trail</h5>
+            <div class="space-y-3 max-h-72 overflow-y-auto pr-2">
+                {% for event in audit_events %}
+                <div class="rounded-xl border border-outline-variant/10 bg-surface-container-low p-3">
+                    <p class="text-[10px] text-on-surface uppercase tracking-wider font-bold">{{ event.get_action_display }}</p>
+                    <p class="text-[9px] text-outline mt-1">{{ event.created_at|date:"d M Y H:i" }}{% if event.user %} · {{ event.user.username }}{% elif event.actor %} · {{ event.actor }}{% endif %}</p>
+                    {% if event.details %}
+                    <p class="text-[10px] text-on-surface-variant mt-2">{{ event.details }}</p>
+                    {% endif %}
+                </div>
+                {% empty %}
+                <p class="text-[10px] text-outline uppercase tracking-wider">No audit events yet.</p>
+                {% endfor %}
+            </div>
         </div>
         {% if vuln.supply_chain %}
         <div class="bg-surface-container rounded-3xl p-8 border border-outline-variant/5">

@@ -1,0 +1,87 @@
+{% extends 'vuln_manager/base.html' %}
+
+{% block title %}Scan Diff{% endblock %}
+
+{% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
+
+{% block content %}
+<section class="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+    <div>
+        <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight">
+            Scan <span class="text-primary">Diff</span>
+        </h1>
+        <p class="text-on-surface-variant text-sm mt-1">
+            {{ current_scan.get_scan_type_display }} · {{ current_scan.uploaded_at|date:"d M Y H:i" }} UTC
+            {% if previous_scan %}vs {{ previous_scan.uploaded_at|date:"d M Y H:i" }} UTC{% endif %}
+        </p>
+    </div>
+    <a href="{% url 'scan_list' %}" class="px-5 py-2.5 rounded-xl border border-outline-variant/20 text-outline text-[10px] font-black uppercase tracking-widest hover:text-on-surface transition-all flex items-center gap-2">
+        <span class="material-symbols-outlined text-sm">arrow_back</span> Back to History
+    </a>
+</section>
+
+{% if not previous_scan %}
+<div class="bg-surface-container rounded-3xl p-8 border border-outline-variant/10">
+    <p class="text-on-surface text-sm font-bold">No previous scan of this type found. Diff requires at least two scans of the same source.</p>
+</div>
+{% else %}
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <div class="bg-surface-container rounded-3xl p-6 border-l-4 border-primary shadow-xl">
+        <p class="text-[10px] font-black text-outline uppercase tracking-[0.2em]">New</p>
+        <p class="text-3xl font-headline font-black text-on-surface mt-2">{{ summary.new_count }}</p>
+    </div>
+    <div class="bg-surface-container rounded-3xl p-6 border-l-4 border-tertiary shadow-xl">
+        <p class="text-[10px] font-black text-outline uppercase tracking-[0.2em]">Reopened</p>
+        <p class="text-3xl font-headline font-black text-on-surface mt-2">{{ summary.reopened_count }}</p>
+    </div>
+    <div class="bg-surface-container rounded-3xl p-6 border-l-4 border-error shadow-xl">
+        <p class="text-[10px] font-black text-outline uppercase tracking-[0.2em]">Fixed</p>
+        <p class="text-3xl font-headline font-black text-on-surface mt-2">{{ summary.fixed_count }}</p>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+    <div class="bg-surface-container rounded-3xl p-6">
+        <h3 class="font-headline font-bold text-sm uppercase tracking-widest text-primary mb-4">New Findings</h3>
+        <div class="space-y-3">
+            {% for vuln in new_findings %}
+            <a href="{% url 'vuln_detail' vuln.id %}" class="block p-4 rounded-2xl bg-surface-container-low hover:bg-surface-container-high transition-all">
+                <p class="text-xs font-black text-on-surface">{{ vuln.cve_id }}</p>
+                <p class="text-[10px] text-outline uppercase mt-1">{{ vuln.severity }} · {{ vuln.name|truncatewords:8 }}</p>
+            </a>
+            {% empty %}
+            <p class="text-[10px] text-outline uppercase tracking-widest">No new findings.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="bg-surface-container rounded-3xl p-6">
+        <h3 class="font-headline font-bold text-sm uppercase tracking-widest text-tertiary mb-4">Reopened Findings</h3>
+        <div class="space-y-3">
+            {% for vuln in reopened_findings %}
+            <a href="{% url 'vuln_detail' vuln.id %}" class="block p-4 rounded-2xl bg-surface-container-low hover:bg-surface-container-high transition-all">
+                <p class="text-xs font-black text-on-surface">{{ vuln.cve_id }}</p>
+                <p class="text-[10px] text-outline uppercase mt-1">{{ vuln.severity }} · {{ vuln.name|truncatewords:8 }}</p>
+            </a>
+            {% empty %}
+            <p class="text-[10px] text-outline uppercase tracking-widest">No reopened findings.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="bg-surface-container rounded-3xl p-6">
+        <h3 class="font-headline font-bold text-sm uppercase tracking-widest text-error mb-4">Fixed Findings</h3>
+        <div class="space-y-3">
+            {% for vuln in fixed_findings %}
+            <a href="{% url 'vuln_detail' vuln.id %}" class="block p-4 rounded-2xl bg-surface-container-low hover:bg-surface-container-high transition-all">
+                <p class="text-xs font-black text-on-surface">{{ vuln.cve_id }}</p>
+                <p class="text-[10px] text-outline uppercase mt-1">{{ vuln.severity }} · {{ vuln.name|truncatewords:8 }}</p>
+            </a>
+            {% empty %}
+            <p class="text-[10px] text-outline uppercase tracking-widest">No fixed findings.</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

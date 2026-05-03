@@ -40,6 +40,7 @@ def is_cisa_kev(cve_id):
         except Exception as e:
             print(f"Error fetching CISA KEV: {e}")
             _kev_cache = []
+    return cve_id.upper() in {entry.upper() for entry in _kev_cache if entry}
             
 def get_cve_details(cve_id):
     """

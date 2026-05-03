@@ -47,6 +47,13 @@
                                class="w-full bg-surface-container-lowest border border-outline-variant/10 rounded-xl px-5 py-4 text-on-surface text-sm font-bold focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-outline/20" 
                                placeholder="e.g. srv-prod-db-01.internal.net">
                     </div>
+
+                    <div class="md:col-span-12">
+                        <label class="block text-[10px] font-black uppercase tracking-[0.3em] text-outline/50 mb-3">Operating System</label>
+                        <input type="text" name="operating_system" value="{{ host_obj.operating_system|default:'' }}"
+                               class="w-full bg-surface-container-lowest border border-outline-variant/10 rounded-xl px-5 py-4 text-on-surface text-sm font-bold focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-outline/20"
+                               placeholder="e.g. Ubuntu 24.04 LTS">
+                    </div>
                 </div>
 
                 <!-- Guidance Info -->

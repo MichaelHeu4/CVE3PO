@@ -38,18 +38,19 @@
         <table class="w-full text-left border-collapse" id="hostTable">
             <thead>
                 <tr class="bg-surface-container-highest/30 border-b border-outline-variant/10">
-                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline">Name / IP</th>
-                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Priority</th>
-                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Ports</th>
-                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Vulnerabilities</th>
-                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Last Seen</th>
+                    <th data-sort-type="text" class="sortable-th cursor-pointer select-none px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline">Name / IP</th>
+                    <th data-sort-type="text" class="sortable-th cursor-pointer select-none px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline">OS</th>
+                    <th data-sort-type="text" class="sortable-th cursor-pointer select-none px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Priority</th>
+                    <th data-sort-type="number" class="sortable-th cursor-pointer select-none px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Ports</th>
+                    <th data-sort-type="number" class="sortable-th cursor-pointer select-none px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Vulnerabilities</th>
+                    <th data-sort-type="text" class="sortable-th cursor-pointer select-none px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Last Seen</th>
                     <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-right">Actions</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-outline-variant/5">
                 {% for host in hosts %}
                 <tr class="hover:bg-primary/5 transition-colors group">
-                    <td class="px-6 py-4">
+                    <td class="px-6 py-4" data-sort-value="{{ host.ip_address }} {{ host.hostname|default:'n/a' }}">
                         <div class="flex items-center gap-4">
                             <div class="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center text-primary border border-outline-variant/5">
                                 <span class="material-symbols-outlined text-xl">dns</span>
@@ -60,7 +61,12 @@
                             </div>
                         </div>
                     </td>
-                    <td class="px-6 py-4 text-center">
+                    <td class="px-6 py-4" data-sort-value="{{ host.operating_system|default:'n/a' }}">
+                        <span class="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider">
+                            {{ host.operating_system|default:"n/a" }}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 text-center" data-sort-value="{{ host.criticality|default:'Not set' }}">
                         {% if host.criticality %}
                         <span class="inline-flex px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest {% if host.criticality == 'Critical' %}bg-error/10 text-error border border-error/20 shadow-[0_0_10px_rgba(255,69,99,0.1)]{% elif host.criticality == 'High' %}bg-tertiary/10 text-tertiary border border-tertiary/20{% else %}bg-primary/10 text-primary border border-primary/20{% endif %}">
                             {{ host.criticality }}
@@ -69,11 +75,11 @@
                         <span class="text-outline/30 text-[9px] font-black uppercase tracking-widest italic">Not set</span>
                         {% endif %}
                     </td>
-                    <td class="px-6 py-4 text-center">
+                    <td class="px-6 py-4 text-center" data-sort-value="{{ host.current_port_count }}">
                         <span class="text-sm font-black text-on-surface">{{ host.current_port_count }}</span>
                         <span class="text-[9px] text-outline uppercase font-bold ml-1">Ports</span>
                     </td>
-                    <td class="px-6 py-4">
+                    <td class="px-6 py-4" data-sort-value="{{ host.num_vulns|add:host.num_info }}">
                         <div class="flex justify-center gap-2">
                             {% if host.num_vulns > 0 %}
                             <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-error/5 border border-error/10 text-error">
@@ -92,7 +98,7 @@
                             {% endif %}
                         </div>
                     </td>
-                    <td class="px-6 py-4 text-center">
+                    <td class="px-6 py-4 text-center" data-sort-value="{{ host.last_scanned|date:'YmdHis' }}">
                         <p class="text-[11px] font-black text-on-surface">{{ host.last_scanned|date:"d M Y" }}</p>
                         <p class="text-[9px] text-outline/50 uppercase tracking-tighter">Scan</p>
                     </td>
@@ -127,6 +133,30 @@
         </div>
         {% endif %}
     </div>
+    
+    <!-- Pagination Footer -->
+    <div class="bg-surface-container-highest/20 px-8 py-6 flex items-center justify-between border-t border-outline-variant/10">
+        <p class="text-[10px] font-black text-outline uppercase tracking-widest">
+            Page {{ hosts.number }} of {{ hosts.paginator.num_pages }} ({{ hosts.paginator.count }} total)
+        </p>
+        <div class="flex gap-2">
+            {% if hosts.has_previous %}
+                <a href="?page={{ hosts.previous_page_number }}" class="w-10 h-10 rounded-xl bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5">
+                    <span class="material-symbols-outlined text-base">chevron_left</span>
+                </a>
+            {% endif %}
+            
+            <button class="w-10 h-10 rounded-xl bg-primary text-surface flex items-center justify-center text-xs font-black shadow-lg shadow-primary/20">
+                {{ hosts.number }}
+            </button>
+            
+            {% if hosts.has_next %}
+                <a href="?page={{ hosts.next_page_number }}" class="w-10 h-10 rounded-xl bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5">
+                    <span class="material-symbols-outlined text-base">chevron_right</span>
+                </a>
+            {% endif %}
+        </div>
+    </div>
 </div>
 
 <script>
@@ -145,5 +175,46 @@ function filterHosts() {
         }
     }
 }
+
+function makeTableSortable(tableId) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    const tbody = table.querySelector("tbody");
+    const headers = table.querySelectorAll("thead th.sortable-th");
+    const sortState = {};
+
+    headers.forEach((header, index) => {
+        sortState[index] = "none";
+        header.addEventListener("click", () => {
+            const type = header.dataset.sortType || "text";
+            const rows = Array.from(tbody.querySelectorAll("tr"));
+            const next = sortState[index] === "asc" ? "desc" : "asc";
+            sortState[index] = next;
+
+            rows.sort((a, b) => {
+                const aCell = a.children[index];
+                const bCell = b.children[index];
+                const aRaw = (aCell?.dataset.sortValue || aCell?.innerText || "").trim();
+                const bRaw = (bCell?.dataset.sortValue || bCell?.innerText || "").trim();
+
+                if (type === "number") {
+                    const aNum = parseFloat(aRaw.replace(",", ".")) || 0;
+                    const bNum = parseFloat(bRaw.replace(",", ".")) || 0;
+                    return next === "asc" ? aNum - bNum : bNum - aNum;
+                }
+
+                return next === "asc"
+                    ? aRaw.localeCompare(bRaw, undefined, { sensitivity: "base" })
+                    : bRaw.localeCompare(aRaw, undefined, { sensitivity: "base" });
+            });
+
+            rows.forEach((row) => tbody.appendChild(row));
+        });
+    });
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+    makeTableSortable("hostTable");
+});
 </script>
 {% endblock %}

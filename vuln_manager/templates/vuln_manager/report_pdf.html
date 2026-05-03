@@ -87,6 +87,49 @@
         <p style="margin: 5pt 0 0 0; color: #060e20;">There are currently <strong>{{ metrics.critical_count }}</strong> critical and <strong>{{ metrics.high_count }}</strong> high-priority vulnerabilities requiring immediate remediation. <strong>{{ metrics.vuln_hosts_count }}</strong> out of {{ metrics.host_count }} assets are currently impacted.</p>
     </div>
 
+    <h2>Operational KPIs</h2>
+    <table>
+        <thead>
+            <tr>
+                <th width="40%">KPI</th>
+                <th width="20%">Value</th>
+                <th width="40%">Interpretation</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Remediation Rate</td>
+                <td style="font-weight: bold;">{{ metrics.remediation_rate }}%</td>
+                <td>Share of resolved vulnerabilities (excluding false positives).</td>
+            </tr>
+            <tr>
+                <td>Asset Exposure</td>
+                <td style="font-weight: bold;">{{ metrics.exposure_rate }}%</td>
+                <td>Percentage of inventoried assets currently impacted by open findings.</td>
+            </tr>
+            <tr>
+                <td>Average Open Age</td>
+                <td style="font-weight: bold;">{{ metrics.avg_open_age_days }} days</td>
+                <td>Mean age of currently open findings.</td>
+            </tr>
+            <tr>
+                <td>Oldest Open Finding</td>
+                <td style="font-weight: bold;">{{ metrics.oldest_open_days }} days</td>
+                <td>Indicates long-tail remediation risk.</td>
+            </tr>
+            <tr>
+                <td>SLA Breaches</td>
+                <td style="font-weight: bold;">{{ metrics.sla_breach_count }}</td>
+                <td>Open critical findings older than 7 days and high findings older than 30 days.</td>
+            </tr>
+            <tr>
+                <td>Reopened Findings (30d)</td>
+                <td style="font-weight: bold;">{{ metrics.reopened_30d }}</td>
+                <td>Indicator for remediation quality and recurrence.</td>
+            </tr>
+        </tbody>
+    </table>
+
     <h2>Top Vulnerable Assets</h2>
     <table>
         <thead>
@@ -116,6 +159,30 @@
     </table>
 
     <pdf:nextpage />
+
+    <h2>Most Exposed Software</h2>
+    <table>
+        <thead>
+            <tr>
+                <th width="45%">Software</th>
+                <th width="20%">Version</th>
+                <th width="35%" style="text-align: center;">Open Findings</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for sw in top_software %}
+            <tr>
+                <td style="font-weight: bold;">{{ sw.name }}</td>
+                <td>{{ sw.version|default:"n/a" }}</td>
+                <td style="text-align: center; font-weight: bold; color: #fc4563;">{{ sw.num_vulns }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="3" style="text-align: center; color: #a3aac4; font-style: italic;">No software with open findings.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 
     <h2>Recent High-Priority Findings</h2>
     <table>

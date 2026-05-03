@@ -33,17 +33,17 @@
         <table class="w-full text-left border-collapse" id="softwareTable">
             <thead>
                 <tr class="bg-surface-container-highest/30 border-b border-outline-variant/10">
-                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline">Software</th>
-                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Priority</th>
-                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Version</th>
-                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Installations</th>
+                    <th data-sort-type="text" class="sortable-th cursor-pointer select-none px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline">Software</th>
+                    <th data-sort-type="text" class="sortable-th cursor-pointer select-none px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Priority</th>
+                    <th data-sort-type="text" class="sortable-th cursor-pointer select-none px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Version</th>
+                    <th data-sort-type="number" class="sortable-th cursor-pointer select-none px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Installations</th>
                     <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-right">Actions</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-outline-variant/5">
                 {% for item in software %}
                 <tr class="hover:bg-primary/5 transition-colors group">
-                    <td class="px-6 py-4">
+                    <td class="px-6 py-4" data-sort-value="{{ item.name }}">
                         <div class="flex items-center gap-4">
                             <div class="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center text-primary border border-outline-variant/5">
                                 <span class="material-symbols-outlined text-xl">deployed_code</span>
@@ -54,7 +54,7 @@
                             </div>
                         </div>
                     </td>
-                    <td class="px-6 py-4 text-center">
+                    <td class="px-6 py-4 text-center" data-sort-value="{{ item.criticality|default:'Not set' }}">
                         {% if item.criticality %}
                         <span class="inline-flex px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest {% if item.criticality == 'Critical' %}bg-error/10 text-error border border-error/20{% elif item.criticality == 'High' %}bg-tertiary/10 text-tertiary border border-tertiary/20{% else %}bg-primary/10 text-primary border border-primary/20{% endif %}">
                             {{ item.criticality }}
@@ -63,12 +63,12 @@
                         <span class="text-outline/30 text-[9px] font-black uppercase tracking-widest italic">Not set</span>
                         {% endif %}
                     </td>
-                    <td class="px-6 py-4 text-center">
+                    <td class="px-6 py-4 text-center" data-sort-value="{{ item.version|default:'-' }}">
                         <span class="px-3 py-1 rounded-lg bg-surface-container-highest text-primary text-[10px] font-black border border-outline-variant/10">
                             {{ item.version|default:"-" }}
                         </span>
                     </td>
-                    <td class="px-6 py-4 text-center">
+                    <td class="px-6 py-4 text-center" data-sort-value="{{ item.num_hosts }}">
                         <div class="flex flex-col items-center">
                             <span class="text-sm font-black text-on-surface">{{ item.num_hosts }}</span>
                             <span class="text-[9px] text-outline uppercase font-bold">Systems</span>
@@ -105,6 +105,30 @@
         </div>
         {% endif %}
     </div>
+    
+    <!-- Pagination Footer -->
+    <div class="bg-surface-container-highest/20 px-8 py-6 flex items-center justify-between border-t border-outline-variant/10">
+        <p class="text-[10px] font-black text-outline uppercase tracking-widest">
+            Page {{ software.number }} of {{ software.paginator.num_pages }} ({{ software.paginator.count }} total)
+        </p>
+        <div class="flex gap-2">
+            {% if software.has_previous %}
+                <a href="?page={{ software.previous_page_number }}" class="w-10 h-10 rounded-xl bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5">
+                    <span class="material-symbols-outlined text-base">chevron_left</span>
+                </a>
+            {% endif %}
+            
+            <button class="w-10 h-10 rounded-xl bg-primary text-surface flex items-center justify-center text-xs font-black shadow-lg shadow-primary/20">
+                {{ software.number }}
+            </button>
+            
+            {% if software.has_next %}
+                <a href="?page={{ software.next_page_number }}" class="w-10 h-10 rounded-xl bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5">
+                    <span class="material-symbols-outlined text-base">chevron_right</span>
+                </a>
+            {% endif %}
+        </div>
+    </div>
 </div>
 
 <script>
@@ -123,5 +147,46 @@ function filterSoftware() {
         }
     }
 }
+
+function makeTableSortable(tableId) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    const tbody = table.querySelector("tbody");
+    const headers = table.querySelectorAll("thead th.sortable-th");
+    const sortState = {};
+
+    headers.forEach((header, index) => {
+        sortState[index] = "none";
+        header.addEventListener("click", () => {
+            const type = header.dataset.sortType || "text";
+            const rows = Array.from(tbody.querySelectorAll("tr"));
+            const next = sortState[index] === "asc" ? "desc" : "asc";
+            sortState[index] = next;
+
+            rows.sort((a, b) => {
+                const aCell = a.children[index];
+                const bCell = b.children[index];
+                const aRaw = (aCell?.dataset.sortValue || aCell?.innerText || "").trim();
+                const bRaw = (bCell?.dataset.sortValue || bCell?.innerText || "").trim();
+
+                if (type === "number") {
+                    const aNum = parseFloat(aRaw.replace(",", ".")) || 0;
+                    const bNum = parseFloat(bRaw.replace(",", ".")) || 0;
+                    return next === "asc" ? aNum - bNum : bNum - aNum;
+                }
+
+                return next === "asc"
+                    ? aRaw.localeCompare(bRaw, undefined, { sensitivity: "base" })
+                    : bRaw.localeCompare(aRaw, undefined, { sensitivity: "base" });
+            });
+
+            rows.forEach((row) => tbody.appendChild(row));
+        });
+    });
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+    makeTableSortable("softwareTable");
+});
 </script>
 {% endblock %}

@@ -1,5 +1,5 @@
 import json
-from vuln_manager.models import Vulnerability
+from vuln_manager.utils.vuln_dedup import create_or_update_vulnerability
 
 
 def parse_semgrep_json(file_path, scan_obj, software_obj=None):
@@ -20,8 +20,7 @@ def parse_semgrep_json(file_path, scan_obj, software_obj=None):
             severity = "medium"
 
         # SAST findings are now linked to Software, not a dummy host
-        Vulnerability.objects.create(
-            host=None,
+        create_or_update_vulnerability(
             scan=scan_obj,
             software=software_obj,
             cve_id=check_id,
@@ -29,4 +28,5 @@ def parse_semgrep_json(file_path, scan_obj, software_obj=None):
             name=f"Semgrep: {check_id}",
             description=f"File: {path}\n\n{message}",
             nuclei_poc=extra.get("lines"),
+            actor="semgrep_parser",
         )

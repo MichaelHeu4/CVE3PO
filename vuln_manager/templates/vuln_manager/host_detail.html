@@ -15,6 +15,7 @@
     </ol>
 </nav>
 
+<!-- Asset Header -->
 <section class="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
     <div class="flex items-center gap-6">
         <div class="w-20 h-20 rounded-2xl bg-surface-container-highest border border-outline-variant/10 flex items-center justify-center text-primary shadow-2xl">
@@ -22,9 +23,13 @@
         </div>
         <div>
             <div class="flex items-center gap-2 mb-2">
-                <span class="px-2 py-0.5 rounded bg-primary/10 text-primary text-[9px] font-black uppercase tracking-widest border border-primary/20">Active Host</span>
+                <span class="px-2 py-0.5 rounded bg-primary/10 text-primary text-[9px] font-black uppercase tracking-widest border border-primary/20">Managed Asset</span>
                 <span class="w-1.5 h-1.5 rounded-full bg-outline-variant/30"></span>
                 <span class="text-[10px] text-outline font-black uppercase tracking-[0.1em]">{{ host.hostname|default:"Unidentified Host" }}</span>
+                {% if host.operating_system %}
+                <span class="w-1.5 h-1.5 rounded-full bg-outline-variant/30"></span>
+                <span class="text-[10px] text-primary font-black uppercase tracking-[0.1em]">{{ host.operating_system }}</span>
+                {% endif %}
             </div>
             <h1 class="font-headline font-black text-4xl md:text-5xl text-on-surface tracking-tighter">{{ host.ip_address }}</h1>
         </div>
@@ -51,24 +56,48 @@
     </div>
 </section>
 
+<!-- Tab Navigation -->
+<div class="flex items-center gap-1 mb-8 bg-surface-container-low p-1.5 rounded-2xl border border-outline-variant/5 w-fit">
+    <a href="?tab=threats{% if show_mode %}&mode={{ show_mode }}{% endif %}{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all {% if active_tab == 'threats' %}bg-surface-variant text-on-surface shadow-md{% else %}text-outline hover:text-on-surface{% endif %} flex items-center gap-2">
+        <span class="material-symbols-outlined text-sm">gpp_maybe</span> Threats
+    </a>
+    <a href="?tab=inventory" class="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all {% if active_tab == 'inventory' %}bg-surface-variant text-on-surface shadow-md{% else %}text-outline hover:text-on-surface{% endif %} flex items-center gap-2">
+        <span class="material-symbols-outlined text-sm">inventory_2</span> Inventory
+    </a>
+    <a href="?tab=infrastructure" class="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all {% if active_tab == 'infrastructure' %}bg-surface-variant text-on-surface shadow-md{% else %}text-outline hover:text-on-surface{% endif %} flex items-center gap-2">
+        <span class="material-symbols-outlined text-sm">router</span> Infrastructure
+    </a>
+</div>
+
 <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12">
-    <!-- Analysis & Chart -->
+    <!-- Main Content Area (Tabs) -->
     <div class="lg:col-span-8">
-        <div class="bg-surface-container rounded-3xl p-8 mb-8">
-            <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-8">Scan History</h5>
+        
+        {% if active_tab == 'threats' %}
+        <!-- THREATS TAB -->
+        <div class="bg-surface-container rounded-3xl p-8 mb-8 shadow-xl">
+            <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-8">Attack Surface Trend</h5>
             <div style="height: 250px;">
                 <canvas id="hostTimeline"></canvas>
             </div>
         </div>
 
-        <div class="bg-surface-container rounded-3xl p-8">
+        <div class="bg-surface-container rounded-3xl p-8 shadow-xl">
             <div class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
                 <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline">Detected Threats</h5>
-                
                 <div class="flex items-center gap-2 bg-surface-container-low p-1 rounded-xl">
-                    <a href="?mode=all" class="px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all {% if show_mode == 'all' %}bg-surface-variant text-on-surface shadow-sm{% else %}text-outline hover:text-on-surface{% endif %}">All Findings</a>
-                    <a href="?mode=direct" class="px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all {% if show_mode == 'direct' %}bg-surface-variant text-on-surface shadow-sm{% else %}text-outline hover:text-on-surface{% endif %}">Direct Only</a>
+                    <a href="?tab=threats&mode=all{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all {% if show_mode == 'all' %}bg-surface-variant text-on-surface shadow-sm{% else %}text-outline hover:text-on-surface{% endif %}">All</a>
+                    <a href="?tab=threats&mode=direct{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all {% if show_mode == 'direct' %}bg-surface-variant text-on-surface shadow-sm{% else %}text-outline hover:text-on-surface{% endif %}">Direct</a>
                 </div>
+            </div>
+            <div class="mb-6 flex flex-wrap items-center gap-2">
+                <span class="text-[9px] text-outline uppercase tracking-widest font-black">Severity</span>
+                <a href="?tab=threats{% if show_mode %}&mode={{ show_mode }}{% endif %}" class="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all {% if not severity_filter %}bg-surface-variant text-on-surface border-outline-variant/30{% else %}text-outline border-outline-variant/20 hover:text-on-surface{% endif %}">All</a>
+                {% for value, label in severity_choices %}
+                <a href="?tab=threats{% if show_mode %}&mode={{ show_mode }}{% endif %}&severity={{ value }}" class="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all {% if severity_filter == value %}bg-surface-variant text-on-surface border-outline-variant/30{% else %}text-outline border-outline-variant/20 hover:text-on-surface{% endif %}">
+                    {{ label }}
+                </a>
+                {% endfor %}
             </div>
             
             <div class="space-y-4">
@@ -85,100 +114,162 @@
                                 </p>
                             </div>
                         </div>
-                        <div class="flex items-center gap-4">
-                            <span class="text-[10px] font-black text-outline uppercase tracking-widest">{{ vuln.get_status_display }}</span>
-                            <span class="material-symbols-outlined text-outline group-hover:text-primary transition-all">expand_more</span>
-                        </div>
+                        <span class="material-symbols-outlined text-outline group-hover:text-primary transition-all">expand_more</span>
                     </button>
                     <div id="vuln-{{ vuln.id }}" class="hidden px-6 pb-6 border-t border-outline-variant/5">
                         <div class="pt-6">
                             <p class="text-xs text-on-surface-variant leading-relaxed mb-6">{{ vuln.description|default:"No technical details provided." }}</p>
                             <div class="flex justify-between items-center">
-                                <a href="{% url 'vuln_detail' vuln.id %}" class="text-[10px] font-black tracking-widest text-primary uppercase hover:underline">Full Analysis & POC</a>
-                                <span class="text-[9px] text-outline uppercase">Scan Identifier: {{ vuln.scan.id }}</span>
+                                <a href="{% url 'vuln_detail' vuln.id %}" class="text-[10px] font-black tracking-widest text-primary uppercase hover:underline">Full Analysis</a>
+                                <span class="text-[9px] text-outline uppercase">Scan: {{ vuln.scan.id }}</span>
                             </div>
                         </div>
                     </div>
                 </div>
                 {% empty %}
                 <div class="text-center py-12">
-                    <span class="material-symbols-outlined text-outline-variant text-4xl mb-3 opacity-20">verified_user</span>
                     <p class="text-outline text-[10px] font-black uppercase tracking-widest">No Active Threats Detected</p>
                 </div>
                 {% endfor %}
             </div>
-        </div>
-    </div>
 
-    <!-- Infrastructure Specs -->
-    <div class="lg:col-span-4 space-y-8">
-        <!-- Criticality Card -->
-        <div class="bg-surface-container-high rounded-3xl p-8 shadow-2xl shadow-black/40 border-l-4 {% if host.criticality == 'Critical' %}border-error{% elif host.criticality == 'High' %}border-tertiary{% elif host.criticality == 'Medium' %}border-primary{% else %}border-outline-variant{% endif %}">
-            <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-6">Business Criticality</h5>
-            
-            <form action="{% url 'update_host_criticality' host.id %}" method="POST">
-                {% csrf_token %}
-                <div class="relative group">
-                    <select name="criticality" onchange="this.form.submit()" class="w-full bg-surface-container-highest border-none rounded-xl px-5 py-4 text-on-surface text-sm font-black uppercase tracking-widest focus:ring-2 focus:ring-primary/30 transition-all appearance-none cursor-pointer">
-                        <option value="">NOT DEFINED</option>
-                        {% for val, label in criticality_choices %}
-                        <option value="{{ val }}" {% if host.criticality == val %}selected{% endif %}>{{ label|upper }}</option>
-                        {% endfor %}
-                    </select>
-                    <div class="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-outline group-hover:text-primary transition-colors">
-                        <span class="material-symbols-outlined text-sm">stat_3</span>
-                    </div>
+            <!-- Threats Pagination -->
+            {% if vulns.paginator.num_pages > 1 %}
+            <div class="mt-8 flex items-center justify-between pt-6 border-t border-outline-variant/5">
+                <p class="text-[9px] font-black text-outline uppercase tracking-widest">Page {{ vulns.number }} of {{ vulns.paginator.num_pages }}</p>
+                <div class="flex gap-2">
+                    {% if vulns.has_previous %}
+                    <a href="?tab=threats&vuln_page={{ vulns.previous_page_number }}{% if show_mode %}&mode={{ show_mode }}{% endif %}{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5"><span class="material-symbols-outlined text-sm">chevron_left</span></a>
+                    {% endif %}
+                    {% if vulns.has_next %}
+                    <a href="?tab=threats&vuln_page={{ vulns.next_page_number }}{% if show_mode %}&mode={{ show_mode }}{% endif %}{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5"><span class="material-symbols-outlined text-sm">chevron_right</span></a>
+                    {% endif %}
                 </div>
-            </form>
-            <p class="text-[9px] text-outline-variant mt-4 leading-relaxed italic">Defines host priority and remediation SLAs for this asset.</p>
+            </div>
+            {% endif %}
         </div>
 
-        <!-- Ports -->
-        <div class="bg-surface-container-high rounded-3xl p-8 shadow-2xl shadow-black/40">
-            <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-6">Open Ports / Services</h5>
-            <div class="space-y-3">
+        {% elif active_tab == 'inventory' %}
+        <!-- INVENTORY TAB -->
+        <div class="bg-surface-container rounded-3xl p-8 shadow-xl">
+            <div class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+                <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline">Software Inventory</h5>
+                <div class="relative w-full md:w-64">
+                    <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm">search</span>
+                    <input type="text" id="swSearch" placeholder="Search components..." class="w-full bg-surface-container-low border-none rounded-xl pl-10 pr-4 py-2 text-[10px] text-on-surface focus:ring-1 focus:ring-primary/30" onkeyup="filterLocalSoftware()">
+                </div>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-separate border-spacing-y-2" id="swTable">
+                    <thead>
+                        <tr class="text-[9px] font-black uppercase tracking-[0.2em] text-outline/50">
+                            <th class="px-4 pb-4">Component</th>
+                            <th class="px-4 pb-4">Version</th>
+                            <th class="px-4 pb-4 text-right">Security</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sw in installed_software %}
+                        <tr class="group bg-surface-container-low hover:bg-surface-container-high transition-all cursor-pointer" onclick="window.location='{% url 'software_detail' sw.id %}'">
+                            <td class="px-4 py-4 rounded-l-2xl border-l-2 {% if sw.active_vulns > 0 %}border-error/50{% else %}border-primary/30{% endif %}">
+                                <div class="flex items-center gap-3">
+                                    <span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors text-lg">deployed_code</span>
+                                    <span class="text-xs font-bold text-on-surface">{{ sw.name }}</span>
+                                </div>
+                            </td>
+                            <td class="px-4 py-4 text-[10px] font-black text-on-surface-variant uppercase tracking-widest">{{ sw.version|default:"-" }}</td>
+                            <td class="px-4 py-4 rounded-r-2xl text-right">
+                                {% if sw.active_vulns > 0 %}
+                                <span class="bg-error/10 text-error px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">{{ sw.active_vulns }} Vulns</span>
+                                {% else %}
+                                <span class="text-[9px] font-black text-primary uppercase tracking-widest opacity-50">Secure</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="3" class="text-center py-12 text-outline text-[10px] font-black uppercase tracking-widest">No data collected</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Software Pagination -->
+            {% if installed_software.paginator.num_pages > 1 %}
+            <div class="mt-8 flex items-center justify-between pt-6 border-t border-outline-variant/5">
+                <p class="text-[9px] font-black text-outline uppercase tracking-widest">Page {{ installed_software.number }} of {{ installed_software.paginator.num_pages }}</p>
+                <div class="flex gap-2">
+                    {% if installed_software.has_previous %}
+                    <a href="?tab=inventory&sw_page={{ installed_software.previous_page_number }}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5"><span class="material-symbols-outlined text-sm">chevron_left</span></a>
+                    {% endif %}
+                    {% if installed_software.has_next %}
+                    <a href="?tab=inventory&sw_page={{ installed_software.next_page_number }}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5"><span class="material-symbols-outlined text-sm">chevron_right</span></a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        {% elif active_tab == 'infrastructure' %}
+        <!-- INFRASTRUCTURE TAB -->
+        <div class="bg-surface-container rounded-3xl p-8 shadow-xl">
+            <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-8">Network & Services</h5>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {% for port in active_ports %}
-                <div class="flex items-center justify-between p-4 bg-surface-container-highest rounded-2xl">
+                <div class="flex items-center justify-between p-5 bg-surface-container-low rounded-2xl border border-outline-variant/5">
                     <div class="flex items-center gap-4">
-                        <span class="text-sm font-black font-headline text-primary">{{ port.port_number }}</span>
-                        <span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">{{ port.service_name }}</span>
+                        <div class="w-10 h-10 rounded-xl bg-primary/5 flex items-center justify-center text-primary font-black text-sm">{{ port.port_number }}</div>
+                        <div>
+                            <p class="text-xs font-bold text-on-surface">{{ port.service_name|upper }}</p>
+                            <p class="text-[9px] text-outline uppercase tracking-widest">Active Service</p>
+                        </div>
                     </div>
                     <span class="w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_#3bbffa]"></span>
                 </div>
                 {% empty %}
-                <p class="text-[10px] text-outline text-center py-4 uppercase font-bold tracking-widest">No Active Ports</p>
+                <p class="text-outline text-[10px] font-black uppercase tracking-widest py-8 text-center col-span-2">No active ports identified</p>
                 {% endfor %}
             </div>
         </div>
+        {% endif %}
+    </div>
 
-        <!-- Software -->
+    <!-- Sidebar (Shared Context) -->
+    <div class="lg:col-span-4 space-y-8">
+        <!-- Business Impact -->
+        <div class="bg-surface-container-high rounded-3xl p-8 shadow-2xl border-l-4 {% if host.criticality == 'Critical' %}border-error{% elif host.criticality == 'High' %}border-tertiary{% elif host.criticality == 'Medium' %}border-primary{% else %}border-outline-variant{% endif %}">
+            <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-6">Asset Value</h5>
+            <form action="{% url 'update_host_criticality' host.id %}" method="POST">
+                {% csrf_token %}
+                <select name="criticality" onchange="this.form.submit()" class="w-full bg-surface-container-highest border-none rounded-xl px-5 py-4 text-on-surface text-[11px] font-black uppercase tracking-widest appearance-none cursor-pointer">
+                    <option value="">NOT DEFINED</option>
+                    {% for val, label in criticality_choices %}
+                    <option value="{{ val }}" {% if host.criticality == val %}selected{% endif %}>{{ label|upper }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+            <p class="text-[9px] text-outline-variant mt-4 leading-relaxed italic">Affects remediation prioritization and SLA tracking.</p>
+        </div>
+
+        <!-- Quick Stats -->
         <div class="bg-surface-container rounded-3xl p-8 border border-outline-variant/5">
-            <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-6">Associated Software</h5>
+            <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-6">Quick Metadata</h5>
             <div class="space-y-4">
-                {% for sw in installed_software %}
-                <a href="{% url 'software_detail' sw.id %}" class="flex items-center justify-between p-4 bg-surface-container-low rounded-2xl hover:bg-surface-container-high transition-all group">
-                    <div class="flex items-center gap-4 overflow-hidden">
-                        <div class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-outline group-hover:text-primary transition-colors">
-                            <span class="material-symbols-outlined text-sm">deployed_code</span>
-                        </div>
-                        <div class="overflow-hidden">
-                            <p class="text-xs font-bold text-on-surface truncate mb-0.5">{{ sw.name }}</p>
-                            <p class="text-[9px] text-outline uppercase tracking-tighter">{{ sw.version|default:"v. unknown" }}</p>
-                        </div>
-                    </div>
-                    {% if sw.active_vulns > 0 %}
-                    <span class="w-5 h-5 rounded-full bg-error text-surface flex items-center justify-center text-[9px] font-black">{{ sw.active_vulns }}</span>
-                    {% else %}
-                    <span class="material-symbols-outlined text-sm text-outline-variant">chevron_right</span>
-                    {% endif %}
-                </a>
-                {% empty %}
-                <p class="text-[10px] text-outline text-center py-4 uppercase font-bold tracking-widest">No Software Registered</p>
-                {% endfor %}
+                <div class="flex justify-between items-center">
+                    <span class="text-[10px] text-outline uppercase font-bold">First Seen</span>
+                    <span class="text-[10px] text-on-surface font-black">{{ host.last_scanned|date:"d M Y" }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-[10px] text-outline uppercase font-bold">Inventory Items</span>
+                    <span class="text-[10px] text-on-surface font-black">{{ installed_software.paginator.count }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-[10px] text-outline uppercase font-bold">Operating System</span>
+                    <span class="text-[10px] text-on-surface font-black">{{ host.operating_system|default:"N/A" }}</span>
+                </div>
             </div>
-            <a href="{% url 'software_add' %}" class="w-full mt-6 py-3 rounded-xl bg-primary/5 text-primary text-[10px] font-black tracking-widest uppercase hover:bg-primary/10 transition-all block text-center">
-                Assign Software
-            </a>
         </div>
     </div>
 </div>
@@ -187,12 +278,22 @@
 function toggleAccordion(id) {
     const el = document.getElementById(id);
     const all = document.querySelectorAll('[id^="vuln-"]');
-    all.forEach(item => {
-        if (item.id !== id) item.classList.add('hidden');
-    });
+    all.forEach(item => { if (item.id !== id) item.classList.add('hidden'); });
     el.classList.toggle('hidden');
 }
 
+function filterLocalSoftware() {
+    let input = document.getElementById("swSearch");
+    let filter = input.value.toUpperCase();
+    let table = document.getElementById("swTable");
+    let tr = table.getElementsByTagName("tr");
+    for (let i = 1; i < tr.length; i++) {
+        let textContent = tr[i].textContent || tr[i].innerText;
+        tr[i].style.display = textContent.toUpperCase().indexOf(filter) > -1 ? "" : "none";
+    }
+}
+
+{% if active_tab == 'threats' %}
 document.addEventListener('DOMContentLoaded', function() {
     const ctx = document.getElementById('hostTimeline').getContext('2d');
     new Chart(ctx, {
@@ -217,5 +318,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+{% endif %}
 </script>
 {% endblock %}

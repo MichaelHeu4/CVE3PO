@@ -18,7 +18,7 @@
                 <h3 class="font-body text-sm text-on-surface-variant mb-1">Auto-Triaged</h3>
                 <div class="flex items-baseline gap-2">
                     <span class="font-headline text-4xl font-bold text-on-surface">{{ triaged_vulns }}</span>
-                    <span class="font-body text-sm text-on-surface-variant">/ {{ all_vulns | length }}</span>
+                    <span class="font-body text-sm text-on-surface-variant">/ {{ all_vulns.paginator.count }}</span>
                 </div>
             </div>
             <!-- Manual Review Card -->
@@ -31,7 +31,7 @@
                 <h3 class="font-body text-sm text-on-surface-variant mb-1">Action Required</h3>
                 <div class="flex items-baseline gap-2">
                     <span class="font-headline text-4xl font-bold text-on-surface">{{ action_required }}</span>
-                    <span class="font-body text-sm text-on-surface-variant">/ {{ all_vulns | length }}</span>
+                    <span class="font-body text-sm text-on-surface-variant">/ {{ all_vulns.paginator.count }}</span>
                 </div>
             </div>
             <!-- Total Processed Card -->
@@ -70,15 +70,15 @@
                     </form>
                 </div>
                 <div class="overflow-x-auto">
-                    <table class="w-full text-left border-collapse">
+                    <table class="w-full text-left border-collapse" id="aiQueueTable">
                         <thead>
                             <tr class="border-b border-outline-variant/10 bg-surface-container-low/50">
-                                <th class="py-3 px-5 font-body text-xs font-medium text-on-surface-variant uppercase tracking-wider">Severity</th>
-                                <th class="py-3 px-5 font-body text-xs font-medium text-on-surface-variant uppercase tracking-wider">CVE ID</th>
-                                <th class="py-3 px-5 font-body text-xs font-medium text-on-surface-variant uppercase tracking-wider">
+                                <th data-sort-type="text" class="sortable-th cursor-pointer select-none py-3 px-5 font-body text-xs font-medium text-on-surface-variant uppercase tracking-wider">Severity</th>
+                                <th data-sort-type="text" class="sortable-th cursor-pointer select-none py-3 px-5 font-body text-xs font-medium text-on-surface-variant uppercase tracking-wider">CVE ID</th>
+                                <th data-sort-type="text" class="sortable-th cursor-pointer select-none py-3 px-5 font-body text-xs font-medium text-on-surface-variant uppercase tracking-wider">
                                     Asset Affected
                                 </th>
-                                <th class="py-3 px-5 font-body text-xs font-medium text-on-surface-variant uppercase tracking-wider">AI Result</th>
+                                <th data-sort-type="text" class="sortable-th cursor-pointer select-none py-3 px-5 font-body text-xs font-medium text-on-surface-variant uppercase tracking-wider">AI Result</th>
                                 <th class="py-3 px-5 font-body text-xs font-medium text-on-surface-variant uppercase tracking-wider text-right">
                                     Actions
                                 </th>
@@ -88,13 +88,13 @@
                             <!-- Row 1 - Active --> <!-- bg-surface-container-highest/30 => "active" -->
                             {% for vuln in all_vulns %}
                             <tr class="border-b border-outline-variant/10 hover:bg-surface-container-high transition-colors">
-                                <td class="py-4 px-5">
+                                <td class="py-4 px-5" data-sort-value="{{ vuln.severity }}">
                                     <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-error-container text-on-error-container">
                                         {{ vuln.severity }}
                                     </span>
                                 </td>
-                                <td class="py-4 px-5 font-medium text-on-surface">{{ vuln.cve_id }}</td>
-                                <td class="py-4 px-5">
+                                <td class="py-4 px-5 font-medium text-on-surface" data-sort-value="{{ vuln.cve_id }}">{{ vuln.cve_id }}</td>
+                                <td class="py-4 px-5" data-sort-value="{% if vuln.most_critical_host %}{{ vuln.most_critical_host }}{% else %}n/a{% endif %} {% if vuln.software %}{{ vuln.software }}{% endif %}">
                                     <div class="flex flex-col">
                                         <span class="text-on-surface">
                                             {% if vuln.most_critical_host %}
@@ -106,7 +106,7 @@
                                         <span class="text-xs text-on-surface-variant">{% if vuln.software %} {{ vuln.software }} {% endif %}</span>
                                     </div>
                                 </td>
-                                <td class="py-4 px-5">
+                                <td class="py-4 px-5" data-sort-value="{{ vuln.ai_result }}">
                                     <div class="flex items-center gap-3">
                                         <span class="text-primary font-bold w-8 text-right">{{ vuln.ai_result }}</span>
                                     </div>
@@ -120,6 +120,30 @@
                             {% endfor %}
                         </tbody>
                     </table>
+                </div>
+                
+                <!-- Pagination -->
+                <div class="p-5 border-t border-outline-variant/10 flex justify-between items-center bg-surface-container-low/30">
+                    <p class="text-[10px] font-black text-outline uppercase tracking-widest">
+                        Page {{ all_vulns.number }} of {{ all_vulns.paginator.num_pages }}
+                    </p>
+                    <div class="flex gap-2">
+                        {% if all_vulns.has_previous %}
+                            <a href="?page={{ all_vulns.previous_page_number }}{% if selected_vuln %}&selected_vuln={{ selected_vuln.id }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5">
+                                <span class="material-symbols-outlined text-sm">chevron_left</span>
+                            </a>
+                        {% endif %}
+                        
+                        <button class="w-8 h-8 rounded-lg bg-primary text-surface flex items-center justify-center text-[10px] font-black shadow-lg shadow-primary/20">
+                            {{ all_vulns.number }}
+                        </button>
+                        
+                        {% if all_vulns.has_next %}
+                            <a href="?page={{ all_vulns.next_page_number }}{% if selected_vuln %}&selected_vuln={{ selected_vuln.id }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5">
+                                <span class="material-symbols-outlined text-sm">chevron_right</span>
+                            </a>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
             <!-- AI Rationale Pane (Contextual Details) -->
@@ -206,4 +230,49 @@
             </div>
         </div>
     </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function makeTableSortable(tableId) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    const tbody = table.querySelector("tbody");
+    const headers = table.querySelectorAll("thead th.sortable-th");
+    const sortState = {};
+
+    headers.forEach((header, index) => {
+        sortState[index] = "none";
+        header.addEventListener("click", () => {
+            const type = header.dataset.sortType || "text";
+            const rows = Array.from(tbody.querySelectorAll("tr"));
+            const next = sortState[index] === "asc" ? "desc" : "asc";
+            sortState[index] = next;
+
+            rows.sort((a, b) => {
+                const aCell = a.children[index];
+                const bCell = b.children[index];
+                const aRaw = (aCell?.dataset.sortValue || aCell?.innerText || "").trim();
+                const bRaw = (bCell?.dataset.sortValue || bCell?.innerText || "").trim();
+
+                if (type === "number") {
+                    const aNum = parseFloat(aRaw.replace(",", ".")) || 0;
+                    const bNum = parseFloat(bRaw.replace(",", ".")) || 0;
+                    return next === "asc" ? aNum - bNum : bNum - aNum;
+                }
+
+                return next === "asc"
+                    ? aRaw.localeCompare(bRaw, undefined, { sensitivity: "base" })
+                    : bRaw.localeCompare(aRaw, undefined, { sensitivity: "base" });
+            });
+
+            rows.forEach((row) => tbody.appendChild(row));
+        });
+    });
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+    makeTableSortable("aiQueueTable");
+});
+</script>
 {% endblock %}
