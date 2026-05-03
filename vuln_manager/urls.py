@@ -13,9 +13,9 @@ urlpatterns = [
     path(
         "password-reset/",
         auth_views.PasswordResetView.as_view(
-            template_name="registration/password_reset_form.html",
-            email_template_name="registration/password_reset_email.txt",
-            subject_template_name="registration/password_reset_subject.txt",
+            template_name="vuln_manager/auth/password_reset_form.html",
+            email_template_name="vuln_manager/auth/password_reset_email.txt",
+            subject_template_name="vuln_manager/auth/password_reset_subject.txt",
             success_url="/password-reset/done/",
         ),
         name="password_reset",
@@ -23,14 +23,14 @@ urlpatterns = [
     path(
         "password-reset/done/",
         auth_views.PasswordResetDoneView.as_view(
-            template_name="registration/password_reset_done.html"
+            template_name="vuln_manager/auth/password_reset_done.html"
         ),
         name="password_reset_done",
     ),
     path(
         "reset/<uidb64>/<token>/",
         auth_views.PasswordResetConfirmView.as_view(
-            template_name="registration/password_reset_confirm.html",
+            template_name="vuln_manager/auth/password_reset_confirm.html",
             success_url="/reset/done/",
         ),
         name="password_reset_confirm",
@@ -38,7 +38,7 @@ urlpatterns = [
     path(
         "reset/done/",
         auth_views.PasswordResetCompleteView.as_view(
-            template_name="registration/password_reset_complete.html"
+            template_name="vuln_manager/auth/password_reset_complete.html"
         ),
         name="password_reset_complete",
     ),
