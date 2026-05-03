@@ -63,6 +63,11 @@
 
             <!-- Actions -->
             <div class="col-span-2 text-right flex items-center justify-end gap-2">
+                {% if scan.previous_same_type %}
+                <a href="{% url 'scan_diff' scan.id %}" class="w-9 h-9 rounded-xl bg-surface-container-highest flex items-center justify-center text-outline hover:text-primary hover:bg-primary/10 transition-all" title="Compare Diff">
+                    <span class="material-symbols-outlined text-sm">difference</span>
+                </a>
+                {% endif %}
                 {% if scan.raw_file %}
                 <a href="{{ scan.raw_file.url }}" class="w-9 h-9 rounded-xl bg-surface-container-highest flex items-center justify-center text-outline hover:text-primary hover:bg-primary/10 transition-all" title="Archive Access" download>
                     <span class="material-symbols-outlined text-sm">download</span>

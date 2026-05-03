@@ -1,10 +1,12 @@
 from unittest.mock import patch
 
 import json
+from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from vuln_manager.models import (
     Extension,
@@ -430,3 +432,93 @@ class SeverityFilterAndSingleTriageTests(TestCase):
             vulnerability=self.v_critical, action="updated", user=self.user
         ).latest("created_at")
         self.assertEqual(event.details.get("source"), "manual_retriage")
+
+
+class ScanDiffViewTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="diff-user", password="pw12345")
+        self.host = Host.objects.create(ip_address="10.0.2.10")
+        self.software = Software.objects.create(name="diff-sw", version="1.0", vendor="acme")
+        self.software.hosts.add(self.host)
+
+    def test_scan_list_exposes_diff_for_scans_with_previous_same_type(self):
+        older = Scan.objects.create(scan_type="NMAP")
+        newer = Scan.objects.create(scan_type="NMAP")
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("scan_list"))
+        self.assertEqual(response.status_code, 200)
+        newer_in_context = next(scan for scan in response.context["scans"] if scan.pk == newer.pk)
+        self.assertIsNotNone(newer_in_context.previous_same_type)
+        self.assertEqual(newer_in_context.previous_same_type.pk, older.pk)
+
+    def test_scan_diff_shows_new_reopened_and_fixed_counts(self):
+        self.client.force_login(self.user)
+
+        older = Scan.objects.create(scan_type="NMAP")
+        newer = Scan.objects.create(scan_type="NMAP")
+        t1 = timezone.now() - timedelta(hours=2)
+        t2 = timezone.now() - timedelta(hours=1)
+        Scan.objects.filter(pk=older.pk).update(uploaded_at=t1)
+        Scan.objects.filter(pk=newer.pk).update(uploaded_at=t2)
+        older.refresh_from_db()
+        newer.refresh_from_db()
+
+        new_vuln = Vulnerability.objects.create(
+            scan=newer,
+            host=self.host,
+            software=self.software,
+            cve_id="CVE-2026-50001",
+            severity="high",
+            status="open",
+            name="New finding",
+            first_seen=t2 + timedelta(minutes=1),
+            last_seen=t2 + timedelta(minutes=1),
+        )
+        reopened_vuln = Vulnerability.objects.create(
+            scan=newer,
+            host=self.host,
+            software=self.software,
+            cve_id="CVE-2026-50002",
+            severity="medium",
+            status="open",
+            name="Reopened finding",
+            first_seen=t1 - timedelta(days=1),
+            last_seen=t2 + timedelta(minutes=2),
+        )
+        reopened_event = VulnerabilityAuditEvent.objects.create(
+            vulnerability=reopened_vuln,
+            action="reopened",
+            actor="test",
+            details={"from_status": "fixed", "to_status": "open"},
+        )
+        VulnerabilityAuditEvent.objects.filter(pk=reopened_event.pk).update(
+            created_at=t2 + timedelta(minutes=3)
+        )
+
+        fixed_vuln = Vulnerability.objects.create(
+            scan=older,
+            host=self.host,
+            software=self.software,
+            cve_id="CVE-2026-50003",
+            severity="critical",
+            status="fixed",
+            name="Fixed finding",
+            first_seen=t1 - timedelta(days=2),
+            last_seen=t1 + timedelta(minutes=5),
+        )
+        fixed_event = VulnerabilityAuditEvent.objects.create(
+            vulnerability=fixed_vuln,
+            action="status_changed",
+            actor="test",
+            details={"from_status": "open", "to_status": "fixed"},
+        )
+        VulnerabilityAuditEvent.objects.filter(pk=fixed_event.pk).update(
+            created_at=t2 + timedelta(minutes=4)
+        )
+
+        response = self.client.get(reverse("scan_diff", args=[newer.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["summary"]["new_count"], 1)
+        self.assertEqual(response.context["summary"]["reopened_count"], 1)
+        self.assertEqual(response.context["summary"]["fixed_count"], 1)
+        self.assertEqual(response.context["new_findings"].first().pk, new_vuln.pk)

@@ -43,6 +43,7 @@ urlpatterns = [
     path("vulnerabilities/add/", views.vuln_add, name="vuln_add"),
     path("import/", views.scan_import, name="scan_import"),
     path("scans/", views.scan_list, name="scan_list"),
+    path("scans/<int:pk>/diff/", views.scan_diff, name="scan_diff"),
     path("scans/<int:pk>/delete/", views.delete_scan, name="delete_scan"),
     path("software/", views.software_list, name="software_list"),
     path("software/add/", views.software_form, name="software_add"),

@@ -796,10 +796,100 @@ def port_list(request):
 
 @login_required
 def scan_list(request):
-    scans = Scan.objects.annotate(num_vulns=Count("vulnerabilities")).order_by(
-        "-uploaded_at"
+    scans = list(
+        Scan.objects.annotate(num_vulns=Count("vulnerabilities")).order_by("-uploaded_at")
     )
+    last_by_type = {}
+    for scan in reversed(scans):
+        scan.previous_same_type = last_by_type.get(scan.scan_type)
+        last_by_type[scan.scan_type] = scan
     return render(request, "vuln_manager/scan_list.html", {"scans": scans})
+
+
+@login_required
+def scan_diff(request, pk):
+    severity_order = Case(
+        When(severity__iexact="critical", then=Value(5)),
+        When(severity__iexact="high", then=Value(4)),
+        When(severity__iexact="medium", then=Value(3)),
+        When(severity__iexact="low", then=Value(2)),
+        When(severity__iexact="info", then=Value(1)),
+        default=Value(0),
+        output_field=IntegerField(),
+    )
+
+    current_scan = get_object_or_404(Scan, pk=pk)
+    previous_scan = (
+        Scan.objects.filter(
+            scan_type=current_scan.scan_type, uploaded_at__lt=current_scan.uploaded_at
+        )
+        .order_by("-uploaded_at")
+        .first()
+    )
+    next_scan = (
+        Scan.objects.filter(
+            scan_type=current_scan.scan_type, uploaded_at__gt=current_scan.uploaded_at
+        )
+        .order_by("uploaded_at")
+        .first()
+    )
+
+    window_end = next_scan.uploaded_at if next_scan else now()
+
+    new_findings = Vulnerability.objects.none()
+    reopened_findings = Vulnerability.objects.none()
+    fixed_findings = Vulnerability.objects.none()
+
+    if previous_scan:
+        current_detected = (
+            Vulnerability.objects.filter(scan=current_scan)
+            .exclude(status="false_positive")
+            .annotate(sev_score=severity_order)
+            .select_related("host", "software")
+        )
+
+        new_findings = current_detected.filter(
+            first_seen__gt=previous_scan.uploaded_at
+        ).order_by("-sev_score", "cve_id")
+
+        reopened_findings = (
+            current_detected.filter(
+                audit_events__action="reopened",
+                audit_events__created_at__gt=previous_scan.uploaded_at,
+                audit_events__created_at__lte=window_end,
+            )
+            .distinct()
+            .order_by("-sev_score", "cve_id")
+        )
+
+        fixed_findings = (
+            Vulnerability.objects.filter(
+                audit_events__action="status_changed",
+                audit_events__details__to_status="fixed",
+                audit_events__created_at__gt=previous_scan.uploaded_at,
+                audit_events__created_at__lte=window_end,
+            )
+            .exclude(status="false_positive")
+            .annotate(sev_score=severity_order)
+            .select_related("host", "software")
+            .distinct()
+            .order_by("-sev_score", "cve_id")
+        )
+
+    context = {
+        "current_scan": current_scan,
+        "previous_scan": previous_scan,
+        "next_scan": next_scan,
+        "new_findings": new_findings,
+        "reopened_findings": reopened_findings,
+        "fixed_findings": fixed_findings,
+        "summary": {
+            "new_count": new_findings.count(),
+            "reopened_count": reopened_findings.count(),
+            "fixed_count": fixed_findings.count(),
+        },
+    }
+    return render(request, "vuln_manager/scan_diff.html", context)
 
 
 @login_required
