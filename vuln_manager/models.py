@@ -34,6 +34,7 @@ class Scan(models.Model):
         ("SEMGREP", "Semgrep SAST"),
         ("MANUAL", "Manual Entry"),
         ("OSV", "OSV Scan"),
+        ("NVD", "NVD Scan"),
         ("WAZUH", "Wazuh Live Feed"),
     )
     scan_type = models.CharField(max_length=10, choices=SCAN_TYPES)

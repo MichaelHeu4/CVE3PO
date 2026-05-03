@@ -20,7 +20,7 @@ from .parser import semgrep
 from .utils import ai_triage
 from .utils.audit import log_vulnerability_event
 from .utils.vuln_dedup import create_or_update_vulnerability
-from .utils.osv_auto import enrich_software_with_osv
+from .utils.osv_auto import enrich_software_with_feeds
 from .extensions import wrike as wrike_ext
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -473,7 +473,7 @@ def software_rescan_osv(request, pk):
     if not sw.version:
         return HttpResponseForbidden("missing_version")
 
-    worker = threading.Thread(target=enrich_software_with_osv, args=(sw.id,), daemon=True)
+    worker = threading.Thread(target=enrich_software_with_feeds, args=(sw.id,), daemon=True)
     worker.start()
     return redirect("software_detail", pk=pk)
 

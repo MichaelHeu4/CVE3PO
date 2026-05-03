@@ -14,7 +14,7 @@ Ingest and parse technical manifests from industry-standard security tools:
 - **Nuclei**: Template-based vulnerability scanning with automated POC extraction.
 - **OpenVAS (GVM)**: Deep infrastructure security reports.
 - **Semgrep SAST**: Static analysis findings linked directly to software artifacts.
-- OSV Scanner: Open Source Vulnerability data for software dependencies.
+- OSV + NVD Enrichment: Open source and NVD CVE data for software dependencies.
 
 ### 🏛️ Architectural Registry
 - **Asset Inventory**: Automated tracking of hosts, open ports, and service status.
@@ -48,7 +48,8 @@ docker compose up -d
 ```
 
 ### 2. Change Settings
-Before running the server, ensure you set the `SECRET_KEY` Environment variable (using a .env file) to a secure random value for production use. Futhermore make sure to adjust the `ALLOWED_HOSTS` setting to include your server's domain or IP address when deploying. Last but not least, check if DEBUG is set to `False` for production environments to enhance security.
+Before running the server, ensure you set the `SECRET_KEY` Environment variable (using a .env file) to a secure random value for production use. Futhermore make sure to adjust the `ALLOWED_HOSTS` setting to include your server's domain or IP address when deploying. Last but not least, check if DEBUG is set to `False` for production environments to enhance security.  
+Optional: set `NVD_API_KEY` to increase NVD API lookup limits for software enrichment.
 
 ### 3. Create a user
 Navigate to http://localhost:8000/register/ to create a new user account.
