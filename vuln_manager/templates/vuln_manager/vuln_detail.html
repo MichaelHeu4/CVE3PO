@@ -64,6 +64,12 @@
                         </select>
                         <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-primary pointer-events-none text-sm">unfold_more</span>
                     </form>
+                    <form action="{% url 'triage_single_vulnerability' vuln.id %}" method="POST" class="mt-3">
+                        {% csrf_token %}
+                        <button type="submit" class="w-full py-2.5 rounded-xl border border-primary/20 text-primary text-[10px] font-black tracking-[0.2em] uppercase hover:bg-primary/10 transition-all">
+                            Re-Run AI Triage
+                        </button>
+                    </form>
                 </div>
             </div>
 

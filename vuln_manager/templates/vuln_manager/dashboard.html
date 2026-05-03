@@ -84,7 +84,7 @@
         </div>
         <div class="mt-4 flex items-center gap-2">
             <span class="material-symbols-outlined text-xs text-primary">check_circle</span>
-            <span class="text-[9px] text-outline/60 uppercase font-black tracking-widest">98% Coverage detected</span>
+            <span class="text-[9px] text-outline/60 uppercase font-black tracking-widest">{{ exposure_rate }}% Assets currently impacted</span>
         </div>
     </div>
 </div>
@@ -145,6 +145,59 @@
     </div>
 </section>
 
+<!-- Operational KPIs -->
+<section class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
+    <div class="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-surface-container rounded-3xl p-6 border border-outline-variant/5 shadow-xl">
+            <p class="text-[10px] font-black text-outline uppercase tracking-[0.3em] mb-4">Remediation Rate</p>
+            <div class="flex items-end gap-3">
+                <h2 class="text-4xl font-headline font-black text-primary">{{ remediation_rate }}</h2>
+                <p class="text-xs text-outline mb-1 font-bold">%</p>
+            </div>
+            <p class="mt-3 text-[10px] text-outline uppercase tracking-widest font-bold">{{ resolved_count }} fixed / {{ ignored_count }} accepted risk</p>
+        </div>
+        <div class="bg-surface-container rounded-3xl p-6 border border-outline-variant/5 shadow-xl">
+            <p class="text-[10px] font-black text-outline uppercase tracking-[0.3em] mb-4">Open Risk Age</p>
+            <div class="flex items-end gap-3">
+                <h2 class="text-4xl font-headline font-black text-on-surface">{{ avg_open_age_days }}</h2>
+                <p class="text-xs text-outline mb-1 font-bold">Avg Days</p>
+            </div>
+            <p class="mt-3 text-[10px] text-outline uppercase tracking-widest font-bold">Oldest open: {{ oldest_open_days }} days</p>
+        </div>
+        <div class="bg-surface-container rounded-3xl p-6 border border-outline-variant/5 shadow-xl">
+            <p class="text-[10px] font-black text-outline uppercase tracking-[0.3em] mb-4">SLA Breaches</p>
+            <div class="flex items-end gap-3">
+                <h2 class="text-4xl font-headline font-black {% if sla_breach_count > 0 %}text-error{% else %}text-primary{% endif %}">{{ sla_breach_count }}</h2>
+                <p class="text-xs text-outline mb-1 font-bold">Open Critical/High</p>
+            </div>
+            <p class="mt-3 text-[10px] text-outline uppercase tracking-widest font-bold">Critical >7d, High >30d</p>
+        </div>
+        <div class="bg-surface-container rounded-3xl p-6 border border-outline-variant/5 shadow-xl">
+            <p class="text-[10px] font-black text-outline uppercase tracking-[0.3em] mb-4">Reopened (30d)</p>
+            <div class="flex items-end gap-3">
+                <h2 class="text-4xl font-headline font-black text-tertiary">{{ reopened_30d }}</h2>
+                <p class="text-xs text-outline mb-1 font-bold">Findings</p>
+            </div>
+            <p class="mt-3 text-[10px] text-outline uppercase tracking-widest font-bold">Signal for fix quality</p>
+        </div>
+    </div>
+    <div class="bg-surface-container rounded-3xl p-8 shadow-xl">
+        <div class="flex items-center justify-between mb-8">
+            <h3 class="font-headline font-bold text-xl text-on-surface">Workflow Distribution</h3>
+            <span class="text-[10px] text-outline font-black uppercase tracking-widest">Current Status</span>
+        </div>
+        <div class="flex items-center justify-center relative" style="height: 220px;">
+            <canvas id="statusDoughnut"></canvas>
+        </div>
+        <div class="mt-6 grid grid-cols-2 gap-3 text-[10px] font-bold uppercase tracking-widest text-outline">
+            <span>Open: {{ status_map.open }}</span>
+            <span>In Progress: {{ status_map.in_progress }}</span>
+            <span>Fixed: {{ status_map.fixed }}</span>
+            <span>Risk Accepted: {{ status_map.risk_accepted }}</span>
+        </div>
+    </div>
+</section>
+
 <!-- Assets & Recent Events -->
 <section class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
     <!-- Top Risky Assets -->
@@ -191,6 +244,26 @@
             </div>
             {% endfor %}
         </div>
+    </div>
+</section>
+
+<!-- Software Exposure -->
+<section class="bg-surface-container rounded-3xl p-8 shadow-xl mb-8">
+    <div class="flex items-center justify-between mb-8">
+        <h3 class="font-headline font-bold text-xl text-on-surface">Most Exposed Software</h3>
+        <span class="text-[10px] text-outline font-black uppercase tracking-widest">Open Findings</span>
+    </div>
+    <div class="space-y-4">
+        {% for sw in top_software %}
+        <div class="flex items-center justify-between p-4 bg-surface-container-low rounded-2xl">
+            <a href="{% url 'software_detail' sw.id %}" class="font-bold text-on-surface text-sm hover:text-primary transition-colors">
+                {{ sw.name }} {% if sw.version %}<span class="text-outline">{{ sw.version }}</span>{% endif %}
+            </a>
+            <span class="text-[10px] font-black text-error uppercase tracking-widest">{{ sw.active_vulns }} open</span>
+        </div>
+        {% empty %}
+        <p class="text-[10px] text-outline uppercase tracking-widest font-bold">No exposed software found.</p>
+        {% endfor %}
     </div>
 </section>
 {% endblock %}
@@ -270,6 +343,32 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 cutout: '82%',
+                plugins: { legend: { display: false } }
+            }
+        });
+
+        const statusCtx = document.getElementById('statusDoughnut').getContext('2d');
+        new Chart(statusCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Open', 'In Progress', 'Fixed', 'Risk Accepted', 'False Positive'],
+                datasets: [{
+                    data: [
+                        {{ status_map.open }},
+                        {{ status_map.in_progress }},
+                        {{ status_map.fixed }},
+                        {{ status_map.risk_accepted }},
+                        {{ status_map.false_positive }}
+                    ],
+                    backgroundColor: ['#fc4563', '#8950fc', '#3bbffa', '#1bc5bd', '#a3aac4'],
+                    borderWidth: 0,
+                    hoverOffset: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '74%',
                 plugins: { legend: { display: false } }
             }
         });

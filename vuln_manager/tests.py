@@ -177,6 +177,22 @@ class AuthAndStatusFlowTests(TestCase):
         self.vuln.refresh_from_db()
         self.assertEqual(self.vuln.status, "open")
 
+    def test_dashboard_contains_extended_kpis(self):
+        host = Host.objects.create(ip_address="10.0.0.20")
+        sw = Software.objects.create(name="demo", version="1.0.0", vendor="acme")
+        sw.hosts.add(host)
+        self.vuln.software = sw
+        self.vuln.save(update_fields=["software"])
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("remediation_rate", response.context)
+        self.assertIn("avg_open_age_days", response.context)
+        self.assertIn("sla_breach_count", response.context)
+        self.assertIn("status_map", response.context)
+        self.assertIn("top_software", response.context)
+
 
 class SoftwareRescanPermissionTests(TestCase):
     def setUp(self):
@@ -291,3 +307,85 @@ class AgentInventorySnapshotSyncTests(TestCase):
             actor="software_delete:auto_close",
         ).latest("created_at")
         self.assertEqual(event.details.get("reason"), "software_deleted")
+
+
+class SeverityFilterAndSingleTriageTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="eve", password="pw12345")
+        self.scan = Scan.objects.create(scan_type="MANUAL")
+        self.host = Host.objects.create(ip_address="10.0.0.30")
+        self.software = Software.objects.create(name="svc", version="1.0.0", vendor="acme")
+        self.software.hosts.add(self.host)
+
+        self.v_critical = Vulnerability.objects.create(
+            scan=self.scan,
+            host=self.host,
+            software=self.software,
+            cve_id="CVE-2026-30001",
+            severity="critical",
+            status="open",
+            name="Critical issue",
+        )
+        self.v_low = Vulnerability.objects.create(
+            scan=self.scan,
+            host=self.host,
+            software=self.software,
+            cve_id="CVE-2026-30002",
+            severity="low",
+            status="open",
+            name="Low issue",
+        )
+
+    def test_host_detail_filters_by_severity(self):
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse("host_detail", args=[self.host.pk]) + "?tab=threats&severity=critical"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["severity_filter"], "critical")
+        vulns = list(response.context["vulns"].object_list)
+        self.assertEqual(len(vulns), 1)
+        self.assertEqual(vulns[0].cve_id, "CVE-2026-30001")
+
+    def test_software_detail_filters_by_severity(self):
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse("software_detail", args=[self.software.pk]) + "?severity=low"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["severity_filter"], "low")
+        vulns = list(response.context["vulns"])
+        self.assertEqual(len(vulns), 1)
+        self.assertEqual(vulns[0].cve_id, "CVE-2026-30002")
+
+    def test_kanban_filters_by_severity(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("kanban_board") + "?severity=critical")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["severity_filter"], "critical")
+        self.assertEqual(response.context["board"]["open"].count(), 1)
+        self.assertEqual(response.context["board"]["open"].first().cve_id, "CVE-2026-30001")
+
+    def test_vuln_list_filters_by_severity(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("vuln_list") + "?status=active&severity=low")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["severity"], "low")
+        vulns = list(response.context["vulns"].object_list)
+        self.assertEqual(len(vulns), 1)
+        self.assertEqual(vulns[0].cve_id, "CVE-2026-30002")
+
+    @patch("vuln_manager.views.threading.Thread")
+    def test_single_vulnerability_retriage_endpoint(self, thread_cls):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("triage_single_vulnerability", args=[self.v_critical.pk])
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("vuln_detail", args=[self.v_critical.pk]))
+        thread_cls.assert_called_once()
+        thread_cls.return_value.start.assert_called_once()
+        event = VulnerabilityAuditEvent.objects.filter(
+            vulnerability=self.v_critical, action="updated", user=self.user
+        ).latest("created_at")
+        self.assertEqual(event.details.get("source"), "manual_retriage")

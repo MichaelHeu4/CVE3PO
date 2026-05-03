@@ -66,6 +66,11 @@ urlpatterns = [
     ),
     path("ai/dashboard/", views.ki_dashboard, name="ai_dashboard"),
     path("ai/triage", views.do_triage, name="do_triage"),
+    path(
+        "vulnerabilities/<int:pk>/triage/",
+        views.triage_single_vulnerability,
+        name="triage_single_vulnerability",
+    ),
     path("modules/", views.extensions_view, name="extensions"),
     path(
         "modules/toggle/<str:name_id>/", views.toggle_extension, name="toggle_extension"

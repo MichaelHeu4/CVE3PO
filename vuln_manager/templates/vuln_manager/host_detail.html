@@ -58,7 +58,7 @@
 
 <!-- Tab Navigation -->
 <div class="flex items-center gap-1 mb-8 bg-surface-container-low p-1.5 rounded-2xl border border-outline-variant/5 w-fit">
-    <a href="?tab=threats" class="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all {% if active_tab == 'threats' %}bg-surface-variant text-on-surface shadow-md{% else %}text-outline hover:text-on-surface{% endif %} flex items-center gap-2">
+    <a href="?tab=threats{% if show_mode %}&mode={{ show_mode }}{% endif %}{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all {% if active_tab == 'threats' %}bg-surface-variant text-on-surface shadow-md{% else %}text-outline hover:text-on-surface{% endif %} flex items-center gap-2">
         <span class="material-symbols-outlined text-sm">gpp_maybe</span> Threats
     </a>
     <a href="?tab=inventory" class="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all {% if active_tab == 'inventory' %}bg-surface-variant text-on-surface shadow-md{% else %}text-outline hover:text-on-surface{% endif %} flex items-center gap-2">
@@ -86,9 +86,18 @@
             <div class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
                 <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline">Detected Threats</h5>
                 <div class="flex items-center gap-2 bg-surface-container-low p-1 rounded-xl">
-                    <a href="?tab=threats&mode=all" class="px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all {% if show_mode == 'all' %}bg-surface-variant text-on-surface shadow-sm{% else %}text-outline hover:text-on-surface{% endif %}">All</a>
-                    <a href="?tab=threats&mode=direct" class="px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all {% if show_mode == 'direct' %}bg-surface-variant text-on-surface shadow-sm{% else %}text-outline hover:text-on-surface{% endif %}">Direct</a>
+                    <a href="?tab=threats&mode=all{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all {% if show_mode == 'all' %}bg-surface-variant text-on-surface shadow-sm{% else %}text-outline hover:text-on-surface{% endif %}">All</a>
+                    <a href="?tab=threats&mode=direct{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all {% if show_mode == 'direct' %}bg-surface-variant text-on-surface shadow-sm{% else %}text-outline hover:text-on-surface{% endif %}">Direct</a>
                 </div>
+            </div>
+            <div class="mb-6 flex flex-wrap items-center gap-2">
+                <span class="text-[9px] text-outline uppercase tracking-widest font-black">Severity</span>
+                <a href="?tab=threats{% if show_mode %}&mode={{ show_mode }}{% endif %}" class="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all {% if not severity_filter %}bg-surface-variant text-on-surface border-outline-variant/30{% else %}text-outline border-outline-variant/20 hover:text-on-surface{% endif %}">All</a>
+                {% for value, label in severity_choices %}
+                <a href="?tab=threats{% if show_mode %}&mode={{ show_mode }}{% endif %}&severity={{ value }}" class="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all {% if severity_filter == value %}bg-surface-variant text-on-surface border-outline-variant/30{% else %}text-outline border-outline-variant/20 hover:text-on-surface{% endif %}">
+                    {{ label }}
+                </a>
+                {% endfor %}
             </div>
             
             <div class="space-y-4">
@@ -130,10 +139,10 @@
                 <p class="text-[9px] font-black text-outline uppercase tracking-widest">Page {{ vulns.number }} of {{ vulns.paginator.num_pages }}</p>
                 <div class="flex gap-2">
                     {% if vulns.has_previous %}
-                    <a href="?tab=threats&vuln_page={{ vulns.previous_page_number }}{% if show_mode %}&mode={{ show_mode }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5"><span class="material-symbols-outlined text-sm">chevron_left</span></a>
+                    <a href="?tab=threats&vuln_page={{ vulns.previous_page_number }}{% if show_mode %}&mode={{ show_mode }}{% endif %}{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5"><span class="material-symbols-outlined text-sm">chevron_left</span></a>
                     {% endif %}
                     {% if vulns.has_next %}
-                    <a href="?tab=threats&vuln_page={{ vulns.next_page_number }}{% if show_mode %}&mode={{ show_mode }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5"><span class="material-symbols-outlined text-sm">chevron_right</span></a>
+                    <a href="?tab=threats&vuln_page={{ vulns.next_page_number }}{% if show_mode %}&mode={{ show_mode }}{% endif %}{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5"><span class="material-symbols-outlined text-sm">chevron_right</span></a>
                     {% endif %}
                 </div>
             </div>

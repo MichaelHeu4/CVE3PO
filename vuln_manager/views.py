@@ -28,8 +28,9 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
 from django.utils.http import url_has_allowed_host_and_scheme
 import io
-from django.http import FileResponse, HttpResponseForbidden, JsonResponse
+from django.http import FileResponse, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.utils.timezone import now
+from datetime import timedelta
 
 from xhtml2pdf import pisa
 from django.template.loader import render_to_string
@@ -149,7 +150,12 @@ def export_dashboard_pdf(request):
     high_count = all_vulns.filter(severity="high").count()
     host_count = Host.objects.count()
     vuln_hosts_count = (
-        Host.objects.filter(vulnerabilities__in=all_vulns).distinct().count()
+        Host.objects.filter(
+            Q(vulnerabilities__in=all_vulns)
+            | Q(software_inventory__vulnerabilities__in=all_vulns)
+        )
+        .distinct()
+        .count()
     )
     avg_proc_time_ms = (
         Vulnerability.objects.filter(ai_proc_time__gt=0).aggregate(Avg("ai_proc_time"))[
@@ -157,6 +163,26 @@ def export_dashboard_pdf(request):
         ]
         or 0
     )
+    resolved_count = Vulnerability.objects.filter(status="fixed").count()
+    total_non_fp = Vulnerability.objects.exclude(status="false_positive").count()
+    remediation_rate = round((resolved_count / total_non_fp) * 100, 1) if total_non_fp else 0
+    exposure_rate = round((vuln_hosts_count / host_count) * 100, 1) if host_count else 0
+    avg_open_age_days = 0
+    open_ages = [
+        max((now() - opened_at).days, 0)
+        for opened_at in all_vulns.values_list("first_seen", flat=True)
+        if opened_at
+    ]
+    if open_ages:
+        avg_open_age_days = round(sum(open_ages) / len(open_ages), 1)
+    oldest_open_days = max(open_ages) if open_ages else 0
+    sla_breach_count = all_vulns.filter(
+        Q(severity="critical", first_seen__lt=now() - timedelta(days=7))
+        | Q(severity="high", first_seen__lt=now() - timedelta(days=30))
+    ).count()
+    reopened_30d = VulnerabilityAuditEvent.objects.filter(
+        action="reopened", created_at__gte=now() - timedelta(days=30)
+    ).count()
 
     top_hosts = Host.objects.annotate(
         num_vulns=Count(
@@ -164,6 +190,12 @@ def export_dashboard_pdf(request):
             filter=~Q(vulnerabilities__status__in=["fixed", "false_positive"]),
         )
     ).order_by("-num_vulns")[:5]
+    top_software = Software.objects.annotate(
+        num_vulns=Count(
+            "vulnerabilities",
+            filter=~Q(vulnerabilities__status__in=["fixed", "false_positive"]),
+        )
+    ).filter(num_vulns__gt=0).order_by("-num_vulns", "name")[:5]
 
     recent_vulns = (
         Vulnerability.objects.filter(severity__in=["critical", "high"])
@@ -180,8 +212,16 @@ def export_dashboard_pdf(request):
             "high_count": high_count,
             "vuln_hosts_count": vuln_hosts_count,
             "mttt": round(avg_proc_time_ms / 1000, 2),
+            "resolved_count": resolved_count,
+            "remediation_rate": remediation_rate,
+            "exposure_rate": exposure_rate,
+            "avg_open_age_days": avg_open_age_days,
+            "oldest_open_days": oldest_open_days,
+            "sla_breach_count": sla_breach_count,
+            "reopened_30d": reopened_30d,
         },
         "top_hosts": top_hosts,
+        "top_software": top_software,
         "recent_vulns": recent_vulns,
     }
 
@@ -217,6 +257,33 @@ def dashboard(request):
         status__in=["fixed", "false_positive"]
     )
     vuln_count = all_open_vulns.exclude(severity="info").count()
+    resolved_count = Vulnerability.objects.filter(status="fixed").count()
+    ignored_count = Vulnerability.objects.filter(status="risk_accepted").count()
+    total_non_fp = Vulnerability.objects.exclude(status="false_positive").count()
+    remediation_rate = round((resolved_count / total_non_fp) * 100, 1) if total_non_fp else 0
+    impacted_assets_count = (
+        Host.objects.filter(
+            Q(vulnerabilities__in=all_open_vulns)
+            | Q(software_inventory__vulnerabilities__in=all_open_vulns)
+        )
+        .distinct()
+        .count()
+    )
+    exposure_rate = round((impacted_assets_count / host_count) * 100, 1) if host_count else 0
+    open_ages = [
+        max((now() - opened_at).days, 0)
+        for opened_at in all_open_vulns.values_list("first_seen", flat=True)
+        if opened_at
+    ]
+    avg_open_age_days = round(sum(open_ages) / len(open_ages), 1) if open_ages else 0
+    oldest_open_days = max(open_ages) if open_ages else 0
+    sla_breach_count = all_open_vulns.filter(
+        Q(severity="critical", first_seen__lt=now() - timedelta(days=7))
+        | Q(severity="high", first_seen__lt=now() - timedelta(days=30))
+    ).count()
+    reopened_30d = VulnerabilityAuditEvent.objects.filter(
+        action="reopened", created_at__gte=now() - timedelta(days=30)
+    ).count()
 
     # Severity distribution
     vuln_stats = all_open_vulns.values("severity").annotate(count=Count("id"))
@@ -246,7 +313,6 @@ def dashboard(request):
     trend_fixed = []
 
     import datetime
-
     today = datetime.date.today()
     for i in range(13, -1, -1):
         day = today - datetime.timedelta(days=i)
@@ -283,6 +349,16 @@ def dashboard(request):
     )
 
     recent_vulns = all_open_vulns.select_related("host").order_by("-id")[:5]
+    top_software = (
+        Software.objects.annotate(
+            active_vulns=Count(
+                "vulnerabilities",
+                filter=~Q(vulnerabilities__status__in=["fixed", "false_positive"]),
+            )
+        )
+        .filter(active_vulns__gt=0)
+        .order_by("-active_vulns", "name")[:5]
+    )
 
     top_ports = (
         Port.objects.filter(
@@ -308,6 +384,13 @@ def dashboard(request):
     ai_context = {
         "proc_time": round(avg_proc_time_ms / 1000, 2),
     }
+    status_map = {
+        "open": Vulnerability.objects.filter(status="open").count(),
+        "in_progress": Vulnerability.objects.filter(status="in_progress").count(),
+        "fixed": resolved_count,
+        "risk_accepted": ignored_count,
+        "false_positive": Vulnerability.objects.filter(status="false_positive").count(),
+    }
 
     context = {
         "host_count": host_count,
@@ -319,10 +402,21 @@ def dashboard(request):
         "trend_open": json.dumps(trend_open),
         "trend_fixed": json.dumps(trend_fixed),
         "top_hosts": top_hosts,
+        "top_software": top_software,
         "recent_vulns": recent_vulns,
         "top_ports": top_ports,
         "software_count": software_count,
         "ai": ai_context,
+        "resolved_count": resolved_count,
+        "ignored_count": ignored_count,
+        "impacted_assets_count": impacted_assets_count,
+        "exposure_rate": exposure_rate,
+        "remediation_rate": remediation_rate,
+        "avg_open_age_days": avg_open_age_days,
+        "oldest_open_days": oldest_open_days,
+        "sla_breach_count": sla_breach_count,
+        "reopened_30d": reopened_30d,
+        "status_map": status_map,
         "user": User.objects.get(pk=request.user.id),
     }
     return render(request, "vuln_manager/dashboard.html", context)
@@ -367,6 +461,10 @@ def host_detail(request, pk):
         p for p in historic_ports if p["port_number"] not in active_port_nums
     ]
     show_mode = request.GET.get("mode", "all")
+    severity_filter = (request.GET.get("severity") or "").lower()
+    allowed_severities = {choice[0] for choice in Vulnerability.SEVERITY_CHOICES}
+    if severity_filter and severity_filter not in allowed_severities:
+        severity_filter = ""
     if show_mode == "direct":
         vulns_query = host.vulnerabilities.exclude(status="false_positive").order_by(
             "-severity"
@@ -378,6 +476,8 @@ def host_detail(request, pk):
             .distinct()
             .order_by("-severity")
         )
+    if severity_filter:
+        vulns_query = vulns_query.filter(severity=severity_filter)
 
     # Paginate Threats
     vuln_paginator = Paginator(vulns_query, 20)
@@ -423,6 +523,8 @@ def host_detail(request, pk):
             "timeline_values": json.dumps(host_timeline_values),
             "installed_software": installed_software,
             "show_mode": show_mode,
+            "severity_filter": severity_filter,
+            "severity_choices": Vulnerability.SEVERITY_CHOICES,
             "active_tab": active_tab,
             "criticality_choices": Host.CRITICALITY_CHOICES,
         },
@@ -446,11 +548,17 @@ def software_list(request):
 def software_detail(request, pk):
     item = get_object_or_404(Software, pk=pk)
     hosts = item.hosts.all()
+    severity_filter = (request.GET.get("severity") or "").lower()
+    allowed_severities = {choice[0] for choice in Vulnerability.SEVERITY_CHOICES}
+    if severity_filter and severity_filter not in allowed_severities:
+        severity_filter = ""
     vulns = (
         Vulnerability.objects.filter(software=item)
         .exclude(status="false_positive")
         .order_by("-severity")
     )
+    if severity_filter:
+        vulns = vulns.filter(severity=severity_filter)
     return render(
         request,
         "vuln_manager/software_detail.html",
@@ -458,6 +566,8 @@ def software_detail(request, pk):
             "software": item,
             "hosts": hosts,
             "vulns": vulns,
+            "severity_filter": severity_filter,
+            "severity_choices": Vulnerability.SEVERITY_CHOICES,
             "criticality_choices": Software.CRITICALITY_CHOICES,
             "osv_rescan_possible": bool(item.version),
         },
@@ -706,6 +816,12 @@ def kanban_board(request):
     vulns = Vulnerability.objects.select_related("host").annotate(
         sev_score=severity_order
     )
+    severity_filter = (request.GET.get("severity") or "").lower()
+    allowed_severities = {choice[0] for choice in Vulnerability.SEVERITY_CHOICES}
+    if severity_filter and severity_filter not in allowed_severities:
+        severity_filter = ""
+    if severity_filter:
+        vulns = vulns.filter(severity=severity_filter)
     board_data = {
         "open": vulns.filter(status="open").order_by("-sev_score", "cve_id"),
         "in_progress": vulns.filter(status="in_progress").order_by(
@@ -719,7 +835,15 @@ def kanban_board(request):
             "-sev_score", "cve_id"
         ),
     }
-    return render(request, "vuln_manager/kanban_board.html", {"board": board_data})
+    return render(
+        request,
+        "vuln_manager/kanban_board.html",
+        {
+            "board": board_data,
+            "severity_filter": severity_filter,
+            "severity_choices": Vulnerability.SEVERITY_CHOICES,
+        },
+    )
 
 
 @login_required
@@ -758,7 +882,10 @@ def update_vuln_status(request, pk):
 
 @login_required
 def vuln_list(request):
-    severity = request.GET.get("severity")
+    severity = (request.GET.get("severity") or "").lower()
+    allowed_severities = {choice[0] for choice in Vulnerability.SEVERITY_CHOICES}
+    if severity and severity not in allowed_severities:
+        severity = ""
     status_filter = request.GET.get("status", "active")
     active_vulns = Vulnerability.objects.exclude(status="false_positive")
 
@@ -797,6 +924,7 @@ def vuln_list(request):
         {
             "vulns": vulns,
             "severity": severity,
+            "severity_choices": Vulnerability.SEVERITY_CHOICES,
             "status_filter": status_filter,
             "metrics": metrics,
         },
@@ -1156,3 +1284,33 @@ def do_triage(request):
         print("[AI] Background triage started.")
 
     return redirect("ai_dashboard")
+
+
+@login_required
+@require_POST
+def triage_single_vulnerability(request, pk):
+    vuln = get_object_or_404(Vulnerability, pk=pk)
+
+    def _run_single_triage(vuln_id):
+        triage_target = Vulnerability.objects.filter(pk=vuln_id).first()
+        if not triage_target:
+            return
+        try:
+            ai_triage.triage(triage_target)
+        except Exception as exc:
+            print(f"[AI] Single triage failed for vulnerability {vuln_id}: {exc}")
+
+    worker = threading.Thread(
+        target=_run_single_triage,
+        args=(vuln.id,),
+        daemon=True,
+    )
+    worker.start()
+
+    log_vulnerability_event(
+        vuln,
+        "updated",
+        user=request.user,
+        details={"source": "manual_retriage"},
+    )
+    return redirect("vuln_detail", pk=pk)

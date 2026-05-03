@@ -13,15 +13,21 @@
             <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight">Security <span class="text-primary">Alerts</span></h1>
             <p class="text-on-surface-variant font-body max-w-xl text-sm">Overview of detected security flaws across your systems.</p>
         </div>
-        <div class="flex items-center gap-4 bg-surface-container-low p-1.5 rounded-xl border border-outline-variant/5">
-            <a href="{% url 'vuln_list' %}?status=active" class="px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all {% if status_filter == 'active' %}bg-surface-variant text-on-surface shadow-md{% else %}text-outline hover:text-on-surface{% endif %}">Active</a>
-            <a href="{% url 'vuln_list' %}?status=resolved" class="px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all {% if status_filter == 'resolved' %}bg-surface-variant text-on-surface shadow-md{% else %}text-outline hover:text-on-surface{% endif %}">Resolved</a>
-            <a href="{% url 'vuln_list' %}?status=ignored" class="px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all {% if status_filter == 'ignored' %}bg-surface-variant text-on-surface shadow-md{% else %}text-outline hover:text-on-surface{% endif %}">Accepted</a>
-            <div class="w-px h-4 bg-outline-variant/20 mx-2"></div>
-            <button class="flex items-center gap-2 px-4 py-2 rounded-lg bg-surface-container-highest text-primary text-[10px] font-black uppercase tracking-widest hover:brightness-110 border border-primary/10 transition-all">
-                <span class="material-symbols-outlined text-sm">filter_list</span> Filters
-            </button>
+        <div class="flex flex-wrap items-center gap-2 bg-surface-container-low p-1.5 rounded-xl border border-outline-variant/5">
+            <a href="{% url 'vuln_list' %}?status=active{% if severity %}&severity={{ severity }}{% endif %}" class="px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all {% if status_filter == 'active' %}bg-surface-variant text-on-surface shadow-md{% else %}text-outline hover:text-on-surface{% endif %}">Active</a>
+            <a href="{% url 'vuln_list' %}?status=resolved{% if severity %}&severity={{ severity }}{% endif %}" class="px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all {% if status_filter == 'resolved' %}bg-surface-variant text-on-surface shadow-md{% else %}text-outline hover:text-on-surface{% endif %}">Resolved</a>
+            <a href="{% url 'vuln_list' %}?status=ignored{% if severity %}&severity={{ severity }}{% endif %}" class="px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all {% if status_filter == 'ignored' %}bg-surface-variant text-on-surface shadow-md{% else %}text-outline hover:text-on-surface{% endif %}">Accepted</a>
         </div>
+    </div>
+
+    <div class="mt-2 mb-6 flex flex-wrap items-center gap-2">
+        <span class="text-[9px] text-outline uppercase tracking-widest font-black">Severity</span>
+        <a href="{% url 'vuln_list' %}?status={{ status_filter }}" class="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all {% if not severity %}bg-surface-variant text-on-surface border-outline-variant/30{% else %}text-outline border-outline-variant/20 hover:text-on-surface{% endif %}">All</a>
+        {% for value, label in severity_choices %}
+        <a href="{% url 'vuln_list' %}?status={{ status_filter }}&severity={{ value }}" class="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all {% if severity == value %}bg-surface-variant text-on-surface border-outline-variant/30{% else %}text-outline border-outline-variant/20 hover:text-on-surface{% endif %}">
+            {{ label }}
+        </a>
+        {% endfor %}
     </div>
 
     <!-- Metrics Summary -->
@@ -75,11 +81,11 @@
         <table class="w-full text-left border-collapse" id="vulnTable">
             <thead>
                 <tr class="bg-surface-container-highest/30 border-b border-outline-variant/10">
-                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline">CVE ID</th>
-                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Priority</th>
-                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline">Vulnerability Name</th>
-                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Target</th>
-                    <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">State</th>
+                    <th data-sort-type="text" class="sortable-th cursor-pointer select-none px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline">CVE ID</th>
+                    <th data-sort-type="text" class="sortable-th cursor-pointer select-none px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Priority</th>
+                    <th data-sort-type="text" class="sortable-th cursor-pointer select-none px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline">Vulnerability Name</th>
+                    <th data-sort-type="text" class="sortable-th cursor-pointer select-none px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">Target</th>
+                    <th data-sort-type="text" class="sortable-th cursor-pointer select-none px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-center">State</th>
                     <th class="px-6 py-5 text-[10px] font-black text-outline uppercase tracking-[0.2em] font-headline text-right">Action</th>
                 </tr>
             </thead>
@@ -182,5 +188,48 @@ function filterVulns() {
         }
     }
 }
+
+function makeTableSortable(tableId) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    const tbody = table.querySelector("tbody");
+    const headers = table.querySelectorAll("thead th.sortable-th");
+    const sortState = {};
+
+    headers.forEach((header, index) => {
+        sortState[index] = "none";
+        header.addEventListener("click", () => {
+            const type = header.dataset.sortType || "text";
+            const rows = Array.from(tbody.querySelectorAll("tr")).filter(
+                (row) => !row.querySelector("td[colspan]")
+            );
+            const next = sortState[index] === "asc" ? "desc" : "asc";
+            sortState[index] = next;
+
+            rows.sort((a, b) => {
+                const aCell = a.children[index];
+                const bCell = b.children[index];
+                const aRaw = (aCell?.dataset.sortValue || aCell?.innerText || "").trim();
+                const bRaw = (bCell?.dataset.sortValue || bCell?.innerText || "").trim();
+
+                if (type === "number") {
+                    const aNum = parseFloat(aRaw.replace(",", ".")) || 0;
+                    const bNum = parseFloat(bRaw.replace(",", ".")) || 0;
+                    return next === "asc" ? aNum - bNum : bNum - aNum;
+                }
+
+                return next === "asc"
+                    ? aRaw.localeCompare(bRaw, undefined, { sensitivity: "base" })
+                    : bRaw.localeCompare(aRaw, undefined, { sensitivity: "base" });
+            });
+
+            rows.forEach((row) => tbody.appendChild(row));
+        });
+    });
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+    makeTableSortable("vulnTable");
+});
 </script>
 {% endblock %}
