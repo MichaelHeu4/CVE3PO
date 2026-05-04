@@ -63,12 +63,17 @@
                     </div>
                     <form action="{% url 'do_triage' %}" method="post">
                         {% csrf_token %}
-                        <button type="submit" class="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-md hover:bg-primary-hover transition-colors font-body text-sm font-bold">
+                        <button type="submit" {% if not ai_module_active %}disabled{% endif %} class="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-md hover:bg-primary-hover transition-colors font-body text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed">
                             <span class="material-symbols-outlined text-[18px]">auto_fix</span>
                             Run AI Triage
                         </button>
                     </form>
                 </div>
+                {% if not ai_module_active %}
+                <div class="px-5 py-2 text-[10px] font-bold uppercase tracking-wider text-outline border-b border-outline-variant/10 bg-surface-container-low">
+                    AI Triage module is disabled. Enable and configure it in <a href="{% url 'extensions' %}" class="text-primary hover:underline">Modules</a>.
+                </div>
+                {% endif %}
                 <div class="overflow-x-auto">
                     <table class="w-full text-left border-collapse" id="aiQueueTable">
                         <thead>

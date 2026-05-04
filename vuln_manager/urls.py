@@ -111,6 +111,11 @@ urlpatterns = [
     ),
     path("modules/wrike/config/", views.save_wrike_config, name="save_wrike_config"),
     path(
+        "modules/ai-triage/config/",
+        views.save_ai_triage_config,
+        name="save_ai_triage_config",
+    ),
+    path(
         "modules/email-reporting/config/",
         views.save_email_reporting_config,
         name="save_email_reporting_config",

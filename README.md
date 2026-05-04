@@ -26,6 +26,7 @@ Ingest and parse technical manifests from industry-standard security tools:
 - **Interactive Kanban Board**: Drag-and-drop remediation pipeline (Open → In Progress → Fixed → Risk Accepted → False Positive).
 - **Business Criticality**: Define node and artifact importance. Automatic propagation ensures that high-value assets inherit the risk bias of their critical software.
 - **Manual Intelligence**: Register findings from external research or magazines through a dedicated manual entry workflow.
+- **AI Triage Module**: Optional SSVC-based triage module with selectable provider (OpenRouter or Azure AI).
 
 ### 📊 Visual Analytics
 - **Risk Over Time**: Global trend analysis of active vulnerabilities.

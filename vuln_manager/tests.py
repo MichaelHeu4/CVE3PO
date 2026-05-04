@@ -358,6 +358,7 @@ class AgentInventorySnapshotSyncTests(TestCase):
 class SeverityFilterAndSingleTriageTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="eve", password="pw12345")
+        Extension.objects.create(name_id="ai_triage", is_active=True)
         self.scan = Scan.objects.create(scan_type="MANUAL")
         self.host = Host.objects.create(ip_address="10.0.0.30")
         self.software = Software.objects.create(name="svc", version="1.0.0", vendor="acme")
@@ -576,3 +577,64 @@ class EmailReportingAndPasswordResetTests(TestCase):
     def test_password_reset_form_is_reachable(self):
         response = self.client.get(reverse("password_reset"))
         self.assertEqual(response.status_code, 200)
+
+
+class AITriageModuleConfigTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="triage-admin",
+            email="triage-admin@example.com",
+            password="pw12345",
+            is_staff=True,
+        )
+        self.user = User.objects.create_user(
+            username="triage-user",
+            email="triage-user@example.com",
+            password="pw12345",
+        )
+        self.scan = Scan.objects.create(scan_type="MANUAL")
+        self.vuln = Vulnerability.objects.create(
+            scan=self.scan,
+            cve_id="CVE-2026-88888",
+            severity="high",
+            status="open",
+            name="AI Triage test vuln",
+        )
+        Extension.objects.create(name_id="ai_triage", is_active=False)
+
+    def test_staff_can_save_ai_triage_provider_config(self):
+        self.client.force_login(self.staff)
+        response = self.client.post(
+            reverse("save_ai_triage_config"),
+            {
+                "ai_triage_provider": "azure",
+                "ai_openrouter_model": "deepseek/deepseek-v4-flash",
+                "ai_azure_endpoint": "https://example-resource.inference.ai.azure.com",
+                "ai_azure_model": "gpt-4o-mini",
+                "ai_azure_api_key": "azure-secret",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("extensions"))
+        settings_obj = SystemSettings.objects.get(pk=1)
+        self.assertEqual(settings_obj.ai_triage_provider, "azure")
+        self.assertEqual(settings_obj.ai_azure_model, "gpt-4o-mini")
+        self.assertEqual(
+            settings_obj.ai_azure_endpoint, "https://example-resource.inference.ai.azure.com"
+        )
+
+    @patch("vuln_manager.views.threading.Thread")
+    def test_single_triage_forbidden_when_module_disabled(self, thread_cls):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("triage_single_vulnerability", args=[self.vuln.pk])
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.content.decode(), "ai_triage_disabled")
+        thread_cls.assert_not_called()
+
+    def test_bulk_triage_forbidden_when_module_disabled(self):
+        self.client.force_login(self.user)
+        response = self.client.post(reverse("do_triage"))
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.content.decode(), "ai_triage_disabled")

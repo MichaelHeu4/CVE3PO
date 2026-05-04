@@ -62,6 +62,12 @@ def get_wrike_config():
     return wrike_extension, settings_obj
 
 
+def get_ai_triage_config():
+    settings_obj = get_system_settings()
+    ai_extension, _ = Extension.objects.get_or_create(name_id="ai_triage")
+    return ai_extension, settings_obj
+
+
 def login_view(request):
     next_url = request.GET.get("next", "dashboard")
     error_message = None
@@ -1135,15 +1141,21 @@ def ki_dashboard(request):
     page_number = request.GET.get("page")
     all_vulns = paginator.get_page(page_number)
 
-    ai = {
-        "model": "DeepSeek V4 Flash",
-        "proc_time": round(avg_proc_time_ms / 1000, 2),
-    }
+    ai_extension, settings_obj = get_ai_triage_config()
+    provider = (settings_obj.ai_triage_provider or "openrouter").lower()
+    if not ai_extension.is_active:
+        model_label = "Disabled"
+    elif provider == "azure":
+        model_label = f"Azure AI · {settings_obj.ai_azure_model or 'N/A'}"
+    else:
+        model_label = f"OpenRouter · {settings_obj.ai_openrouter_model or 'N/A'}"
+    ai = {"model": model_label, "proc_time": round(avg_proc_time_ms / 1000, 2)}
     context = {
         "triaged_vulns": triaged_vulns,
         "all_vulns": all_vulns,
         "action_required": action_required,
         "ai": ai,
+        "ai_module_active": ai_extension.is_active,
         "selected_vuln": selected_vuln,
     }
     return render(request, "vuln_manager/ki_dashboard.html", context)
@@ -1169,6 +1181,12 @@ def extensions_view(request):
             "name": "Wrike Ticketing",
             "description": "Creates Wrike tasks from vulnerabilities and syncs completion status.",
             "icon": "assignment",
+            "color": "secondary",
+        },
+        "ai_triage": {
+            "name": "AI Triage",
+            "description": "Runs SSVC-based vulnerability triage with selectable AI backend.",
+            "icon": "psychology",
             "color": "secondary",
         },
         "email_reporting": {
@@ -1197,6 +1215,18 @@ def extensions_view(request):
                     system_settings.email_report_recipients
                     if mid == "email_reporting"
                     else None
+                ),
+                "ai_triage_provider": (
+                    system_settings.ai_triage_provider if mid == "ai_triage" else None
+                ),
+                "ai_openrouter_model": (
+                    system_settings.ai_openrouter_model if mid == "ai_triage" else None
+                ),
+                "ai_azure_endpoint": (
+                    system_settings.ai_azure_endpoint if mid == "ai_triage" else None
+                ),
+                "ai_azure_model": (
+                    system_settings.ai_azure_model if mid == "ai_triage" else None
                 ),
                 "icon": meta["icon"],
                 "color": meta["color"],
@@ -1283,6 +1313,44 @@ def save_email_reporting_config(request):
     settings_obj = get_system_settings()
     settings_obj.email_report_recipients = recipients or None
     settings_obj.save(update_fields=["email_report_recipients"])
+    return redirect("extensions")
+
+
+@login_required
+@require_POST
+def save_ai_triage_config(request):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+    provider = (request.POST.get("ai_triage_provider") or "openrouter").strip().lower()
+    if provider not in {"openrouter", "azure"}:
+        return HttpResponseForbidden("invalid_provider")
+    openrouter_model = (
+        request.POST.get("ai_openrouter_model") or "deepseek/deepseek-v4-flash"
+    ).strip()
+    azure_endpoint = (request.POST.get("ai_azure_endpoint") or "").strip() or None
+    azure_model = (request.POST.get("ai_azure_model") or "").strip() or None
+    openrouter_key = (request.POST.get("ai_openrouter_api_key") or "").strip()
+    azure_key = (request.POST.get("ai_azure_api_key") or "").strip()
+
+    settings_obj = get_system_settings()
+    settings_obj.ai_triage_provider = provider
+    settings_obj.ai_openrouter_model = openrouter_model
+    settings_obj.ai_azure_endpoint = azure_endpoint
+    settings_obj.ai_azure_model = azure_model
+    if openrouter_key:
+        settings_obj.ai_openrouter_api_key = openrouter_key
+    if azure_key:
+        settings_obj.ai_azure_api_key = azure_key
+    settings_obj.save(
+        update_fields=[
+            "ai_triage_provider",
+            "ai_openrouter_model",
+            "ai_azure_endpoint",
+            "ai_azure_model",
+            "ai_openrouter_api_key",
+            "ai_azure_api_key",
+        ]
+    )
     return redirect("extensions")
 
 
@@ -1436,6 +1504,9 @@ def run_triage_background():
 
 @login_required
 def do_triage(request):
+    ai_extension, _ = get_ai_triage_config()
+    if not ai_extension.is_active:
+        return HttpResponseForbidden("ai_triage_disabled")
     if request.method == "POST":
         thread = threading.Thread(target=run_triage_background)
         thread.start()
@@ -1447,16 +1518,16 @@ def do_triage(request):
 @login_required
 @require_POST
 def triage_single_vulnerability(request, pk):
+    ai_extension, _ = get_ai_triage_config()
+    if not ai_extension.is_active:
+        return HttpResponseForbidden("ai_triage_disabled")
     vuln = get_object_or_404(Vulnerability, pk=pk)
 
     def _run_single_triage(vuln_id):
         triage_target = Vulnerability.objects.filter(pk=vuln_id).first()
         if not triage_target:
             return
-        try:
-            ai_triage.triage(triage_target)
-        except Exception as exc:
-            print(f"[AI] Single triage failed for vulnerability {vuln_id}: {exc}")
+        ai_triage.triage(triage_target)
 
     worker = threading.Thread(
         target=_run_single_triage,

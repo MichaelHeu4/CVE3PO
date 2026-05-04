@@ -2,6 +2,7 @@ annotated-types==0.7.0
 anyio==4.13.0
 asgiref==3.11.1
 attrs==26.1.0
+azure-ai-inference>=1.0.0b9
 boltons==21.0.0
 bracex==2.6
 certifi==2026.2.25
