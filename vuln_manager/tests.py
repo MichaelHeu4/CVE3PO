@@ -24,6 +24,7 @@ from vuln_manager.utils.osv_auto import (
     _extract_nvd_cvss_and_severity,
     enrich_software_with_osv,
 )
+from vuln_manager.utils.enrichment import get_cve_details
 
 
 class NvdAutoLookupTests(TestCase):
@@ -82,6 +83,45 @@ class NvdAutoLookupTests(TestCase):
         self.assertEqual(vuln.scan.scan_type, "NVD")
         self.assertEqual(vuln.severity, "high")
         self.assertEqual(vuln.name, "NVD: CVE-2024-12345")
+
+
+class CveDetailEnrichmentParsingTests(TestCase):
+    @patch("vuln_manager.utils.enrichment.requests.get")
+    def test_get_cve_details_supports_cve_json_5_descriptions(self, get_mock):
+        get_mock.return_value.status_code = 200
+        get_mock.return_value.json.return_value = {
+            "containers": {
+                "cna": {
+                    "descriptions": [
+                        {
+                            "lang": "en",
+                            "value": "Improper access control in PAM propagation scripts.",
+                            "supportingMedia": [
+                                {
+                                    "type": "text/html",
+                                    "value": "<div>Improper access control in PAM propagation scripts.</div>",
+                                }
+                            ],
+                        }
+                    ]
+                }
+            },
+            "metrics": {
+                "cvssMetricV31": [
+                    {
+                        "cvssData": {
+                            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H"
+                        }
+                    }
+                ]
+            },
+        }
+
+        cvss, description = get_cve_details("CVE-2023-5240")
+        self.assertEqual(cvss, "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H")
+        self.assertEqual(
+            description, "Improper access control in PAM propagation scripts."
+        )
 
 
 class SoftwareDeletionStatusTests(TestCase):
@@ -355,9 +395,61 @@ class AgentInventorySnapshotSyncTests(TestCase):
         self.assertEqual(event.details.get("reason"), "software_deleted")
 
 
+class ManualVulnerabilityEnrichmentTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="enricher", password="pw12345")
+        self.scan = Scan.objects.create(scan_type="MANUAL")
+        self.vuln = Vulnerability.objects.create(
+            scan=self.scan,
+            cve_id="CVE-2026-33333",
+            severity="medium",
+            status="open",
+            name="Manual finding",
+            description="",
+            cvss="",
+        )
+
+    @patch("vuln_manager.views.get_cve_details")
+    def test_enrich_single_vulnerability_updates_cvss_and_description(self, cve_details_mock):
+        cve_details_mock.return_value = (
+            "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+            "Updated description from external source",
+        )
+        self.client.force_login(self.user)
+        response = self.client.post(reverse("enrich_single_vulnerability", args=[self.vuln.pk]))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("vuln_detail", args=[self.vuln.pk]))
+        self.vuln.refresh_from_db()
+        self.assertEqual(
+            self.vuln.cvss, "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+        )
+        self.assertEqual(
+            self.vuln.description, "Updated description from external source"
+        )
+        event = VulnerabilityAuditEvent.objects.filter(
+            vulnerability=self.vuln, action="updated", user=self.user
+        ).latest("created_at")
+        self.assertEqual(event.details.get("source"), "manual_enrich")
+
+    @patch("vuln_manager.views.get_cve_details", return_value=(None, None))
+    def test_enrich_single_vulnerability_without_data_keeps_existing_values(
+        self, _cve_details_mock
+    ):
+        self.vuln.cvss = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:L"
+        self.vuln.description = "Existing text"
+        self.vuln.save(update_fields=["cvss", "description"])
+        self.client.force_login(self.user)
+        response = self.client.post(reverse("enrich_single_vulnerability", args=[self.vuln.pk]))
+        self.assertEqual(response.status_code, 302)
+        self.vuln.refresh_from_db()
+        self.assertEqual(self.vuln.cvss, "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:L")
+        self.assertEqual(self.vuln.description, "Existing text")
+
+
 class SeverityFilterAndSingleTriageTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="eve", password="pw12345")
+        Extension.objects.create(name_id="ai_triage", is_active=True)
         self.scan = Scan.objects.create(scan_type="MANUAL")
         self.host = Host.objects.create(ip_address="10.0.0.30")
         self.software = Software.objects.create(name="svc", version="1.0.0", vendor="acme")
@@ -576,3 +668,64 @@ class EmailReportingAndPasswordResetTests(TestCase):
     def test_password_reset_form_is_reachable(self):
         response = self.client.get(reverse("password_reset"))
         self.assertEqual(response.status_code, 200)
+
+
+class AITriageModuleConfigTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="triage-admin",
+            email="triage-admin@example.com",
+            password="pw12345",
+            is_staff=True,
+        )
+        self.user = User.objects.create_user(
+            username="triage-user",
+            email="triage-user@example.com",
+            password="pw12345",
+        )
+        self.scan = Scan.objects.create(scan_type="MANUAL")
+        self.vuln = Vulnerability.objects.create(
+            scan=self.scan,
+            cve_id="CVE-2026-88888",
+            severity="high",
+            status="open",
+            name="AI Triage test vuln",
+        )
+        Extension.objects.create(name_id="ai_triage", is_active=False)
+
+    def test_staff_can_save_ai_triage_provider_config(self):
+        self.client.force_login(self.staff)
+        response = self.client.post(
+            reverse("save_ai_triage_config"),
+            {
+                "ai_triage_provider": "azure",
+                "ai_openrouter_model": "deepseek/deepseek-v4-flash",
+                "ai_azure_endpoint": "https://example-resource.inference.ai.azure.com",
+                "ai_azure_model": "gpt-4o-mini",
+                "ai_azure_api_key": "azure-secret",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("extensions"))
+        settings_obj = SystemSettings.objects.get(pk=1)
+        self.assertEqual(settings_obj.ai_triage_provider, "azure")
+        self.assertEqual(settings_obj.ai_azure_model, "gpt-4o-mini")
+        self.assertEqual(
+            settings_obj.ai_azure_endpoint, "https://example-resource.inference.ai.azure.com"
+        )
+
+    @patch("vuln_manager.views.threading.Thread")
+    def test_single_triage_forbidden_when_module_disabled(self, thread_cls):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("triage_single_vulnerability", args=[self.vuln.pk])
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.content.decode(), "ai_triage_disabled")
+        thread_cls.assert_not_called()
+
+    def test_bulk_triage_forbidden_when_module_disabled(self):
+        self.client.force_login(self.user)
+        response = self.client.post(reverse("do_triage"))
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.content.decode(), "ai_triage_disabled")

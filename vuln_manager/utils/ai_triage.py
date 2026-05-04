@@ -1,7 +1,8 @@
-from vuln_manager.models import Vulnerability
+from vuln_manager.models import Extension, SystemSettings, Vulnerability
 import os
 import json
 import instructor
+from django.conf import settings
 from pydantic import BaseModel, Field
 from openai import OpenAI
 
@@ -22,17 +23,7 @@ class TriageErgebnis(BaseModel):
 
 
 # ==========================================
-# 2. API-CLIENT SETUP (OPENROUTER)
-# ==========================================
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "DEFAULT_CHANGE_ME")
-
-client = instructor.from_openai(
-    OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY),
-    mode=instructor.Mode.JSON,
-)
-
-# ==========================================
-# 3. PROMPTS & REGELN
+# 2. PROMPTS & REGELN
 # ==========================================
 SYSTEM_PROMPT = """Du bist ein Senior Security Analyst. Führe eine Triage nach unserem erweiterten SSVC-Framework durch.
 
@@ -83,7 +74,82 @@ BEISPIEL_OUTPUT = json.dumps(
 from .enrichment import get_epss_score, is_cisa_kev, get_cve_details
 
 
+def _get_ai_config():
+    ext, _ = Extension.objects.get_or_create(name_id="ai_triage")
+    settings_obj, _ = SystemSettings.objects.get_or_create(
+        pk=1, defaults={"disable_register": settings.DISABLE_REGISTER}
+    )
+    provider = (settings_obj.ai_triage_provider or "openrouter").strip().lower()
+    return ext, settings_obj, provider
+
+
+def _build_messages(current_finding):
+    return [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": BEISPIEL_INPUT},
+        {"role": "assistant", "content": BEISPIEL_OUTPUT},
+        {
+            "role": "user",
+            "content": f"Bitte bewerte diesen neuen Fund:\n{current_finding}",
+        },
+    ]
+
+
+def _call_openrouter(messages, settings_obj):
+    api_key = (settings_obj.ai_openrouter_api_key or os.getenv("OPENROUTER_API_KEY", "")).strip()
+    if not api_key:
+        raise RuntimeError("ai_triage_missing_openrouter_key")
+    model = (settings_obj.ai_openrouter_model or "deepseek/deepseek-v4-flash").strip()
+    client = instructor.from_openai(
+        OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key),
+        mode=instructor.Mode.JSON,
+    )
+    return client.chat.completions.create(
+        model=model,
+        response_model=TriageErgebnis,
+        messages=messages,
+        temperature=0.0,
+    )
+
+
+def _call_azure_ai(messages, settings_obj):
+    endpoint = (settings_obj.ai_azure_endpoint or "").strip()
+    api_key = (settings_obj.ai_azure_api_key or "").strip()
+    model = (settings_obj.ai_azure_model or "").strip()
+    if not endpoint or not api_key or not model:
+        raise RuntimeError("ai_triage_missing_azure_config")
+
+    from azure.ai.inference import ChatCompletionsClient
+    from azure.ai.inference.models import AssistantMessage, SystemMessage, UserMessage
+    from azure.core.credentials import AzureKeyCredential
+
+    client = ChatCompletionsClient(
+        endpoint=endpoint,
+        credential=AzureKeyCredential(api_key),
+    )
+    azure_messages = []
+    for msg in messages:
+        if msg["role"] == "system":
+            azure_messages.append(SystemMessage(msg["content"]))
+        elif msg["role"] == "assistant":
+            azure_messages.append(AssistantMessage(msg["content"]))
+        else:
+            azure_messages.append(UserMessage(msg["content"]))
+
+    response = client.complete(messages=azure_messages, model=model, temperature=0)
+    content = response.choices[0].message.content
+    if isinstance(content, list):
+        text = "".join(part.text for part in content if hasattr(part, "text"))
+    else:
+        text = str(content)
+    return TriageErgebnis.model_validate_json(text)
+
+
 def triage(vuln: Vulnerability):
+    extension, settings_obj, provider = _get_ai_config()
+    if not extension.is_active:
+        raise RuntimeError("ai_triage_disabled")
+
     # Enrichment: Daten von externen APIs holen
     epss_score = get_epss_score(vuln.cve_id)
     is_kev = is_cisa_kev(vuln.cve_id)
@@ -138,38 +204,23 @@ def triage(vuln: Vulnerability):
     Business Criticality: {host_criticality}
     """
 
-    # ==========================================
-    # 5. DER API-CALL
-    # ==========================================
+    messages = _build_messages(aktueller_fund)
+
     import time
 
     start_time = time.time()
-    try:
-        response = client.chat.completions.create(
-            model="deepseek/deepseek-v4-flash",  # Nutzt das aktuelle DeepSeek Modell via OpenRouter
-            response_model=TriageErgebnis,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": BEISPIEL_INPUT},
-                {"role": "assistant", "content": BEISPIEL_OUTPUT},
-                {
-                    "role": "user",
-                    "content": f"Bitte bewerte diesen neuen Fund:\n{aktueller_fund}",
-                },
-            ],
-            temperature=0.0,
-        )
-        proc_time = (time.time() - start_time) * 1000  # In ms
+    if provider == "azure":
+        response = _call_azure_ai(messages, settings_obj)
+    elif provider == "openrouter":
+        response = _call_openrouter(messages, settings_obj)
+    else:
+        raise RuntimeError("ai_triage_invalid_provider")
+    proc_time = (time.time() - start_time) * 1000  # In ms
 
-        Vulnerability.objects.filter(pk=vuln.id).update(
-            ai_reason=response.gedankengang_analyst,
-            ai_result=response.ssvc_score,
-            ai_suggestion=response.patching_vorschlag,
-            ai_proc_time=proc_time,
-            ai_last_criticality=host_criticality
-        )
-
-
-    except Exception as e:
-        print(f"❌ Fehler bei der API-Anfrage: {e}")
-
+    Vulnerability.objects.filter(pk=vuln.id).update(
+        ai_reason=response.gedankengang_analyst,
+        ai_result=response.ssvc_score,
+        ai_suggestion=response.patching_vorschlag,
+        ai_proc_time=proc_time,
+        ai_last_criticality=host_criticality,
+    )

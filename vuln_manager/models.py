@@ -22,6 +22,14 @@ class SystemSettings(models.Model):
     disable_register = models.BooleanField(default=True)
     wrike_folder_id = models.CharField(max_length=100, blank=True, null=True)
     email_report_recipients = models.TextField(blank=True, null=True)
+    ai_triage_provider = models.CharField(max_length=20, default="openrouter")
+    ai_openrouter_api_key = models.CharField(max_length=255, blank=True, null=True)
+    ai_openrouter_model = models.CharField(
+        max_length=120, default="deepseek/deepseek-v4-flash"
+    )
+    ai_azure_endpoint = models.URLField(blank=True, null=True)
+    ai_azure_api_key = models.CharField(max_length=255, blank=True, null=True)
+    ai_azure_model = models.CharField(max_length=120, blank=True, null=True)
 
     def __str__(self):
         return f"SystemSettings(disable_register={self.disable_register})"
