@@ -70,6 +70,12 @@
                             Re-Run AI Triage
                         </button>
                     </form>
+                    <form action="{% url 'enrich_single_vulnerability' vuln.id %}" method="POST" class="mt-3">
+                        {% csrf_token %}
+                        <button type="submit" class="w-full py-2.5 rounded-xl border border-outline-variant/20 text-on-surface text-[10px] font-black tracking-[0.2em] uppercase hover:bg-surface-container-highest transition-all">
+                            Enrich CVE Details
+                        </button>
+                    </form>
                 </div>
             </div>
 

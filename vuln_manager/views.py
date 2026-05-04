@@ -21,6 +21,7 @@ from .utils import ai_triage
 from .utils.audit import log_vulnerability_event
 from .utils.vuln_dedup import create_or_update_vulnerability
 from .utils.osv_auto import enrich_software_with_feeds
+from .utils.enrichment import get_cve_details
 from .extensions import wrike as wrike_ext
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -1542,4 +1543,30 @@ def triage_single_vulnerability(request, pk):
         user=request.user,
         details={"source": "manual_retriage"},
     )
+    return redirect("vuln_detail", pk=pk)
+
+
+@login_required
+@require_POST
+def enrich_single_vulnerability(request, pk):
+    vuln = get_object_or_404(Vulnerability, pk=pk)
+    cvss, description = get_cve_details(vuln.cve_id)
+
+    updated_fields = []
+    if cvss and vuln.cvss != cvss:
+        vuln.cvss = cvss
+        updated_fields.append("cvss")
+    if description and vuln.description != description:
+        vuln.description = description
+        updated_fields.append("description")
+
+    if updated_fields:
+        vuln.save(update_fields=updated_fields)
+        log_vulnerability_event(
+            vuln,
+            "updated",
+            user=request.user,
+            details={"source": "manual_enrich", "fields": updated_fields},
+        )
+
     return redirect("vuln_detail", pk=pk)

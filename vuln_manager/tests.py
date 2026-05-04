@@ -24,6 +24,7 @@ from vuln_manager.utils.osv_auto import (
     _extract_nvd_cvss_and_severity,
     enrich_software_with_osv,
 )
+from vuln_manager.utils.enrichment import get_cve_details
 
 
 class NvdAutoLookupTests(TestCase):
@@ -82,6 +83,45 @@ class NvdAutoLookupTests(TestCase):
         self.assertEqual(vuln.scan.scan_type, "NVD")
         self.assertEqual(vuln.severity, "high")
         self.assertEqual(vuln.name, "NVD: CVE-2024-12345")
+
+
+class CveDetailEnrichmentParsingTests(TestCase):
+    @patch("vuln_manager.utils.enrichment.requests.get")
+    def test_get_cve_details_supports_cve_json_5_descriptions(self, get_mock):
+        get_mock.return_value.status_code = 200
+        get_mock.return_value.json.return_value = {
+            "containers": {
+                "cna": {
+                    "descriptions": [
+                        {
+                            "lang": "en",
+                            "value": "Improper access control in PAM propagation scripts.",
+                            "supportingMedia": [
+                                {
+                                    "type": "text/html",
+                                    "value": "<div>Improper access control in PAM propagation scripts.</div>",
+                                }
+                            ],
+                        }
+                    ]
+                }
+            },
+            "metrics": {
+                "cvssMetricV31": [
+                    {
+                        "cvssData": {
+                            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H"
+                        }
+                    }
+                ]
+            },
+        }
+
+        cvss, description = get_cve_details("CVE-2023-5240")
+        self.assertEqual(cvss, "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H")
+        self.assertEqual(
+            description, "Improper access control in PAM propagation scripts."
+        )
 
 
 class SoftwareDeletionStatusTests(TestCase):
@@ -353,6 +393,57 @@ class AgentInventorySnapshotSyncTests(TestCase):
             actor="software_delete:auto_close",
         ).latest("created_at")
         self.assertEqual(event.details.get("reason"), "software_deleted")
+
+
+class ManualVulnerabilityEnrichmentTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="enricher", password="pw12345")
+        self.scan = Scan.objects.create(scan_type="MANUAL")
+        self.vuln = Vulnerability.objects.create(
+            scan=self.scan,
+            cve_id="CVE-2026-33333",
+            severity="medium",
+            status="open",
+            name="Manual finding",
+            description="",
+            cvss="",
+        )
+
+    @patch("vuln_manager.views.get_cve_details")
+    def test_enrich_single_vulnerability_updates_cvss_and_description(self, cve_details_mock):
+        cve_details_mock.return_value = (
+            "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+            "Updated description from external source",
+        )
+        self.client.force_login(self.user)
+        response = self.client.post(reverse("enrich_single_vulnerability", args=[self.vuln.pk]))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("vuln_detail", args=[self.vuln.pk]))
+        self.vuln.refresh_from_db()
+        self.assertEqual(
+            self.vuln.cvss, "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+        )
+        self.assertEqual(
+            self.vuln.description, "Updated description from external source"
+        )
+        event = VulnerabilityAuditEvent.objects.filter(
+            vulnerability=self.vuln, action="updated", user=self.user
+        ).latest("created_at")
+        self.assertEqual(event.details.get("source"), "manual_enrich")
+
+    @patch("vuln_manager.views.get_cve_details", return_value=(None, None))
+    def test_enrich_single_vulnerability_without_data_keeps_existing_values(
+        self, _cve_details_mock
+    ):
+        self.vuln.cvss = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:L"
+        self.vuln.description = "Existing text"
+        self.vuln.save(update_fields=["cvss", "description"])
+        self.client.force_login(self.user)
+        response = self.client.post(reverse("enrich_single_vulnerability", args=[self.vuln.pk]))
+        self.assertEqual(response.status_code, 302)
+        self.vuln.refresh_from_db()
+        self.assertEqual(self.vuln.cvss, "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:L")
+        self.assertEqual(self.vuln.description, "Existing text")
 
 
 class SeverityFilterAndSingleTriageTests(TestCase):

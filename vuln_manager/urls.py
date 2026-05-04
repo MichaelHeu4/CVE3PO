@@ -105,6 +105,11 @@ urlpatterns = [
         views.triage_single_vulnerability,
         name="triage_single_vulnerability",
     ),
+    path(
+        "vulnerabilities/<int:pk>/enrich/",
+        views.enrich_single_vulnerability,
+        name="enrich_single_vulnerability",
+    ),
     path("modules/", views.extensions_view, name="extensions"),
     path(
         "modules/toggle/<str:name_id>/", views.toggle_extension, name="toggle_extension"
