@@ -26,8 +26,15 @@ SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "DEFAULT_FOR_BUILD_CHANGE_ME")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 
-ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost").split(",")
+ALLOWED_HOSTS = [
+    i for i in os.environ.get("DJANGO_ALLOWED_HOSTS", "127.0.0.1 localhost").split(" ")
+]
+CSRF_TRUSTED_ORIGINS = [
+    i for i in os.environ.get("DJANGO_ALLOWED_HOSTS", "127.0.0.1 localhost").split(" ")
+]
+CSRF_COOKIE_SECURE = True
 
+SESSION_COOKIE_SECURE = True
 LOGIN_URL = "/login/"
 DISABLE_REGISTER = os.environ.get("DISABLE_REGISTER", "True").lower() == "true"
 # Application definition

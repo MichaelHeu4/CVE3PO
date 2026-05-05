@@ -30,6 +30,9 @@ class SystemSettings(models.Model):
     ai_azure_endpoint = models.URLField(blank=True, null=True)
     ai_azure_api_key = models.CharField(max_length=255, blank=True, null=True)
     ai_azure_model = models.CharField(max_length=120, blank=True, null=True)
+    ai_azure_api_version = models.CharField(
+        max_length=40, default="2024-05-01-preview"
+    )
 
     def __str__(self):
         return f"SystemSettings(disable_register={self.disable_register})"

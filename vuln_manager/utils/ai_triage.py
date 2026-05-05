@@ -4,7 +4,7 @@ import json
 import instructor
 from django.conf import settings
 from pydantic import BaseModel, Field
-from openai import OpenAI
+from openai import AzureOpenAI, OpenAI
 
 
 # ==========================================
@@ -115,18 +115,36 @@ def _call_openrouter(messages, settings_obj):
 def _call_azure_ai(messages, settings_obj):
     endpoint = (settings_obj.ai_azure_endpoint or "").strip()
     api_key = (settings_obj.ai_azure_api_key or "").strip()
-    model = (settings_obj.ai_azure_model or "").strip()
-    if not endpoint or not api_key or not model:
+    deployment = (settings_obj.ai_azure_model or "").strip()
+    api_version = (settings_obj.ai_azure_api_version or "").strip()
+    if not endpoint or not api_key or not deployment:
         raise RuntimeError("ai_triage_missing_azure_config")
+
+    if "openai.azure.com" in endpoint or "cognitiveservices.azure.com" in endpoint:
+        azure_client = AzureOpenAI(
+            azure_endpoint=endpoint,
+            api_key=api_key,
+            api_version=api_version or "2025-01-01-preview",
+        )
+        client = instructor.from_openai(azure_client, mode=instructor.Mode.JSON)
+        return client.chat.completions.create(
+            model=deployment,
+            response_model=TriageErgebnis,
+            messages=messages,
+            temperature=0.0,
+        )
 
     from azure.ai.inference import ChatCompletionsClient
     from azure.ai.inference.models import AssistantMessage, SystemMessage, UserMessage
     from azure.core.credentials import AzureKeyCredential
 
-    client = ChatCompletionsClient(
-        endpoint=endpoint,
-        credential=AzureKeyCredential(api_key),
-    )
+    client_kwargs = {
+        "endpoint": endpoint,
+        "credential": AzureKeyCredential(api_key),
+    }
+    if api_version:
+        client_kwargs["api_version"] = api_version
+    client = ChatCompletionsClient(**client_kwargs)
     azure_messages = []
     for msg in messages:
         if msg["role"] == "system":
@@ -136,7 +154,7 @@ def _call_azure_ai(messages, settings_obj):
         else:
             azure_messages.append(UserMessage(msg["content"]))
 
-    response = client.complete(messages=azure_messages, model=model, temperature=0)
+    response = client.complete(messages=azure_messages, model=deployment, temperature=0)
     content = response.choices[0].message.content
     if isinstance(content, list):
         text = "".join(part.text for part in content if hasattr(part, "text"))

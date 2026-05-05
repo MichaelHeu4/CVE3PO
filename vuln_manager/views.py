@@ -1229,6 +1229,11 @@ def extensions_view(request):
                 "ai_azure_model": (
                     system_settings.ai_azure_model if mid == "ai_triage" else None
                 ),
+                "ai_azure_api_version": (
+                    system_settings.ai_azure_api_version
+                    if mid == "ai_triage"
+                    else None
+                ),
                 "icon": meta["icon"],
                 "color": meta["color"],
             }
@@ -1330,6 +1335,7 @@ def save_ai_triage_config(request):
     ).strip()
     azure_endpoint = (request.POST.get("ai_azure_endpoint") or "").strip() or None
     azure_model = (request.POST.get("ai_azure_model") or "").strip() or None
+    azure_api_version = (request.POST.get("ai_azure_api_version") or "").strip()
     openrouter_key = (request.POST.get("ai_openrouter_api_key") or "").strip()
     azure_key = (request.POST.get("ai_azure_api_key") or "").strip()
 
@@ -1338,6 +1344,7 @@ def save_ai_triage_config(request):
     settings_obj.ai_openrouter_model = openrouter_model
     settings_obj.ai_azure_endpoint = azure_endpoint
     settings_obj.ai_azure_model = azure_model
+    settings_obj.ai_azure_api_version = azure_api_version
     if openrouter_key:
         settings_obj.ai_openrouter_api_key = openrouter_key
     if azure_key:
@@ -1348,6 +1355,7 @@ def save_ai_triage_config(request):
             "ai_openrouter_model",
             "ai_azure_endpoint",
             "ai_azure_model",
+            "ai_azure_api_version",
             "ai_openrouter_api_key",
             "ai_azure_api_key",
         ]

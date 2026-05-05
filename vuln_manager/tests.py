@@ -702,6 +702,7 @@ class AITriageModuleConfigTests(TestCase):
                 "ai_openrouter_model": "deepseek/deepseek-v4-flash",
                 "ai_azure_endpoint": "https://example-resource.inference.ai.azure.com",
                 "ai_azure_model": "gpt-4o-mini",
+                "ai_azure_api_version": "2024-06-01",
                 "ai_azure_api_key": "azure-secret",
             },
         )
@@ -710,6 +711,7 @@ class AITriageModuleConfigTests(TestCase):
         settings_obj = SystemSettings.objects.get(pk=1)
         self.assertEqual(settings_obj.ai_triage_provider, "azure")
         self.assertEqual(settings_obj.ai_azure_model, "gpt-4o-mini")
+        self.assertEqual(settings_obj.ai_azure_api_version, "2024-06-01")
         self.assertEqual(
             settings_obj.ai_azure_endpoint, "https://example-resource.inference.ai.azure.com"
         )
@@ -729,3 +731,19 @@ class AITriageModuleConfigTests(TestCase):
         response = self.client.post(reverse("do_triage"))
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.content.decode(), "ai_triage_disabled")
+
+    def test_staff_can_save_ai_triage_with_empty_azure_api_version(self):
+        self.client.force_login(self.staff)
+        response = self.client.post(
+            reverse("save_ai_triage_config"),
+            {
+                "ai_triage_provider": "azure",
+                "ai_openrouter_model": "deepseek/deepseek-v4-flash",
+                "ai_azure_endpoint": "https://example-resource.inference.ai.azure.com",
+                "ai_azure_model": "gpt-4o-mini",
+                "ai_azure_api_version": "",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        settings_obj = SystemSettings.objects.get(pk=1)
+        self.assertEqual(settings_obj.ai_azure_api_version, "")
