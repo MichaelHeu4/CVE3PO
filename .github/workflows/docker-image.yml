@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  IMAGE_NAME: ghcr.io/${{ github.repository | lower }}
+  IMAGE_NAME: ghcr.io/michaelheu4/cve3po
 
 jobs:
   build-and-push:
