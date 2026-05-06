@@ -14,17 +14,17 @@
             <p class="text-on-surface-variant font-body max-w-xl text-sm">Overview of detected security flaws across your systems.</p>
         </div>
         <div class="flex flex-wrap items-center gap-2 bg-surface-container-low p-1.5 rounded-xl border border-outline-variant/5">
-            <a href="{% url 'vuln_list' %}?status=active{% if severity %}&severity={{ severity }}{% endif %}" class="px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all {% if status_filter == 'active' %}bg-surface-variant text-on-surface shadow-md{% else %}text-outline hover:text-on-surface{% endif %}">Active</a>
-            <a href="{% url 'vuln_list' %}?status=resolved{% if severity %}&severity={{ severity }}{% endif %}" class="px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all {% if status_filter == 'resolved' %}bg-surface-variant text-on-surface shadow-md{% else %}text-outline hover:text-on-surface{% endif %}">Resolved</a>
-            <a href="{% url 'vuln_list' %}?status=ignored{% if severity %}&severity={{ severity }}{% endif %}" class="px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all {% if status_filter == 'ignored' %}bg-surface-variant text-on-surface shadow-md{% else %}text-outline hover:text-on-surface{% endif %}">Accepted</a>
+            <a href="{% url 'vuln_list' %}?status=active{% if severity %}&severity={{ severity }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all {% if status_filter == 'active' %}bg-surface-variant text-on-surface shadow-md{% else %}text-outline hover:text-on-surface{% endif %}">Active</a>
+            <a href="{% url 'vuln_list' %}?status=resolved{% if severity %}&severity={{ severity }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all {% if status_filter == 'resolved' %}bg-surface-variant text-on-surface shadow-md{% else %}text-outline hover:text-on-surface{% endif %}">Resolved</a>
+            <a href="{% url 'vuln_list' %}?status=ignored{% if severity %}&severity={{ severity }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all {% if status_filter == 'ignored' %}bg-surface-variant text-on-surface shadow-md{% else %}text-outline hover:text-on-surface{% endif %}">Accepted</a>
         </div>
     </div>
 
     <div class="mt-2 mb-6 flex flex-wrap items-center gap-2">
         <span class="text-[9px] text-outline uppercase tracking-widest font-black">Severity</span>
-        <a href="{% url 'vuln_list' %}?status={{ status_filter }}" class="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all {% if not severity %}bg-surface-variant text-on-surface border-outline-variant/30{% else %}text-outline border-outline-variant/20 hover:text-on-surface{% endif %}">All</a>
+        <a href="{% url 'vuln_list' %}?status={{ status_filter }}{% if query %}&q={{ query|urlencode }}{% endif %}" class="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all {% if not severity %}bg-surface-variant text-on-surface border-outline-variant/30{% else %}text-outline border-outline-variant/20 hover:text-on-surface{% endif %}">All</a>
         {% for value, label in severity_choices %}
-        <a href="{% url 'vuln_list' %}?status={{ status_filter }}&severity={{ value }}" class="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all {% if severity == value %}bg-surface-variant text-on-surface border-outline-variant/30{% else %}text-outline border-outline-variant/20 hover:text-on-surface{% endif %}">
+        <a href="{% url 'vuln_list' %}?status={{ status_filter }}&severity={{ value }}{% if query %}&q={{ query|urlencode }}{% endif %}" class="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all {% if severity == value %}bg-surface-variant text-on-surface border-outline-variant/30{% else %}text-outline border-outline-variant/20 hover:text-on-surface{% endif %}">
             {{ label }}
         </a>
         {% endfor %}
@@ -69,10 +69,14 @@
 
 <!-- Search Bar -->
 <div class="bg-surface-container-low rounded-3xl p-4 mb-6 border border-outline-variant/5">
-    <div class="relative w-full">
+    <form method="GET" class="relative w-full">
+        <input type="hidden" name="status" value="{{ status_filter }}">
+        {% if severity %}<input type="hidden" name="severity" value="{{ severity }}">{% endif %}
         <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-lg">search</span>
-        <input type="text" id="vulnSearch" placeholder="Search by CVE, name or host..." class="w-full bg-surface-container border-none rounded-2xl pl-12 pr-6 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30 transition-all" onkeyup="filterVulns()">
-    </div>
+        <input type="text" name="q" placeholder="Search by CVE, name or host..." value="{{ query|default:'' }}" class="w-full bg-surface-container border-none rounded-2xl pl-12 pr-40 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30 transition-all">
+        <button type="submit" class="absolute right-20 top-1/2 -translate-y-1/2 px-4 py-1.5 rounded-xl bg-primary text-surface text-[10px] font-black uppercase tracking-widest">Search</button>
+        <a href="{% url 'vuln_list' %}?status={{ status_filter }}{% if severity %}&severity={{ severity }}{% endif %}" class="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-1.5 rounded-xl bg-surface-container-highest text-outline text-[10px] font-black uppercase tracking-widest border border-outline-variant/10 hover:text-on-surface transition-colors">Clear</a>
+    </form>
 </div>
 
 <!-- Main Table -->
@@ -154,7 +158,7 @@
         </p>
         <div class="flex gap-2">
             {% if vulns.has_previous %}
-                <a href="?page={{ vulns.previous_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if severity %}&severity={{ severity }}{% endif %}" class="w-10 h-10 rounded-xl bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5">
+                <a href="?page={{ vulns.previous_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if severity %}&severity={{ severity }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="w-10 h-10 rounded-xl bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5">
                     <span class="material-symbols-outlined text-base">chevron_left</span>
                 </a>
             {% endif %}
@@ -164,7 +168,7 @@
             </button>
             
             {% if vulns.has_next %}
-                <a href="?page={{ vulns.next_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if severity %}&severity={{ severity }}{% endif %}" class="w-10 h-10 rounded-xl bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5">
+                <a href="?page={{ vulns.next_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if severity %}&severity={{ severity }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="w-10 h-10 rounded-xl bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5">
                     <span class="material-symbols-outlined text-base">chevron_right</span>
                 </a>
             {% endif %}
@@ -173,22 +177,6 @@
 </div>
 
 <script>
-function filterVulns() {
-    let input = document.getElementById("vulnSearch");
-    let filter = input.value.toUpperCase();
-    let table = document.getElementById("vulnTable");
-    let tr = table.getElementsByTagName("tr");
-
-    for (let i = 1; i < tr.length; i++) {
-        let textContent = tr[i].textContent || tr[i].innerText;
-        if (textContent.toUpperCase().indexOf(filter) > -1) {
-            tr[i].style.display = "";
-        } else {
-            tr[i].style.display = "none";
-        }
-    }
-}
-
 function makeTableSortable(tableId) {
     const table = document.getElementById(tableId);
     if (!table) return;

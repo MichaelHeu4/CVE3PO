@@ -25,7 +25,11 @@ def webhook(request):
         if not wazuh_ext.is_active:
             return HttpResponseNotFound()
 
-        provided_token = request.headers.get("X-API-Key")
+        auth_header = request.headers.get("Authorization", "")
+        bearer_token = None
+        if auth_header.lower().startswith("bearer "):
+            bearer_token = auth_header.split(" ", 1)[1].strip()
+        provided_token = bearer_token or request.headers.get("X-API-Key")
         if not provided_token or provided_token != wazuh_ext.api_token:
             return JsonResponse(
                 {"status": "error", "message": "unauthorized"}, status=401

@@ -22,11 +22,13 @@
 
 <!-- Search Bar -->
 <div class="bg-surface-container-low rounded-3xl p-4 mb-6 border border-outline-variant/5 flex flex-col md:flex-row gap-4 items-center">
-    <div class="relative flex-grow w-full">
+    <form method="GET" class="relative flex-grow w-full">
         <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-lg">search</span>
-        <input type="text" id="hostSearch" placeholder="Search by IP, name or priority..." class="w-full bg-surface-container border-none rounded-2xl pl-12 pr-6 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30 transition-all" onkeyup="filterHosts()">
-    </div>
+        <input type="text" name="q" placeholder="Search by IP, name or priority..." value="{{ query|default:'' }}" class="w-full bg-surface-container border-none rounded-2xl pl-12 pr-28 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30 transition-all">
+        <button type="submit" class="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-1.5 rounded-xl bg-primary text-surface text-[10px] font-black uppercase tracking-widest">Search</button>
+    </form>
     <div class="flex gap-2 w-full md:w-auto">
+        <a href="{% url 'host_list' %}" class="flex-grow md:flex-none px-6 py-3 rounded-2xl bg-surface-container text-outline text-[10px] font-black uppercase tracking-widest hover:text-on-surface transition-colors border border-outline-variant/5 text-center">Clear</a>
         <a href="{% url 'export_dashboard_pdf' %}" class="flex-grow md:flex-none px-6 py-3 rounded-2xl bg-surface-container text-outline text-[10px] font-black uppercase tracking-widest hover:text-on-surface transition-colors border border-outline-variant/5 text-center flex items-center justify-center gap-2">
             <span class="material-symbols-outlined text-sm">download</span> Export Report
         </a>
@@ -141,7 +143,7 @@
         </p>
         <div class="flex gap-2">
             {% if hosts.has_previous %}
-                <a href="?page={{ hosts.previous_page_number }}" class="w-10 h-10 rounded-xl bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5">
+                <a href="?page={{ hosts.previous_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}" class="w-10 h-10 rounded-xl bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5">
                     <span class="material-symbols-outlined text-base">chevron_left</span>
                 </a>
             {% endif %}
@@ -151,7 +153,7 @@
             </button>
             
             {% if hosts.has_next %}
-                <a href="?page={{ hosts.next_page_number }}" class="w-10 h-10 rounded-xl bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5">
+                <a href="?page={{ hosts.next_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}" class="w-10 h-10 rounded-xl bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5">
                     <span class="material-symbols-outlined text-base">chevron_right</span>
                 </a>
             {% endif %}
@@ -160,22 +162,6 @@
 </div>
 
 <script>
-function filterHosts() {
-    let input = document.getElementById("hostSearch");
-    let filter = input.value.toUpperCase();
-    let table = document.getElementById("hostTable");
-    let tr = table.getElementsByTagName("tr");
-
-    for (let i = 1; i < tr.length; i++) {
-        let textContent = tr[i].textContent || tr[i].innerText;
-        if (textContent.toUpperCase().indexOf(filter) > -1) {
-            tr[i].style.display = "";
-        } else {
-            tr[i].style.display = "none";
-        }
-    }
-}
-
 function makeTableSortable(tableId) {
     const table = document.getElementById(tableId);
     if (!table) return;

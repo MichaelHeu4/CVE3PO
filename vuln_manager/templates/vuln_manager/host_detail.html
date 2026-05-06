@@ -61,7 +61,7 @@
     <a href="?tab=threats{% if show_mode %}&mode={{ show_mode }}{% endif %}{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all {% if active_tab == 'threats' %}bg-surface-variant text-on-surface shadow-md{% else %}text-outline hover:text-on-surface{% endif %} flex items-center gap-2">
         <span class="material-symbols-outlined text-sm">gpp_maybe</span> Threats
     </a>
-    <a href="?tab=inventory" class="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all {% if active_tab == 'inventory' %}bg-surface-variant text-on-surface shadow-md{% else %}text-outline hover:text-on-surface{% endif %} flex items-center gap-2">
+    <a href="?tab=inventory{% if inventory_query %}&inv_q={{ inventory_query|urlencode }}{% endif %}" class="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all {% if active_tab == 'inventory' %}bg-surface-variant text-on-surface shadow-md{% else %}text-outline hover:text-on-surface{% endif %} flex items-center gap-2">
         <span class="material-symbols-outlined text-sm">inventory_2</span> Inventory
     </a>
     <a href="?tab=infrastructure" class="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all {% if active_tab == 'infrastructure' %}bg-surface-variant text-on-surface shadow-md{% else %}text-outline hover:text-on-surface{% endif %} flex items-center gap-2">
@@ -154,10 +154,12 @@
         <div class="bg-surface-container rounded-3xl p-8 shadow-xl">
             <div class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
                 <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline">Software Inventory</h5>
-                <div class="relative w-full md:w-64">
+                <form method="GET" class="relative w-full md:w-96">
+                    <input type="hidden" name="tab" value="inventory">
                     <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm">search</span>
-                    <input type="text" id="swSearch" placeholder="Search components..." class="w-full bg-surface-container-low border-none rounded-xl pl-10 pr-4 py-2 text-[10px] text-on-surface focus:ring-1 focus:ring-primary/30" onkeyup="filterLocalSoftware()">
-                </div>
+                    <input type="text" name="inv_q" placeholder="Search components across all inventory..." value="{{ inventory_query|default:'' }}" class="w-full bg-surface-container-low border-none rounded-xl pl-10 pr-24 py-2 text-[10px] text-on-surface focus:ring-1 focus:ring-primary/30">
+                    <button type="submit" class="absolute right-1 top-1/2 -translate-y-1/2 px-3 py-1 rounded-lg bg-primary text-surface text-[9px] font-black uppercase tracking-widest">Search</button>
+                </form>
             </div>
             
             <div class="overflow-x-auto">
@@ -202,10 +204,10 @@
                 <p class="text-[9px] font-black text-outline uppercase tracking-widest">Page {{ installed_software.number }} of {{ installed_software.paginator.num_pages }}</p>
                 <div class="flex gap-2">
                     {% if installed_software.has_previous %}
-                    <a href="?tab=inventory&sw_page={{ installed_software.previous_page_number }}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5"><span class="material-symbols-outlined text-sm">chevron_left</span></a>
+                    <a href="?tab=inventory&sw_page={{ installed_software.previous_page_number }}{% if inventory_query %}&inv_q={{ inventory_query|urlencode }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5"><span class="material-symbols-outlined text-sm">chevron_left</span></a>
                     {% endif %}
                     {% if installed_software.has_next %}
-                    <a href="?tab=inventory&sw_page={{ installed_software.next_page_number }}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5"><span class="material-symbols-outlined text-sm">chevron_right</span></a>
+                    <a href="?tab=inventory&sw_page={{ installed_software.next_page_number }}{% if inventory_query %}&inv_q={{ inventory_query|urlencode }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5"><span class="material-symbols-outlined text-sm">chevron_right</span></a>
                     {% endif %}
                 </div>
             </div>
@@ -280,17 +282,6 @@ function toggleAccordion(id) {
     const all = document.querySelectorAll('[id^="vuln-"]');
     all.forEach(item => { if (item.id !== id) item.classList.add('hidden'); });
     el.classList.toggle('hidden');
-}
-
-function filterLocalSoftware() {
-    let input = document.getElementById("swSearch");
-    let filter = input.value.toUpperCase();
-    let table = document.getElementById("swTable");
-    let tr = table.getElementsByTagName("tr");
-    for (let i = 1; i < tr.length; i++) {
-        let textContent = tr[i].textContent || tr[i].innerText;
-        tr[i].style.display = textContent.toUpperCase().indexOf(filter) > -1 ? "" : "none";
-    }
 }
 
 {% if active_tab == 'threats' %}

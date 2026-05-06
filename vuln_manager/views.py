@@ -445,7 +445,16 @@ def dashboard(request):
 
 @login_required
 def host_list(request):
-    hosts_query = Host.objects.all().order_by("ip_address")
+    query = (request.GET.get("q") or "").strip()
+    hosts_query = Host.objects.all()
+    if query:
+        hosts_query = hosts_query.filter(
+            Q(ip_address__icontains=query)
+            | Q(hostname__icontains=query)
+            | Q(operating_system__icontains=query)
+            | Q(criticality__icontains=query)
+        )
+    hosts_query = hosts_query.order_by("ip_address")
 
     # Pagination
     paginator = Paginator(hosts_query, 25)  # 25 per page
@@ -464,7 +473,11 @@ def host_list(request):
         )
         host.num_vulns = inherited_q.exclude(severity="info").count()
         host.num_info = inherited_q.filter(severity="info").count()
-    return render(request, "vuln_manager/host_list.html", {"hosts": hosts})
+    return render(
+        request,
+        "vuln_manager/host_list.html",
+        {"hosts": hosts, "query": query},
+    )
 
 
 @login_required
@@ -524,7 +537,15 @@ def host_detail(request, pk):
             )
             & ~Q(vulnerabilities__status__in=["fixed", "false_positive"]),
         )
-    ).order_by("name")
+    )
+    inventory_query = (request.GET.get("inv_q") or "").strip()
+    if inventory_query:
+        sw_query = sw_query.filter(
+            Q(name__icontains=inventory_query)
+            | Q(version__icontains=inventory_query)
+            | Q(vendor__icontains=inventory_query)
+        )
+    sw_query = sw_query.order_by("name")
 
     sw_paginator = Paginator(sw_query, 20)
     sw_page_number = request.GET.get("sw_page")
@@ -543,6 +564,7 @@ def host_detail(request, pk):
             "timeline_labels": json.dumps(host_timeline_labels),
             "timeline_values": json.dumps(host_timeline_values),
             "installed_software": installed_software,
+            "inventory_query": inventory_query,
             "show_mode": show_mode,
             "severity_filter": severity_filter,
             "severity_choices": Vulnerability.SEVERITY_CHOICES,
@@ -554,15 +576,26 @@ def host_detail(request, pk):
 
 @login_required
 def software_list(request):
-    software_query = Software.objects.annotate(num_hosts=Count("hosts")).order_by(
-        "name"
-    )
+    query = (request.GET.get("q") or "").strip()
+    software_query = Software.objects.annotate(num_hosts=Count("hosts"))
+    if query:
+        software_query = software_query.filter(
+            Q(name__icontains=query)
+            | Q(version__icontains=query)
+            | Q(vendor__icontains=query)
+            | Q(criticality__icontains=query)
+        )
+    software_query = software_query.order_by("name")
 
     paginator = Paginator(software_query, 25)
     page_number = request.GET.get("page")
     software = paginator.get_page(page_number)
 
-    return render(request, "vuln_manager/software_list.html", {"software": software})
+    return render(
+        request,
+        "vuln_manager/software_list.html",
+        {"software": software, "query": query},
+    )
 
 
 @login_required
@@ -993,6 +1026,7 @@ def update_vuln_status(request, pk):
 
 @login_required
 def vuln_list(request):
+    query = (request.GET.get("q") or "").strip()
     severity = (request.GET.get("severity") or "").lower()
     allowed_severities = {choice[0] for choice in Vulnerability.SEVERITY_CHOICES}
     if severity and severity not in allowed_severities:
@@ -1009,6 +1043,17 @@ def vuln_list(request):
 
     if severity:
         vulns_query = vulns_query.filter(severity=severity.lower())
+
+    if query:
+        vulns_query = vulns_query.filter(
+            Q(cve_id__icontains=query)
+            | Q(name__icontains=query)
+            | Q(description__icontains=query)
+            | Q(host__ip_address__icontains=query)
+            | Q(host__hostname__icontains=query)
+            | Q(software__name__icontains=query)
+            | Q(software__version__icontains=query)
+        ).distinct()
 
     vulns_query = vulns_query.order_by("-severity", "cve_id")
 
@@ -1038,6 +1083,7 @@ def vuln_list(request):
             "severity_choices": Vulnerability.SEVERITY_CHOICES,
             "status_filter": status_filter,
             "metrics": metrics,
+            "query": query,
         },
     )
 

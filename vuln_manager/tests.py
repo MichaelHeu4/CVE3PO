@@ -308,6 +308,77 @@ class SoftwareRescanPermissionTests(TestCase):
         self.assertEqual(response.content.decode(), "missing_version")
 
 
+class GlobalSearchPaginationTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="searcher", password="pw12345")
+
+    def test_host_search_filters_across_all_pages(self):
+        for i in range(30):
+            Host.objects.create(ip_address=f"10.10.0.{i+1}", hostname=f"host-{i+1}")
+        Host.objects.create(ip_address="10.10.2.200", hostname="needle-host")
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("host_list") + "?q=needle-host")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["hosts"].paginator.count, 1)
+        self.assertContains(response, "needle-host")
+
+    def test_software_search_filters_across_all_pages(self):
+        for i in range(30):
+            Software.objects.create(name=f"pkg-{i}", version="1.0.0", vendor="acme")
+        Software.objects.create(name="needle-package", version="9.9.9", vendor="acme")
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("software_list") + "?q=needle-package")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["software"].paginator.count, 1)
+        self.assertContains(response, "needle-package")
+
+    def test_vulnerability_search_filters_across_all_pages(self):
+        scan = Scan.objects.create(scan_type="MANUAL")
+        for i in range(60):
+            Vulnerability.objects.create(
+                scan=scan,
+                cve_id=f"CVE-2026-{10000+i}",
+                severity="medium",
+                status="open",
+                name=f"bulk-vuln-{i}",
+            )
+        Vulnerability.objects.create(
+            scan=scan,
+            cve_id="CVE-2099-4242",
+            severity="high",
+            status="open",
+            name="needle vulnerability",
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("vuln_list") + "?status=active&q=4242")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["vulns"].paginator.count, 1)
+        self.assertContains(response, "CVE-2099-4242")
+
+
+class HostDetailInventorySearchTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="hostinv", password="pw12345")
+        self.host = Host.objects.create(ip_address="10.22.0.10", hostname="inv-host")
+        for i in range(25):
+            sw = Software.objects.create(name=f"component-{i}", version="1.0.0", vendor="acme")
+            sw.hosts.add(self.host)
+        needle = Software.objects.create(name="needle-component", version="9.1.1", vendor="acme")
+        needle.hosts.add(self.host)
+
+    def test_inventory_search_filters_across_all_pages(self):
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse("host_detail", args=[self.host.pk]) + "?tab=inventory&inv_q=needle-component"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["installed_software"].paginator.count, 1)
+        self.assertContains(response, "needle-component")
+
+
 class AgentInventorySnapshotSyncTests(TestCase):
     def setUp(self):
         self.scan = Scan.objects.create(scan_type="MANUAL")
@@ -393,6 +464,70 @@ class AgentInventorySnapshotSyncTests(TestCase):
             actor="software_delete:auto_close",
         ).latest("created_at")
         self.assertEqual(event.details.get("reason"), "software_deleted")
+
+    @patch("vuln_manager.extensions.agent.threading.Thread")
+    def test_large_inventory_payload_is_accepted_and_processed_async(self, thread_cls):
+        payload = {
+            "host_ip": "10.0.0.55",
+            "software": [
+                {"name": f"pkg-{i}", "version": "1.0.0", "vendor": "acme"}
+                for i in range(220)
+            ],
+        }
+        response = self._post_inventory(payload)
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.json().get("status"), "accepted")
+        thread_cls.assert_called_once()
+        thread_cls.return_value.start.assert_called_once()
+
+
+class WazuhWebhookAuthTests(TestCase):
+    def setUp(self):
+        self.url = reverse("wazuh_webhook")
+        self.extension = Extension.objects.create(
+            name_id="wazuh",
+            is_active=True,
+            api_token="wazuh-token-123",
+        )
+        self.payload = {
+            "agent": {"ip": "10.30.0.10", "name": "wazuh-agent"},
+            "data": {
+                "vulnerability": {
+                    "cve": "CVE-2026-90001",
+                    "severity": "high",
+                    "title": "Wazuh finding",
+                    "status": "VALID",
+                }
+            },
+        }
+
+    def test_wazuh_webhook_accepts_authorization_bearer_token(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps(self.payload),
+            content_type="application/json",
+            HTTP_AUTHORIZATION="Bearer wazuh-token-123",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("status"), "upserted")
+
+    def test_wazuh_webhook_still_accepts_x_api_key(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps(self.payload),
+            content_type="application/json",
+            HTTP_X_API_KEY="wazuh-token-123",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("status"), "upserted")
+
+    def test_wazuh_webhook_rejects_missing_token(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps(self.payload),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 401)
 
 
 class ManualVulnerabilityEnrichmentTests(TestCase):
