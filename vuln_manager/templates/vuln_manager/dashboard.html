@@ -170,7 +170,7 @@
                 <h2 class="text-4xl font-headline font-black {% if sla_breach_count > 0 %}text-error{% else %}text-primary{% endif %}">{{ sla_breach_count }}</h2>
                 <p class="text-xs text-outline mb-1 font-bold">Open Critical/High</p>
             </div>
-            <p class="mt-3 text-[10px] text-outline uppercase tracking-widest font-bold">Critical >7d, High >30d</p>
+            <p class="mt-3 text-[10px] text-outline uppercase tracking-widest font-bold">Critical >{{ sla_critical_days }}d, High >{{ sla_high_days }}d</p>
         </div>
         <div class="bg-surface-container rounded-3xl p-6 border border-outline-variant/5 shadow-xl">
             <p class="text-[10px] font-black text-outline uppercase tracking-[0.3em] mb-4">Reopened (30d)</p>

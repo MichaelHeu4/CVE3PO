@@ -5,6 +5,7 @@ from . import views
 from .extensions import wazuh, agent
 
 urlpatterns = [
+    path("agent/latest/<str:filename>", views.agent_latest_file, name="agent_latest_file"),
     path("", views.dashboard, name="dashboard"),
     path(
         "api/inventory/update/", agent.update_inventory_api, name="api_update_inventory"
@@ -133,6 +134,7 @@ urlpatterns = [
     path("users/", views.user_admin, name="user_admin"),
     path("users/<int:pk>/staff/", views.set_user_staff, name="set_user_staff"),
     path("users/<int:pk>/delete/", views.delete_user, name="delete_user"),
+    path("settings/sla/", views.save_sla_settings, name="save_sla_settings"),
     path("users/register/toggle/", views.toggle_register, name="toggle_register"),
     path(
         "vulnerabilities/<int:pk>/wrike/create/",

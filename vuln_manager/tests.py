@@ -5,6 +5,7 @@ import io
 from datetime import timedelta
 
 from django.contrib.auth.models import User
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.test.utils import override_settings
 from django.urls import reverse
@@ -280,6 +281,53 @@ class AuthAndStatusFlowTests(TestCase):
         self.assertIn("top_software", response.context)
 
 
+class AgentPublicDownloadsTests(TestCase):
+    def setUp(self):
+        self.agent_extension = Extension.objects.create(name_id="agent_api", is_active=True)
+
+    def test_agent_install_script_is_publicly_downloadable(self):
+        response = self.client.get(reverse("agent_latest_file", args=["install.sh"]))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("attachment; filename=\"install.sh\"", response["Content-Disposition"])
+
+    def test_unknown_agent_file_returns_404(self):
+        response = self.client.get(reverse("agent_latest_file", args=["not-found.sh"]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_downloads_blocked_when_agent_module_disabled(self):
+        self.agent_extension.is_active = False
+        self.agent_extension.save(update_fields=["is_active"])
+        response = self.client.get(reverse("agent_latest_file", args=["install.sh"]))
+        self.assertEqual(response.status_code, 404)
+
+
+class SlaSettingsTests(TestCase):
+    def setUp(self):
+        self.superuser = User.objects.create_superuser(
+            username="root", email="root@example.com", password="pw12345"
+        )
+        self.user = User.objects.create_user(username="normal", password="pw12345")
+
+    def test_superuser_can_update_sla_settings(self):
+        self.client.force_login(self.superuser)
+        response = self.client.post(
+            reverse("save_sla_settings"),
+            {"sla_critical_days": "5", "sla_high_days": "20"},
+        )
+        self.assertEqual(response.status_code, 302)
+        settings_obj = SystemSettings.objects.get(pk=1)
+        self.assertEqual(settings_obj.sla_critical_days, 5)
+        self.assertEqual(settings_obj.sla_high_days, 20)
+
+    def test_non_superuser_cannot_update_sla_settings(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("save_sla_settings"),
+            {"sla_critical_days": "5", "sla_high_days": "20"},
+        )
+        self.assertEqual(response.status_code, 403)
+
+
 class SoftwareRescanPermissionTests(TestCase):
     def setUp(self):
         self.staff = User.objects.create_user(username="staff", password="pw12345", is_staff=True)
@@ -306,6 +354,77 @@ class SoftwareRescanPermissionTests(TestCase):
         response = self.client.post(reverse("software_rescan_osv", args=[no_version.pk]))
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.content.decode(), "missing_version")
+
+
+class GlobalSearchPaginationTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="searcher", password="pw12345")
+
+    def test_host_search_filters_across_all_pages(self):
+        for i in range(30):
+            Host.objects.create(ip_address=f"10.10.0.{i+1}", hostname=f"host-{i+1}")
+        Host.objects.create(ip_address="10.10.2.200", hostname="needle-host")
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("host_list") + "?q=needle-host")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["hosts"].paginator.count, 1)
+        self.assertContains(response, "needle-host")
+
+    def test_software_search_filters_across_all_pages(self):
+        for i in range(30):
+            Software.objects.create(name=f"pkg-{i}", version="1.0.0", vendor="acme")
+        Software.objects.create(name="needle-package", version="9.9.9", vendor="acme")
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("software_list") + "?q=needle-package")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["software"].paginator.count, 1)
+        self.assertContains(response, "needle-package")
+
+    def test_vulnerability_search_filters_across_all_pages(self):
+        scan = Scan.objects.create(scan_type="MANUAL")
+        for i in range(60):
+            Vulnerability.objects.create(
+                scan=scan,
+                cve_id=f"CVE-2026-{10000+i}",
+                severity="medium",
+                status="open",
+                name=f"bulk-vuln-{i}",
+            )
+        Vulnerability.objects.create(
+            scan=scan,
+            cve_id="CVE-2099-4242",
+            severity="high",
+            status="open",
+            name="needle vulnerability",
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("vuln_list") + "?status=active&q=4242")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["vulns"].paginator.count, 1)
+        self.assertContains(response, "CVE-2099-4242")
+
+
+class HostDetailInventorySearchTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="hostinv", password="pw12345")
+        self.host = Host.objects.create(ip_address="10.22.0.10", hostname="inv-host")
+        for i in range(25):
+            sw = Software.objects.create(name=f"component-{i}", version="1.0.0", vendor="acme")
+            sw.hosts.add(self.host)
+        needle = Software.objects.create(name="needle-component", version="9.1.1", vendor="acme")
+        needle.hosts.add(self.host)
+
+    def test_inventory_search_filters_across_all_pages(self):
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse("host_detail", args=[self.host.pk]) + "?tab=inventory&inv_q=needle-component"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["installed_software"].paginator.count, 1)
+        self.assertContains(response, "needle-component")
 
 
 class AgentInventorySnapshotSyncTests(TestCase):
@@ -393,6 +512,70 @@ class AgentInventorySnapshotSyncTests(TestCase):
             actor="software_delete:auto_close",
         ).latest("created_at")
         self.assertEqual(event.details.get("reason"), "software_deleted")
+
+    @patch("vuln_manager.extensions.agent.threading.Thread")
+    def test_large_inventory_payload_is_accepted_and_processed_async(self, thread_cls):
+        payload = {
+            "host_ip": "10.0.0.55",
+            "software": [
+                {"name": f"pkg-{i}", "version": "1.0.0", "vendor": "acme"}
+                for i in range(220)
+            ],
+        }
+        response = self._post_inventory(payload)
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.json().get("status"), "accepted")
+        thread_cls.assert_called_once()
+        thread_cls.return_value.start.assert_called_once()
+
+
+class WazuhWebhookAuthTests(TestCase):
+    def setUp(self):
+        self.url = reverse("wazuh_webhook")
+        self.extension = Extension.objects.create(
+            name_id="wazuh",
+            is_active=True,
+            api_token="wazuh-token-123",
+        )
+        self.payload = {
+            "agent": {"ip": "10.30.0.10", "name": "wazuh-agent"},
+            "data": {
+                "vulnerability": {
+                    "cve": "CVE-2026-90001",
+                    "severity": "high",
+                    "title": "Wazuh finding",
+                    "status": "VALID",
+                }
+            },
+        }
+
+    def test_wazuh_webhook_accepts_authorization_bearer_token(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps(self.payload),
+            content_type="application/json",
+            HTTP_AUTHORIZATION="Bearer wazuh-token-123",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("status"), "upserted")
+
+    def test_wazuh_webhook_still_accepts_x_api_key(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps(self.payload),
+            content_type="application/json",
+            HTTP_X_API_KEY="wazuh-token-123",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("status"), "upserted")
+
+    def test_wazuh_webhook_rejects_missing_token(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps(self.payload),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 401)
 
 
 class ManualVulnerabilityEnrichmentTests(TestCase):
@@ -747,3 +930,58 @@ class AITriageModuleConfigTests(TestCase):
         self.assertEqual(response.status_code, 302)
         settings_obj = SystemSettings.objects.get(pk=1)
         self.assertEqual(settings_obj.ai_azure_api_version, "")
+
+
+class CycloneDxImportTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="import-user", email="import@example.com", password="pw12345"
+        )
+        self.client.force_login(self.user)
+
+    def test_scan_import_creates_software_and_vulnerabilities_from_cyclonedx(self):
+        bom = {
+            "bomFormat": "CycloneDX",
+            "specVersion": "1.5",
+            "version": 1,
+            "components": [
+                {
+                    "type": "library",
+                    "name": "openssl",
+                    "version": "3.0.13",
+                    "publisher": "OpenSSL Software Foundation",
+                    "bom-ref": "pkg:generic/openssl@3.0.13",
+                }
+            ],
+            "vulnerabilities": [
+                {
+                    "id": "CVE-2024-99999",
+                    "description": "Test SBOM finding",
+                    "ratings": [
+                        {
+                            "method": "CVSSv31",
+                            "severity": "high",
+                            "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+                        }
+                    ],
+                    "affects": [{"ref": "pkg:generic/openssl@3.0.13"}],
+                }
+            ],
+        }
+        upload = SimpleUploadedFile(
+            "sbom.cdx.json",
+            json.dumps(bom).encode("utf-8"),
+            content_type="application/json",
+        )
+
+        response = self.client.post(
+            reverse("scan_import"),
+            {"scan_type": "CYCLONEDX", "raw_file": upload},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("dashboard"))
+
+        sw = Software.objects.get(name="openssl", version="3.0.13")
+        vuln = Vulnerability.objects.get(cve_id="CVE-2024-99999", software=sw)
+        self.assertEqual(vuln.scan.scan_type, "CYCLONEDX")
+        self.assertEqual(vuln.severity, "high")

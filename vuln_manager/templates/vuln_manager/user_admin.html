@@ -30,6 +30,31 @@
     </div>
 </section>
 
+<section class="mb-10 rounded-[2rem] p-6 bg-surface-container border border-outline-variant/10 shadow-xl">
+    <div class="flex flex-col gap-4">
+        <div>
+            <h2 class="text-sm font-bold text-on-surface uppercase tracking-[0.2em]">SLA Thresholds</h2>
+            <p class="text-xs text-on-surface-variant mt-1">
+                Configure when open critical/high vulnerabilities count as SLA breaches.
+            </p>
+        </div>
+        <form action="{% url 'save_sla_settings' %}" method="POST" class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+            {% csrf_token %}
+            <label class="flex flex-col gap-1 text-xs text-on-surface-variant">
+                Critical (days)
+                <input type="number" min="1" name="sla_critical_days" value="{{ sla_critical_days }}" class="rounded-lg bg-surface-container-highest border border-outline-variant/30 px-3 py-2 text-on-surface" />
+            </label>
+            <label class="flex flex-col gap-1 text-xs text-on-surface-variant">
+                High (days)
+                <input type="number" min="1" name="sla_high_days" value="{{ sla_high_days }}" class="rounded-lg bg-surface-container-highest border border-outline-variant/30 px-3 py-2 text-on-surface" />
+            </label>
+            <button class="rounded-lg px-3 py-2 border border-outline-variant/30 hover:border-primary/40 text-on-surface-variant hover:text-primary transition-all">
+                Save SLA Settings
+            </button>
+        </form>
+    </div>
+</section>
+
 <section class="rounded-[2rem] bg-surface-container border border-outline-variant/10 shadow-xl overflow-hidden">
     <div class="overflow-x-auto">
         <table class="w-full text-xs">

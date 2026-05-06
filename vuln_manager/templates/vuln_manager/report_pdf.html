@@ -120,7 +120,7 @@
             <tr>
                 <td>SLA Breaches</td>
                 <td style="font-weight: bold;">{{ metrics.sla_breach_count }}</td>
-                <td>Open critical findings older than 7 days and high findings older than 30 days.</td>
+                <td>Open critical findings older than {{ metrics.sla_critical_days }} days and high findings older than {{ metrics.sla_high_days }} days.</td>
             </tr>
             <tr>
                 <td>Reopened Findings (30d)</td>

@@ -11,6 +11,7 @@ services:
       DISABLE_REGISTER: ${DISABLE_REGISTER}
       DATABASE_PATH: ${DATABASE_PATH}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      CSRF_TRUSTED_ORIGINS: "http://localhost:8000"
     env_file:
       - .env
     volumes:

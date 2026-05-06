@@ -2,6 +2,7 @@ from django.core.paginator import Paginator
 from django.views.decorators.http import require_POST
 from django.shortcuts import render, redirect, get_object_or_404
 from django.db.models import Count, Q, Max, Case, When, Value, IntegerField, Avg
+from pathlib import Path
 from .models import (
     Host,
     Port,
@@ -17,6 +18,7 @@ from .parser import nuclei
 from .parser import openvas
 from .parser import osvscanner
 from .parser import semgrep
+from .parser import cyclonedx
 from .utils import ai_triage
 from .utils.audit import log_vulnerability_event
 from .utils.vuln_dedup import create_or_update_vulnerability
@@ -30,7 +32,13 @@ from django.contrib.auth.models import User
 from django.core.mail import EmailMessage
 from django.utils.http import url_has_allowed_host_and_scheme
 import io
-from django.http import FileResponse, HttpResponse, HttpResponseForbidden, JsonResponse
+from django.http import (
+    FileResponse,
+    HttpResponse,
+    HttpResponseForbidden,
+    HttpResponseNotFound,
+    JsonResponse,
+)
 from django.utils.timezone import now
 from datetime import timedelta
 import re
@@ -47,6 +55,13 @@ CRITICALITY_WEIGHTS = {
     "Low": 1,
     None: 0,
     "": 0,
+}
+
+AGENT_PUBLIC_FILES = {
+    "install.sh": "install.sh",
+    "agent.env.example": "agent.env.example",
+    "cve3po-agent-linux-amd64": "cve3po-agent-linux-amd64",
+    "cve3po-agent-linux-amd64.sha256": "cve3po-agent-linux-amd64.sha256",
 }
 
 
@@ -152,6 +167,19 @@ def recalculate_host_criticality(host):
     host.save()
 
 
+def _get_sla_thresholds():
+    settings_obj = get_system_settings()
+    try:
+        critical_days = int(settings_obj.sla_critical_days)
+    except (TypeError, ValueError):
+        critical_days = 7
+    try:
+        high_days = int(settings_obj.sla_high_days)
+    except (TypeError, ValueError):
+        high_days = 30
+    return max(1, critical_days), max(1, high_days)
+
+
 def _build_dashboard_report_context():
     all_vulns = Vulnerability.objects.exclude(status__in=["fixed", "false_positive"])
     critical_count = all_vulns.filter(severity="critical").count()
@@ -173,7 +201,9 @@ def _build_dashboard_report_context():
     )
     resolved_count = Vulnerability.objects.filter(status="fixed").count()
     total_non_fp = Vulnerability.objects.exclude(status="false_positive").count()
-    remediation_rate = round((resolved_count / total_non_fp) * 100, 1) if total_non_fp else 0
+    remediation_rate = (
+        round((resolved_count / total_non_fp) * 100, 1) if total_non_fp else 0
+    )
     exposure_rate = round((vuln_hosts_count / host_count) * 100, 1) if host_count else 0
     avg_open_age_days = 0
     open_ages = [
@@ -184,9 +214,10 @@ def _build_dashboard_report_context():
     if open_ages:
         avg_open_age_days = round(sum(open_ages) / len(open_ages), 1)
     oldest_open_days = max(open_ages) if open_ages else 0
+    sla_critical_days, sla_high_days = _get_sla_thresholds()
     sla_breach_count = all_vulns.filter(
-        Q(severity="critical", first_seen__lt=now() - timedelta(days=7))
-        | Q(severity="high", first_seen__lt=now() - timedelta(days=30))
+        Q(severity="critical", first_seen__lt=now() - timedelta(days=sla_critical_days))
+        | Q(severity="high", first_seen__lt=now() - timedelta(days=sla_high_days))
     ).count()
     reopened_30d = VulnerabilityAuditEvent.objects.filter(
         action="reopened", created_at__gte=now() - timedelta(days=30)
@@ -230,6 +261,8 @@ def _build_dashboard_report_context():
             "avg_open_age_days": avg_open_age_days,
             "oldest_open_days": oldest_open_days,
             "sla_breach_count": sla_breach_count,
+            "sla_critical_days": sla_critical_days,
+            "sla_high_days": sla_high_days,
             "reopened_30d": reopened_30d,
         },
         "top_hosts": top_hosts,
@@ -247,6 +280,30 @@ def _render_dashboard_pdf_buffer():
         return None
     buffer.seek(0)
     return buffer
+
+
+def agent_latest_file(request, filename):
+    agent_ext, _ = Extension.objects.get_or_create(name_id="agent_api")
+    if not agent_ext.is_active:
+        return HttpResponseNotFound()
+
+    relative_name = AGENT_PUBLIC_FILES.get(filename)
+    if not relative_name:
+        return HttpResponseNotFound()
+
+    base_dir = Path(settings.BASE_DIR) / "software-agent"
+    file_path = (base_dir / relative_name).resolve()
+    try:
+        file_path.relative_to(base_dir.resolve())
+    except ValueError:
+        return HttpResponseNotFound()
+
+    if not file_path.exists() or not file_path.is_file():
+        return HttpResponseNotFound()
+
+    return FileResponse(
+        open(file_path, "rb"), as_attachment=True, filename=file_path.name
+    )
 
 
 @login_required
@@ -281,7 +338,9 @@ def dashboard(request):
     resolved_count = Vulnerability.objects.filter(status="fixed").count()
     ignored_count = Vulnerability.objects.filter(status="risk_accepted").count()
     total_non_fp = Vulnerability.objects.exclude(status="false_positive").count()
-    remediation_rate = round((resolved_count / total_non_fp) * 100, 1) if total_non_fp else 0
+    remediation_rate = (
+        round((resolved_count / total_non_fp) * 100, 1) if total_non_fp else 0
+    )
     impacted_assets_count = (
         Host.objects.filter(
             Q(vulnerabilities__in=all_open_vulns)
@@ -290,7 +349,9 @@ def dashboard(request):
         .distinct()
         .count()
     )
-    exposure_rate = round((impacted_assets_count / host_count) * 100, 1) if host_count else 0
+    exposure_rate = (
+        round((impacted_assets_count / host_count) * 100, 1) if host_count else 0
+    )
     open_ages = [
         max((now() - opened_at).days, 0)
         for opened_at in all_open_vulns.values_list("first_seen", flat=True)
@@ -298,9 +359,10 @@ def dashboard(request):
     ]
     avg_open_age_days = round(sum(open_ages) / len(open_ages), 1) if open_ages else 0
     oldest_open_days = max(open_ages) if open_ages else 0
+    sla_critical_days, sla_high_days = _get_sla_thresholds()
     sla_breach_count = all_open_vulns.filter(
-        Q(severity="critical", first_seen__lt=now() - timedelta(days=7))
-        | Q(severity="high", first_seen__lt=now() - timedelta(days=30))
+        Q(severity="critical", first_seen__lt=now() - timedelta(days=sla_critical_days))
+        | Q(severity="high", first_seen__lt=now() - timedelta(days=sla_high_days))
     ).count()
     reopened_30d = VulnerabilityAuditEvent.objects.filter(
         action="reopened", created_at__gte=now() - timedelta(days=30)
@@ -334,6 +396,7 @@ def dashboard(request):
     trend_fixed = []
 
     import datetime
+
     today = datetime.date.today()
     for i in range(13, -1, -1):
         day = today - datetime.timedelta(days=i)
@@ -436,6 +499,8 @@ def dashboard(request):
         "avg_open_age_days": avg_open_age_days,
         "oldest_open_days": oldest_open_days,
         "sla_breach_count": sla_breach_count,
+        "sla_critical_days": sla_critical_days,
+        "sla_high_days": sla_high_days,
         "reopened_30d": reopened_30d,
         "status_map": status_map,
         "user": User.objects.get(pk=request.user.id),
@@ -445,7 +510,16 @@ def dashboard(request):
 
 @login_required
 def host_list(request):
-    hosts_query = Host.objects.all().order_by("ip_address")
+    query = (request.GET.get("q") or "").strip()
+    hosts_query = Host.objects.all()
+    if query:
+        hosts_query = hosts_query.filter(
+            Q(ip_address__icontains=query)
+            | Q(hostname__icontains=query)
+            | Q(operating_system__icontains=query)
+            | Q(criticality__icontains=query)
+        )
+    hosts_query = hosts_query.order_by("ip_address")
 
     # Pagination
     paginator = Paginator(hosts_query, 25)  # 25 per page
@@ -464,7 +538,11 @@ def host_list(request):
         )
         host.num_vulns = inherited_q.exclude(severity="info").count()
         host.num_info = inherited_q.filter(severity="info").count()
-    return render(request, "vuln_manager/host_list.html", {"hosts": hosts})
+    return render(
+        request,
+        "vuln_manager/host_list.html",
+        {"hosts": hosts, "query": query},
+    )
 
 
 @login_required
@@ -524,7 +602,15 @@ def host_detail(request, pk):
             )
             & ~Q(vulnerabilities__status__in=["fixed", "false_positive"]),
         )
-    ).order_by("name")
+    )
+    inventory_query = (request.GET.get("inv_q") or "").strip()
+    if inventory_query:
+        sw_query = sw_query.filter(
+            Q(name__icontains=inventory_query)
+            | Q(version__icontains=inventory_query)
+            | Q(vendor__icontains=inventory_query)
+        )
+    sw_query = sw_query.order_by("name")
 
     sw_paginator = Paginator(sw_query, 20)
     sw_page_number = request.GET.get("sw_page")
@@ -543,6 +629,7 @@ def host_detail(request, pk):
             "timeline_labels": json.dumps(host_timeline_labels),
             "timeline_values": json.dumps(host_timeline_values),
             "installed_software": installed_software,
+            "inventory_query": inventory_query,
             "show_mode": show_mode,
             "severity_filter": severity_filter,
             "severity_choices": Vulnerability.SEVERITY_CHOICES,
@@ -554,15 +641,26 @@ def host_detail(request, pk):
 
 @login_required
 def software_list(request):
-    software_query = Software.objects.annotate(num_hosts=Count("hosts")).order_by(
-        "name"
-    )
+    query = (request.GET.get("q") or "").strip()
+    software_query = Software.objects.annotate(num_hosts=Count("hosts"))
+    if query:
+        software_query = software_query.filter(
+            Q(name__icontains=query)
+            | Q(version__icontains=query)
+            | Q(vendor__icontains=query)
+            | Q(criticality__icontains=query)
+        )
+    software_query = software_query.order_by("name")
 
     paginator = Paginator(software_query, 25)
     page_number = request.GET.get("page")
     software = paginator.get_page(page_number)
 
-    return render(request, "vuln_manager/software_list.html", {"software": software})
+    return render(
+        request,
+        "vuln_manager/software_list.html",
+        {"software": software, "query": query},
+    )
 
 
 @login_required
@@ -604,7 +702,9 @@ def software_rescan_osv(request, pk):
     if not sw.version:
         return HttpResponseForbidden("missing_version")
 
-    worker = threading.Thread(target=enrich_software_with_feeds, args=(sw.id,), daemon=True)
+    worker = threading.Thread(
+        target=enrich_software_with_feeds, args=(sw.id,), daemon=True
+    )
     worker.start()
     return redirect("software_detail", pk=pk)
 
@@ -818,7 +918,9 @@ def port_list(request):
 @login_required
 def scan_list(request):
     scans = list(
-        Scan.objects.annotate(num_vulns=Count("vulnerabilities")).order_by("-uploaded_at")
+        Scan.objects.annotate(num_vulns=Count("vulnerabilities")).order_by(
+            "-uploaded_at"
+        )
     )
     last_by_type = {}
     for scan in reversed(scans):
@@ -993,6 +1095,7 @@ def update_vuln_status(request, pk):
 
 @login_required
 def vuln_list(request):
+    query = (request.GET.get("q") or "").strip()
     severity = (request.GET.get("severity") or "").lower()
     allowed_severities = {choice[0] for choice in Vulnerability.SEVERITY_CHOICES}
     if severity and severity not in allowed_severities:
@@ -1009,6 +1112,17 @@ def vuln_list(request):
 
     if severity:
         vulns_query = vulns_query.filter(severity=severity.lower())
+
+    if query:
+        vulns_query = vulns_query.filter(
+            Q(cve_id__icontains=query)
+            | Q(name__icontains=query)
+            | Q(description__icontains=query)
+            | Q(host__ip_address__icontains=query)
+            | Q(host__hostname__icontains=query)
+            | Q(software__name__icontains=query)
+            | Q(software__version__icontains=query)
+        ).distinct()
 
     vulns_query = vulns_query.order_by("-severity", "cve_id")
 
@@ -1038,6 +1152,7 @@ def vuln_list(request):
             "severity_choices": Vulnerability.SEVERITY_CHOICES,
             "status_filter": status_filter,
             "metrics": metrics,
+            "query": query,
         },
     )
 
@@ -1059,8 +1174,9 @@ def vuln_detail(request, pk):
         {
             "vuln": vuln,
             "wrike_ready": wrike_ready,
-            "audit_events": VulnerabilityAuditEvent.objects.filter(vulnerability=vuln)
-            .order_by("-created_at")[:20],
+            "audit_events": VulnerabilityAuditEvent.objects.filter(
+                vulnerability=vuln
+            ).order_by("-created_at")[:20],
         },
     )
 
@@ -1087,6 +1203,8 @@ def scan_import(request):
                 semgrep.parse_semgrep_json(file_path, scan_obj, software_obj=sw_obj)
             elif scan_type == "OSV":
                 osvscanner.parse_osv_json(file_path, scan_obj, software_obj=sw_obj)
+            elif scan_type == "CYCLONEDX":
+                cyclonedx.parse_cyclonedx_json(file_path, scan_obj, software_obj=sw_obj)
             if sw_obj:
                 return redirect("software_detail", pk=sw_obj.id)
             return redirect("dashboard")
@@ -1230,9 +1348,7 @@ def extensions_view(request):
                     system_settings.ai_azure_model if mid == "ai_triage" else None
                 ),
                 "ai_azure_api_version": (
-                    system_settings.ai_azure_api_version
-                    if mid == "ai_triage"
-                    else None
+                    system_settings.ai_azure_api_version if mid == "ai_triage" else None
                 ),
                 "icon": meta["icon"],
                 "color": meta["color"],
@@ -1265,6 +1381,8 @@ def user_admin(request):
         {
             "managed_users": managed_users,
             "registration_disabled": system_settings.disable_register,
+            "sla_critical_days": system_settings.sla_critical_days,
+            "sla_high_days": system_settings.sla_high_days,
         },
     )
 
@@ -1291,6 +1409,25 @@ def delete_user(request, pk):
     if target_user.is_superuser and User.objects.filter(is_superuser=True).count() <= 1:
         return HttpResponseForbidden("cannot_delete_last_superuser")
     target_user.delete()
+    return redirect("user_admin")
+
+
+@login_required
+@require_POST
+def save_sla_settings(request):
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("forbidden")
+    try:
+        critical_days = int(request.POST.get("sla_critical_days", "7"))
+        high_days = int(request.POST.get("sla_high_days", "30"))
+    except ValueError:
+        return HttpResponseForbidden("invalid_sla_values")
+    if critical_days < 1 or high_days < 1:
+        return HttpResponseForbidden("invalid_sla_values")
+    settings_obj = get_system_settings()
+    settings_obj.sla_critical_days = critical_days
+    settings_obj.sla_high_days = high_days
+    settings_obj.save(update_fields=["sla_critical_days", "sla_high_days"])
     return redirect("user_admin")
 
 
@@ -1373,9 +1510,7 @@ def send_email_report_now(request):
         return HttpResponseForbidden("email_reporting_disabled")
     recipients_raw = get_system_settings().email_report_recipients or ""
     recipients = [
-        email.strip()
-        for email in re.split(r"[,;\n]", recipients_raw)
-        if email.strip()
+        email.strip() for email in re.split(r"[,;\n]", recipients_raw) if email.strip()
     ]
     if not recipients:
         return HttpResponseForbidden("email_reporting_not_configured")
@@ -1456,7 +1591,11 @@ def sync_wrike_ticket(request, pk):
                     },
                 )
         else:
-            should_complete = vuln.status in {"fixed", "false_positive", "risk_accepted"}
+            should_complete = vuln.status in {
+                "fixed",
+                "false_positive",
+                "risk_accepted",
+            }
             wrike_ext.mark_task_completed(
                 wrike_extension.api_token, vuln.wrike_task_id, should_complete
             )
