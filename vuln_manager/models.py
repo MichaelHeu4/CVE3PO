@@ -20,6 +20,8 @@ class Extension(models.Model):
 
 class SystemSettings(models.Model):
     disable_register = models.BooleanField(default=True)
+    sla_critical_days = models.PositiveIntegerField(default=7)
+    sla_high_days = models.PositiveIntegerField(default=30)
     wrike_folder_id = models.CharField(max_length=100, blank=True, null=True)
     email_report_recipients = models.TextField(blank=True, null=True)
     ai_triage_provider = models.CharField(max_length=20, default="openrouter")
@@ -44,6 +46,7 @@ class Scan(models.Model):
         ("NUCLEI", "Nuclei Scan"),
         ("OPENVAS", "OpenVAS Scan"),
         ("SEMGREP", "Semgrep SAST"),
+        ("CYCLONEDX", "CycloneDX SBOM"),
         ("MANUAL", "Manual Entry"),
         ("OSV", "OSV Scan"),
         ("NVD", "NVD Scan"),

@@ -5,6 +5,7 @@ import io
 from datetime import timedelta
 
 from django.contrib.auth.models import User
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.test.utils import override_settings
 from django.urls import reverse
@@ -278,6 +279,53 @@ class AuthAndStatusFlowTests(TestCase):
         self.assertIn("sla_breach_count", response.context)
         self.assertIn("status_map", response.context)
         self.assertIn("top_software", response.context)
+
+
+class AgentPublicDownloadsTests(TestCase):
+    def setUp(self):
+        self.agent_extension = Extension.objects.create(name_id="agent_api", is_active=True)
+
+    def test_agent_install_script_is_publicly_downloadable(self):
+        response = self.client.get(reverse("agent_latest_file", args=["install.sh"]))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("attachment; filename=\"install.sh\"", response["Content-Disposition"])
+
+    def test_unknown_agent_file_returns_404(self):
+        response = self.client.get(reverse("agent_latest_file", args=["not-found.sh"]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_downloads_blocked_when_agent_module_disabled(self):
+        self.agent_extension.is_active = False
+        self.agent_extension.save(update_fields=["is_active"])
+        response = self.client.get(reverse("agent_latest_file", args=["install.sh"]))
+        self.assertEqual(response.status_code, 404)
+
+
+class SlaSettingsTests(TestCase):
+    def setUp(self):
+        self.superuser = User.objects.create_superuser(
+            username="root", email="root@example.com", password="pw12345"
+        )
+        self.user = User.objects.create_user(username="normal", password="pw12345")
+
+    def test_superuser_can_update_sla_settings(self):
+        self.client.force_login(self.superuser)
+        response = self.client.post(
+            reverse("save_sla_settings"),
+            {"sla_critical_days": "5", "sla_high_days": "20"},
+        )
+        self.assertEqual(response.status_code, 302)
+        settings_obj = SystemSettings.objects.get(pk=1)
+        self.assertEqual(settings_obj.sla_critical_days, 5)
+        self.assertEqual(settings_obj.sla_high_days, 20)
+
+    def test_non_superuser_cannot_update_sla_settings(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("save_sla_settings"),
+            {"sla_critical_days": "5", "sla_high_days": "20"},
+        )
+        self.assertEqual(response.status_code, 403)
 
 
 class SoftwareRescanPermissionTests(TestCase):
@@ -882,3 +930,58 @@ class AITriageModuleConfigTests(TestCase):
         self.assertEqual(response.status_code, 302)
         settings_obj = SystemSettings.objects.get(pk=1)
         self.assertEqual(settings_obj.ai_azure_api_version, "")
+
+
+class CycloneDxImportTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="import-user", email="import@example.com", password="pw12345"
+        )
+        self.client.force_login(self.user)
+
+    def test_scan_import_creates_software_and_vulnerabilities_from_cyclonedx(self):
+        bom = {
+            "bomFormat": "CycloneDX",
+            "specVersion": "1.5",
+            "version": 1,
+            "components": [
+                {
+                    "type": "library",
+                    "name": "openssl",
+                    "version": "3.0.13",
+                    "publisher": "OpenSSL Software Foundation",
+                    "bom-ref": "pkg:generic/openssl@3.0.13",
+                }
+            ],
+            "vulnerabilities": [
+                {
+                    "id": "CVE-2024-99999",
+                    "description": "Test SBOM finding",
+                    "ratings": [
+                        {
+                            "method": "CVSSv31",
+                            "severity": "high",
+                            "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+                        }
+                    ],
+                    "affects": [{"ref": "pkg:generic/openssl@3.0.13"}],
+                }
+            ],
+        }
+        upload = SimpleUploadedFile(
+            "sbom.cdx.json",
+            json.dumps(bom).encode("utf-8"),
+            content_type="application/json",
+        )
+
+        response = self.client.post(
+            reverse("scan_import"),
+            {"scan_type": "CYCLONEDX", "raw_file": upload},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("dashboard"))
+
+        sw = Software.objects.get(name="openssl", version="3.0.13")
+        vuln = Vulnerability.objects.get(cve_id="CVE-2024-99999", software=sw)
+        self.assertEqual(vuln.scan.scan_type, "CYCLONEDX")
+        self.assertEqual(vuln.severity, "high")

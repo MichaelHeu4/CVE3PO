@@ -48,6 +48,7 @@
                                 <option value="OPENVAS">OPENVAS Security Report</option>
                                 <option value="SEMGREP">SEMGREP SAST Analysis</option>
                                 <option value="OSV">OSV Scan Report</option>
+                                <option value="CYCLONEDX">CycloneDX / Syft SBOM</option>
                             </select>
                             <div class="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-outline">
                                 <span class="material-symbols-outlined text-sm">expand_more</span>
@@ -92,6 +93,11 @@
         <div class="p-4 bg-surface-container-low rounded-2xl text-center">
             <p class="text-[9px] font-black text-primary uppercase tracking-widest">OSV Scanner</p>
             <p class="text-[8px] text-outline uppercase mt-1">Report JSON</p>
+        </div>
+        <div class="p-4 bg-surface-container-low rounded-2xl text-center">
+            <p class="text-[9px] font-black text-primary uppercase tracking-widest">CycloneDX</p>
+            <p class="text-[8px] text-outline uppercase mt-1">SBOM JSON (Syft)</p>
+        </div>
     </div>
 </div>
 {% endblock %}

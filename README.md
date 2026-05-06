@@ -14,6 +14,7 @@ Ingest and parse technical manifests from industry-standard security tools:
 - **Nuclei**: Template-based vulnerability scanning with automated POC extraction.
 - **OpenVAS (GVM)**: Deep infrastructure security reports.
 - **Semgrep SAST**: Static analysis findings linked directly to software artifacts.
+- **CycloneDX / Syft SBOM**: Dependency and supply-chain import via CycloneDX JSON.
 - OSV + NVD Enrichment: Open source and NVD CVE data for software dependencies.
 
 ### 🏛️ Architectural Registry
