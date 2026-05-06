@@ -180,5 +180,5 @@ systemctl disable --now cve3po-agent.service >/dev/null 2>&1 || true
 systemctl enable --now cve3po-agent.timer
 systemctl start cve3po-agent.service
 
-echo "Installed cve3po-agent.service and enabled cve3po-agent.timer (15 min interval)"
+echo "Installed cve3po-agent.service and enabled cve3po-agent.timer (60 min interval)"
 echo "Config: ${ENV_FILE}"
