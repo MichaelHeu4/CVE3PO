@@ -281,6 +281,38 @@ class AuthAndStatusFlowTests(TestCase):
         self.assertIn("top_software", response.context)
 
 
+class HostExposureFlagTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="exposure-user", password="pw12345")
+        self.host = Host.objects.create(ip_address="10.44.0.10")
+
+    def test_host_form_sets_exposed_flag(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("host_add"),
+            {
+                "ip_address": "10.44.0.11",
+                "hostname": "edge-node",
+                "operating_system": "Debian",
+                "criticality": "",
+                "is_exposed": "1",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        created = Host.objects.get(ip_address="10.44.0.11")
+        self.assertTrue(created.is_exposed)
+
+    def test_host_detail_exposure_update_endpoint(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("update_host_exposure", args=[self.host.pk]),
+            {"is_exposed": "1"},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.host.refresh_from_db()
+        self.assertTrue(self.host.is_exposed)
+
+
 class AgentPublicDownloadsTests(TestCase):
     def setUp(self):
         self.agent_extension = Extension.objects.create(name_id="agent_api", is_active=True)
@@ -299,6 +331,65 @@ class AgentPublicDownloadsTests(TestCase):
         self.agent_extension.save(update_fields=["is_active"])
         response = self.client.get(reverse("agent_latest_file", args=["install.sh"]))
         self.assertEqual(response.status_code, 404)
+
+
+class AgentInstallGuideTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_superuser(
+            username="agent-admin", email="agent-admin@example.com", password="pw12345"
+        )
+        self.user = User.objects.create_user(
+            username="agent-user", email="agent-user@example.com", password="pw12345"
+        )
+        self.agent_extension = Extension.objects.create(name_id="agent_api", is_active=True)
+        self.host = Host.objects.create(ip_address="10.88.0.10", hostname="agent-node")
+        self.software = Software.objects.create(name="openssl", version="3.0.0", vendor="openssl")
+        self.software.hosts.add(self.host)
+        HostSoftwareRelationship.objects.create(
+            host=self.host, software=self.software, source="agent"
+        )
+
+    def test_superuser_can_access_agent_install_guide_when_module_active(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("agent_install_guide"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "/agent/latest/install.sh")
+        self.assertContains(response, "/api/inventory/update/")
+        self.assertContains(response, "10.88.0.10")
+
+    def test_non_superuser_cannot_access_agent_install_guide(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("agent_install_guide"))
+        self.assertEqual(response.status_code, 403)
+
+    def test_agent_install_guide_returns_404_when_module_inactive(self):
+        self.agent_extension.is_active = False
+        self.agent_extension.save(update_fields=["is_active"])
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("agent_install_guide"))
+        self.assertEqual(response.status_code, 404)
+
+
+class HostDetailAgentIndicatorTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="sensor-user", password="pw12345")
+        self.scan = Scan.objects.create(scan_type="MANUAL")
+        self.host = Host.objects.create(ip_address="10.66.0.10")
+
+    def test_host_detail_hides_sensor_icon_without_agent_data(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("host_detail", args=[self.host.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, ">sensors<", html=False)
+
+    def test_host_detail_shows_sensor_icon_with_agent_data(self):
+        sw = Software.objects.create(name="nginx", version="1.24", vendor="nginx")
+        sw.hosts.add(self.host)
+        HostSoftwareRelationship.objects.create(host=self.host, software=sw, source="agent")
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("host_detail", args=[self.host.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, ">sensors<", html=False)
 
 
 class SlaSettingsTests(TestCase):

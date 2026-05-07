@@ -10,9 +10,6 @@ from vuln_manager.utils.vuln_dedup import create_or_update_vulnerability
 logger = logging.getLogger(__name__)
 
 
-logger = logging.getLogger(__name__)
-
-
 @csrf_exempt
 @require_POST
 def webhook(request):

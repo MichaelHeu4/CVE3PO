@@ -106,6 +106,13 @@
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
         }
+
+        /* Slightly denser table rows across list views */
+        table th,
+        table td {
+            padding-top: 0.5rem !important;
+            padding-bottom: 0.5rem !important;
+        }
     </style>
 </head>
 <body class="antialiased overflow-x-hidden">
@@ -155,6 +162,12 @@
                 <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'user_admin' %}font-variation-settings: 'FILL' 1;{% endif %}">admin_panel_settings</span>
                 <span class="font-bold text-xs uppercase tracking-[0.2em]">Users</span>
             </a>
+            {% if agent_module_active %}
+            <a href="{% url 'agent_install_guide' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.resolver_match.url_name == 'agent_install_guide' %}bg-primary/10 text-primary shadow-[0_0_20px_rgba(59,191,250,0.1)] border border-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface{% endif %}">
+                <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'agent_install_guide' %}font-variation-settings: 'FILL' 1;{% endif %}">terminal</span>
+                <span class="font-bold text-xs uppercase tracking-[0.2em]">Agent Install</span>
+            </a>
+            {% endif %}
             {% endif %}
 
             <a href="{% url 'kanban_board' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.resolver_match.url_name == 'kanban_board' %}bg-primary/10 text-primary shadow-[0_0_20px_rgba(59,191,250,0.1)] border border-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface{% endif %}">

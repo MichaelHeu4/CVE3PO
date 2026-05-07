@@ -5,6 +5,7 @@ from django.db.models import Count, Q, Max, Case, When, Value, IntegerField, Avg
 from pathlib import Path
 from .models import (
     Host,
+    HostSoftwareRelationship,
     Port,
     Vulnerability,
     VulnerabilityAuditEvent,
@@ -282,9 +283,49 @@ def _render_dashboard_pdf_buffer():
     return buffer
 
 
+def _is_agent_module_active():
+    return Extension.objects.filter(name_id="agent_api", is_active=True).exists()
+
+
+@login_required
+def agent_install_guide(request):
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("forbidden")
+    if not _is_agent_module_active():
+        return HttpResponseNotFound()
+
+    base_url = request.build_absolute_uri("/").rstrip("/")
+    install_script_url = f"{base_url}/agent/latest/install.sh"
+    binary_url = f"{base_url}/agent/latest/cve3po-agent-linux-amd64"
+    sha256_url = f"{base_url}/agent/latest/cve3po-agent-linux-amd64.sha256"
+    api_url = f"{base_url}/api/inventory/update/"
+    agent_hosts = (
+        HostSoftwareRelationship.objects.filter(source="agent")
+        .values(
+            "host_id",
+            "host__ip_address",
+            "host__hostname",
+            "host__operating_system",
+            "host__last_scanned",
+        )
+        .annotate(agent_packages=Count("software_id", distinct=True))
+        .order_by("host__ip_address")
+    )
+    return render(
+        request,
+        "vuln_manager/agent_install.html",
+        {
+            "install_script_url": install_script_url,
+            "binary_url": binary_url,
+            "sha256_url": sha256_url,
+            "api_url": api_url,
+            "agent_hosts": agent_hosts,
+        },
+    )
+
+
 def agent_latest_file(request, filename):
-    agent_ext, _ = Extension.objects.get_or_create(name_id="agent_api")
-    if not agent_ext.is_active:
+    if not _is_agent_module_active():
         return HttpResponseNotFound()
 
     relative_name = AGENT_PUBLIC_FILES.get(filename)
@@ -617,6 +658,9 @@ def host_detail(request, pk):
     installed_software = sw_paginator.get_page(sw_page_number)
 
     active_tab = request.GET.get("tab", "threats")
+    has_agent_data = HostSoftwareRelationship.objects.filter(
+        host=host, source="agent"
+    ).exists()
 
     return render(
         request,
@@ -634,6 +678,7 @@ def host_detail(request, pk):
             "severity_filter": severity_filter,
             "severity_choices": Vulnerability.SEVERITY_CHOICES,
             "active_tab": active_tab,
+            "has_agent_data": has_agent_data,
             "criticality_choices": Host.CRITICALITY_CHOICES,
         },
     )
@@ -802,6 +847,15 @@ def update_host_criticality(request, pk):
 
 
 @login_required
+def update_host_exposure(request, pk):
+    if request.method == "POST":
+        host = get_object_or_404(Host, pk=pk)
+        host.is_exposed = request.POST.get("is_exposed") == "1"
+        host.save(update_fields=["is_exposed"])
+    return redirect("host_detail", pk=pk)
+
+
+@login_required
 def vuln_add(request):
     if request.method == "POST":
         ip_address = request.POST.get("ip_address")
@@ -877,6 +931,7 @@ def host_form(request, pk=None):
         hostname = request.POST.get("hostname")
         operating_system = request.POST.get("operating_system")
         criticality = request.POST.get("criticality")
+        is_exposed = request.POST.get("is_exposed") == "1"
 
         if not host_obj:
             host_obj = Host(ip_address=ip_address)
@@ -886,6 +941,7 @@ def host_form(request, pk=None):
         host_obj.hostname = hostname
         host_obj.operating_system = operating_system
         host_obj.criticality = criticality
+        host_obj.is_exposed = is_exposed
         host_obj.save()
         return redirect("host_list")
 

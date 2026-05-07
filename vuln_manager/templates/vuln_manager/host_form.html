@@ -54,6 +54,19 @@
                                class="w-full bg-surface-container-lowest border border-outline-variant/10 rounded-xl px-5 py-4 text-on-surface text-sm font-bold focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-outline/20"
                                placeholder="e.g. Ubuntu 24.04 LTS">
                     </div>
+
+                    <div class="md:col-span-12">
+                        <label class="block text-[10px] font-black uppercase tracking-[0.3em] text-outline/50 mb-3">Internet Facing</label>
+                        <div class="relative group">
+                            <select name="is_exposed" class="w-full bg-surface-container-lowest border border-outline-variant/10 rounded-xl px-5 py-4 text-on-surface text-sm font-black uppercase tracking-widest focus:ring-2 focus:ring-primary/30 transition-all appearance-none cursor-pointer">
+                                <option value="0" {% if not host_obj or not host_obj.is_exposed %}selected{% endif %}>Internal</option>
+                                <option value="1" {% if host_obj and host_obj.is_exposed %}selected{% endif %}>Internet Facing (Exposed)</option>
+                            </select>
+                            <div class="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-primary">
+                                <span class="material-symbols-outlined text-sm">public</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Guidance Info -->

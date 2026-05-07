@@ -1,0 +1,67 @@
+{% extends 'vuln_manager/base.html' %}
+
+{% block title %}Agent Install{% endblock %}
+{% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto space-y-8">
+    <section>
+        <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight mb-2">Agent <span class="text-primary">Install</span></h1>
+        <p class="text-on-surface-variant text-sm">Deployment guide with prefilled URLs for your current instance.</p>
+    </section>
+
+    <div class="bg-surface-container rounded-3xl p-8 shadow-xl">
+        <h2 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-4">1. Download Installer</h2>
+        <pre class="bg-surface-container-low rounded-xl p-4 text-[11px] text-on-surface overflow-x-auto">wget -O install.sh {{ install_script_url }}</pre>
+    </div>
+
+    <div class="bg-surface-container rounded-3xl p-8 shadow-xl">
+        <h2 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-4">2. Run Installation</h2>
+        <pre class="bg-surface-container-low rounded-xl p-4 text-[11px] text-on-surface overflow-x-auto">sudo bash install.sh \
+  --binary-url {{ binary_url }} \
+  --sha256-url {{ sha256_url }} \
+  --api-url {{ api_url }} \
+  --token &lt;AGENT_API_TOKEN&gt;</pre>
+        <p class="text-[10px] text-outline mt-4">The API token is shown in <strong>Modules → CVE3PO Agent</strong>.</p>
+    </div>
+
+    <div class="bg-surface-container rounded-3xl p-8 shadow-xl">
+        <h2 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-4">3. Verify Service</h2>
+        <pre class="bg-surface-container-low rounded-xl p-4 text-[11px] text-on-surface overflow-x-auto">sudo systemctl status cve3po-agent.timer --no-pager
+sudo systemctl status cve3po-agent.service --no-pager
+sudo journalctl -u cve3po-agent -n 100 --no-pager</pre>
+    </div>
+
+    <div class="bg-surface-container rounded-3xl p-8 shadow-xl">
+        <h2 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-4">Hosts with Agent Data</h2>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left">
+                <thead>
+                    <tr class="text-[9px] font-black uppercase tracking-[0.2em] text-outline/50 border-b border-outline-variant/20">
+                        <th class="px-4 py-3">Host</th>
+                        <th class="px-4 py-3">Hostname</th>
+                        <th class="px-4 py-3">Operating System</th>
+                        <th class="px-4 py-3 text-right">Agent Packages</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in agent_hosts %}
+                    <tr class="border-b border-outline-variant/10 hover:bg-surface-container-high/40 transition-colors">
+                        <td class="px-4 py-3">
+                            <a href="{% url 'host_detail' row.host_id %}" class="text-primary text-[11px] font-black hover:underline">{{ row.host__ip_address }}</a>
+                        </td>
+                        <td class="px-4 py-3 text-[10px] text-on-surface">{{ row.host__hostname|default:"-" }}</td>
+                        <td class="px-4 py-3 text-[10px] text-on-surface-variant">{{ row.host__operating_system|default:"-" }}</td>
+                        <td class="px-4 py-3 text-right text-[10px] font-black text-on-surface">{{ row.agent_packages }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-10 text-outline text-[10px] font-black uppercase tracking-widest">No hosts received agent inventory yet</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -4,56 +4,114 @@
 [![Tailwind CSS](https://img.shields.io/badge/Design-Tailwind%20CSS-06b6d4?logo=tailwind-css)](https://tailwindcss.com/)
 [![SQLite](https://img.shields.io/badge/Database-SQLite-003b57?logo=sqlite)](https://www.sqlite.org/)
 
-**CVE3PO** is modern simplistic Vulnerability Management platform designed to be easy understandable and easy to maintain. 
+**CVE3PO** ist eine kompakte Vulnerability-Management-Plattform für Infrastruktur, Software-Inventar und Supply-Chain-Risiken.
 
-## 🚀 Core Features
+## Features
 
-### 📡 Multi-Scanner Intelligence
-Ingest and parse technical manifests from industry-standard security tools:
-- **Nmap**: Full network discovery and service mapping.
-- **Nuclei**: Template-based vulnerability scanning with automated POC extraction.
-- **OpenVAS (GVM)**: Deep infrastructure security reports.
-- **Semgrep SAST**: Static analysis findings linked directly to software artifacts.
-- **CycloneDX / Syft SBOM**: Dependency and supply-chain import via CycloneDX JSON.
-- OSV + NVD Enrichment: Open source and NVD CVE data for software dependencies.
+### Scanner & Imports
+- Nmap
+- Nuclei
+- OpenVAS
+- Semgrep (SAST)
+- OSV + NVD Enrichment
+- CycloneDX / Syft (SBOM JSON)
+- Wazuh Webhook Feed
 
-### 🏛️ Architectural Registry
-- **Asset Inventory**: Automated tracking of hosts, open ports, and service status.
-- **Software Ecosystem**: Managed catalog of applications, versions, and vendors.
-- **Smart Port Routing**: Automatically associates network findings with specific software based on listening ports.
-- **Vulnerability Inheritance**: Software-level CVEs automatically propagate to all architectural nodes running that artifact.
+### Asset- & Vulnerability-Management
+- Host-/Port-/Software-Inventar
+- Vulnerability-Lifecycle (Open, In Progress, Fixed, Risk Accepted, False Positive)
+- Severity- und Suchfilter in den wichtigsten Ansichten
+- Scan-Diff zwischen Scans gleichen Typs
+- Manuelle Vulnerability-Erfassung + CVE-Enrichment
+- Host-Metadaten inkl. Criticality und Exposed-Flag
 
-### 🛠️ Strategic Workflow
-- **Interactive Kanban Board**: Drag-and-drop remediation pipeline (Open → In Progress → Fixed → Risk Accepted → False Positive).
-- **Business Criticality**: Define node and artifact importance. Automatic propagation ensures that high-value assets inherit the risk bias of their critical software.
-- **Manual Intelligence**: Register findings from external research or magazines through a dedicated manual entry workflow.
-- **AI Triage Module**: Optional SSVC-based triage module with selectable provider (OpenRouter or Azure AI).
+### Automatisierung & Module
+- CVE3PO Agent API (Snapshot-Sync für Software-Inventar)
+- AI Triage (OpenRouter oder Azure)
+- Wrike Integration
+- Email Reporting (PDF Report Versand)
+- Passwort-Reset Flows
 
-### 📊 Visual Analytics
-- **Risk Over Time**: Global trend analysis of active vulnerabilities.
-- **Finding History**: Host-specific bar charts tracking detection counts across multiple scans.
-- **PDF Export + Email Reporting Module**: Generate dashboard reports and optionally send them to configured recipients.
+### Reporting & Dashboard
+- KPI Dashboard (u. a. Remediation/Exposure/SLA)
+- KI Dashboard
+- PDF Export
 
-## 🛠️ Technical Stack
-- **Backend**: Python 3.11+, Django 5.2
-- **Frontend**: Tailwind CSS, Google Stitch (Vigilant Architect Specification)
-- **Charts**: Chart.js
-- **Interactivity**: SortableJS (Kanban Drag & Drop)
-- **Database**: SQLite (Standard)
+## Betrieb mit GHCR Image
 
-## 💻 Quick Start
-
-### 1. Clone & Setup Environment
+Image:
 ```bash
-git clone https://github.com/MichaelHeu4/cve3po.git
-cd cve3po
+docker pull ghcr.io/michaelheu4/cve3po:latest
+```
+
+### Variante 1: Docker Run
+```bash
+docker run -d \
+  --name cve3po \
+  -p 8000:8000 \
+  -e DJANGO_SECRET_KEY='change-me' \
+  -e DEBUG='False' \
+  -e DJANGO_ALLOWED_HOSTS='localhost 127.0.0.1' \
+  -e CSRF_TRUSTED_ORIGINS='http://localhost:8000' \
+  -e DISABLE_REGISTER='False' \
+  -e DATABASE_PATH='/app/data/db.sqlite3' \
+  -v cve3po-data:/app/data \
+  -v cve3po-media:/app/media \
+  ghcr.io/michaelheu4/cve3po:latest
+```
+
+### Variante 2: Docker Compose
+```yaml
+services:
+  cve3po:
+    image: ghcr.io/michaelheu4/cve3po:latest
+    container_name: cve3po
+    ports:
+      - "8000:8000"
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DEBUG: ${DEBUG:-False}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost 127.0.0.1}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-http://localhost:8000}
+      DISABLE_REGISTER: ${DISABLE_REGISTER:-False}
+      DATABASE_PATH: /app/data/db.sqlite3
+    volumes:
+      - cve3po-data:/app/data
+      - cve3po-media:/app/media
+
+volumes:
+  cve3po-data:
+  cve3po-media:
+```
+
+Start:
+```bash
 docker compose up -d
 ```
 
-### 2. Change Settings
-Before running the server, ensure you set the `SECRET_KEY` Environment variable (using a .env file) to a secure random value for production use. Futhermore make sure to adjust the `ALLOWED_HOSTS` setting to include your server's domain or IP address when deploying. Last but not least, check if DEBUG is set to `False` for production environments to enhance security.  
-Optional: set `NVD_API_KEY` to increase NVD API lookup limits for software enrichment.
-Optional (for password reset and email reporting): configure SMTP via `EMAIL_BACKEND`, `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`, and `DEFAULT_FROM_EMAIL`.
+## Erste Inbetriebnahme
 
-### 3. Create a user
-Navigate to http://localhost:8000/register/ to create a new user account.
+1. Anwendung öffnen: `http://localhost:8000`
+2. Account erstellen über `/register` (falls `DISABLE_REGISTER=False`)
+3. Optional Module unter `/modules` aktivieren (Agent, Wazuh, AI, Email, Wrike)
+
+Hinweis: Beim Container-Start werden Migrationen automatisch ausgeführt.
+
+## Optionale Konfiguration
+
+- `NVD_API_KEY`: Höhere Limits bei NVD Enrichment
+- SMTP für Passwort-Reset / Email Reporting:
+  - `EMAIL_BACKEND`
+  - `EMAIL_HOST`
+  - `EMAIL_PORT`
+  - `EMAIL_HOST_USER`
+  - `EMAIL_HOST_PASSWORD`
+  - `EMAIL_USE_TLS`
+  - `DEFAULT_FROM_EMAIL`
+
+## Agent Artefakte
+
+Wenn das Agent-Modul aktiv ist, sind die Agent-Dateien verfügbar unter:
+- `/agent/latest/install.sh`
+- `/agent/latest/cve3po-agent-linux-amd64`
+- `/agent/latest/cve3po-agent-linux-amd64.sha256`

@@ -72,6 +72,7 @@ class Host(models.Model):
     hostname = models.CharField(max_length=255, blank=True, null=True)
     operating_system = models.CharField(max_length=255, blank=True, null=True)
     last_scanned = models.DateTimeField(auto_now=True)
+    is_exposed = models.BooleanField(default=False)
     criticality = models.CharField(
         max_length=15, null=True, choices=CRITICALITY_CHOICES
     )

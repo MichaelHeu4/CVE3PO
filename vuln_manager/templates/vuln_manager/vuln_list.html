@@ -158,9 +158,9 @@
         </p>
         <div class="flex gap-2">
             {% if vulns.has_previous %}
-                <a href="?page={{ vulns.previous_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if severity %}&severity={{ severity }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="w-10 h-10 rounded-xl bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5">
-                    <span class="material-symbols-outlined text-base">chevron_left</span>
-                </a>
+              <a href="?page={{ vulns.previous_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if severity %}&severity={{ severity }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="w-10 h-10 rounded-xl bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5">
+                  <span class="material-symbols-outlined text-base">chevron_left</span>
+              </a>
             {% endif %}
             
             <button class="w-10 h-10 rounded-xl bg-primary text-surface flex items-center justify-center text-xs font-black shadow-lg shadow-primary/20">

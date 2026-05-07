@@ -30,6 +30,10 @@
                 <span class="w-1.5 h-1.5 rounded-full bg-outline-variant/30"></span>
                 <span class="text-[10px] text-primary font-black uppercase tracking-[0.1em]">{{ host.operating_system }}</span>
                 {% endif %}
+                <span class="w-1.5 h-1.5 rounded-full bg-outline-variant/30"></span>
+                <span class="text-[10px] {% if host.is_exposed %}text-error{% else %}text-outline{% endif %} font-black uppercase tracking-[0.1em]">
+                    {% if host.is_exposed %}Internet Facing{% else %}Internal{% endif %}
+                </span>
             </div>
             <h1 class="font-headline font-black text-4xl md:text-5xl text-on-surface tracking-tighter">{{ host.ip_address }}</h1>
         </div>
@@ -38,7 +42,9 @@
     <div class="flex items-center gap-4">
         <div class="bg-surface-container-high px-6 py-4 rounded-2xl border border-outline-variant/10 flex items-center gap-4 shadow-xl">
             <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
+                {% if has_agent_data %}
                 <span class="material-symbols-outlined text-primary text-xl" style="font-variation-settings: 'FILL' 1;">sensors</span>
+                {% endif %}
             </div>
             <div>
                 <p class="text-[9px] uppercase tracking-[0.2em] text-outline font-black mb-0.5">Global Priority</p>
@@ -100,37 +106,43 @@
                 {% endfor %}
             </div>
             
-            <div class="space-y-4">
-                {% for vuln in vulns %}
-                <div class="group bg-surface-container-low rounded-2xl overflow-hidden hover:bg-surface-container-high transition-all">
-                    <button class="w-full text-left p-6 flex items-center justify-between" onclick="toggleAccordion('vuln-{{ vuln.id }}')">
-                        <div class="flex items-center gap-6">
-                            <span class="badge severity-{{ vuln.severity|lower }} rounded-full px-3 py-1 text-[9px] font-black min-w-[70px] text-center">{{ vuln.severity|upper }}</span>
-                            <div>
-                                <p class="font-headline font-black text-on-surface text-sm uppercase tracking-tight">{{ vuln.cve_id }}</p>
-                                <p class="text-[10px] text-on-surface-variant line-clamp-1 mt-0.5">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead>
+                        <tr class="text-[9px] font-black uppercase tracking-[0.2em] text-outline/50 border-b border-outline-variant/20">
+                            <th class="px-4 py-3">Severity</th>
+                            <th class="px-4 py-3">CVE</th>
+                            <th class="px-4 py-3">Threat</th>
+                            <th class="px-4 py-3">Scan</th>
+                            <th class="px-4 py-3 text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for vuln in vulns %}
+                        <tr class="border-b border-outline-variant/10 hover:bg-surface-container-high/40 transition-colors">
+                            <td class="px-4 py-3">
+                                <span class="badge severity-{{ vuln.severity|lower }} rounded-full px-3 py-1 text-[9px] font-black min-w-[70px] inline-block text-center">{{ vuln.severity|upper }}</span>
+                            </td>
+                            <td class="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-on-surface">{{ vuln.cve_id }}</td>
+                            <td class="px-4 py-3">
+                                <p class="text-[10px] text-on-surface line-clamp-1">
                                     {% if vuln.software %}<span class="text-primary font-bold">[{{ vuln.software.name }}]</span> {% endif %}
                                     {{ vuln.name }}
                                 </p>
-                            </div>
-                        </div>
-                        <span class="material-symbols-outlined text-outline group-hover:text-primary transition-all">expand_more</span>
-                    </button>
-                    <div id="vuln-{{ vuln.id }}" class="hidden px-6 pb-6 border-t border-outline-variant/5">
-                        <div class="pt-6">
-                            <p class="text-xs text-on-surface-variant leading-relaxed mb-6">{{ vuln.description|default:"No technical details provided." }}</p>
-                            <div class="flex justify-between items-center">
-                                <a href="{% url 'vuln_detail' vuln.id %}" class="text-[10px] font-black tracking-widest text-primary uppercase hover:underline">Full Analysis</a>
-                                <span class="text-[9px] text-outline uppercase">Scan: {{ vuln.scan.id }}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% empty %}
-                <div class="text-center py-12">
-                    <p class="text-outline text-[10px] font-black uppercase tracking-widest">No Active Threats Detected</p>
-                </div>
-                {% endfor %}
+                                <p class="text-[10px] text-on-surface-variant line-clamp-1 mt-1">{{ vuln.description|default:"No technical details provided." }}</p>
+                            </td>
+                            <td class="px-4 py-3 text-[10px] font-black text-outline uppercase">#{{ vuln.scan.id }}</td>
+                            <td class="px-4 py-3 text-right">
+                                <a href="{% url 'vuln_detail' vuln.id %}" class="text-[10px] font-black tracking-widest text-primary uppercase hover:underline">Details</a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center py-12 text-outline text-[10px] font-black uppercase tracking-widest">No Active Threats Detected</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
 
             <!-- Threats Pagination -->
@@ -163,25 +175,25 @@
             </div>
             
             <div class="overflow-x-auto">
-                <table class="w-full text-left border-separate border-spacing-y-2" id="swTable">
+                <table class="w-full text-left" id="swTable">
                     <thead>
-                        <tr class="text-[9px] font-black uppercase tracking-[0.2em] text-outline/50">
-                            <th class="px-4 pb-4">Component</th>
-                            <th class="px-4 pb-4">Version</th>
-                            <th class="px-4 pb-4 text-right">Security</th>
+                        <tr class="text-[9px] font-black uppercase tracking-[0.2em] text-outline/50 border-b border-outline-variant/20">
+                            <th class="px-4 py-3">Component</th>
+                            <th class="px-4 py-3">Version</th>
+                            <th class="px-4 py-3 text-right">Security</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for sw in installed_software %}
-                        <tr class="group bg-surface-container-low hover:bg-surface-container-high transition-all cursor-pointer" onclick="window.location='{% url 'software_detail' sw.id %}'">
-                            <td class="px-4 py-4 rounded-l-2xl border-l-2 {% if sw.active_vulns > 0 %}border-error/50{% else %}border-primary/30{% endif %}">
+                        <tr class="border-b border-outline-variant/10 hover:bg-surface-container-high/40 transition-colors cursor-pointer" onclick="window.location='{% url 'software_detail' sw.id %}'">
+                            <td class="px-4 py-3">
                                 <div class="flex items-center gap-3">
-                                    <span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors text-lg">deployed_code</span>
+                                    <span class="material-symbols-outlined text-outline text-lg">deployed_code</span>
                                     <span class="text-xs font-bold text-on-surface">{{ sw.name }}</span>
                                 </div>
                             </td>
-                            <td class="px-4 py-4 text-[10px] font-black text-on-surface-variant uppercase tracking-widest">{{ sw.version|default:"-" }}</td>
-                            <td class="px-4 py-4 rounded-r-2xl text-right">
+                            <td class="px-4 py-3 text-[10px] font-black text-on-surface-variant uppercase tracking-widest">{{ sw.version|default:"-" }}</td>
+                            <td class="px-4 py-3 text-right">
                                 {% if sw.active_vulns > 0 %}
                                 <span class="bg-error/10 text-error px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">{{ sw.active_vulns }} Vulns</span>
                                 {% else %}
@@ -255,6 +267,18 @@
             <p class="text-[9px] text-outline-variant mt-4 leading-relaxed italic">Affects remediation prioritization and SLA tracking.</p>
         </div>
 
+        <div class="bg-surface-container-high rounded-3xl p-8 shadow-2xl border-l-4 {% if host.is_exposed %}border-error{% else %}border-outline-variant{% endif %}">
+            <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-6">Network Exposure</h5>
+            <form action="{% url 'update_host_exposure' host.id %}" method="POST">
+                {% csrf_token %}
+                <select name="is_exposed" onchange="this.form.submit()" class="w-full bg-surface-container-highest border-none rounded-xl px-5 py-4 text-on-surface text-[11px] font-black uppercase tracking-widest appearance-none cursor-pointer">
+                    <option value="0" {% if not host.is_exposed %}selected{% endif %}>Internal</option>
+                    <option value="1" {% if host.is_exposed %}selected{% endif %}>Internet Facing (Exposed)</option>
+                </select>
+            </form>
+            <p class="text-[9px] text-outline-variant mt-4 leading-relaxed italic">Manual flag to indicate externally reachable assets.</p>
+        </div>
+
         <!-- Quick Stats -->
         <div class="bg-surface-container rounded-3xl p-8 border border-outline-variant/5">
             <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-6">Quick Metadata</h5>
@@ -271,19 +295,18 @@
                     <span class="text-[10px] text-outline uppercase font-bold">Operating System</span>
                     <span class="text-[10px] text-on-surface font-black">{{ host.operating_system|default:"N/A" }}</span>
                 </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-[10px] text-outline uppercase font-bold">Exposure</span>
+                    <span class="text-[10px] font-black {% if host.is_exposed %}text-error{% else %}text-on-surface{% endif %}">
+                        {% if host.is_exposed %}Internet Facing{% else %}Internal{% endif %}
+                    </span>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
 <script>
-function toggleAccordion(id) {
-    const el = document.getElementById(id);
-    const all = document.querySelectorAll('[id^="vuln-"]');
-    all.forEach(item => { if (item.id !== id) item.classList.add('hidden'); });
-    el.classList.toggle('hidden');
-}
-
 {% if active_tab == 'threats' %}
 document.addEventListener('DOMContentLoaded', function() {
     const ctx = document.getElementById('hostTimeline').getContext('2d');
