@@ -1119,25 +1119,48 @@ def kanban_board(request):
 def update_vuln_status(request, pk):
     if request.method == "POST":
         vuln = get_object_or_404(Vulnerability, pk=pk)
+        content_type = request.content_type or ""
+        is_json = content_type.startswith("application/json")
         new_status = request.POST.get("status")
-        if not new_status and request.content_type == "application/json":
+        status_reason = (request.POST.get("status_reason") or "").strip()
+        if not new_status and is_json:
             try:
                 payload = json.loads(request.body or "{}")
                 new_status = payload.get("status")
+                status_reason = (payload.get("status_reason") or "").strip()
             except json.JSONDecodeError:
                 new_status = None
+        required_reason_statuses = {"risk_accepted", "false_positive"}
         if new_status in dict(Vulnerability.STATUS_CHOICES):
+            if new_status in required_reason_statuses and not status_reason:
+                if is_json:
+                    return JsonResponse(
+                        {
+                            "status": "error",
+                            "message": "status_reason_required",
+                            "required_for": new_status,
+                        },
+                        status=400,
+                    )
+                return HttpResponse(
+                    "status_reason_required",
+                    status=400,
+                    content_type="text/plain; charset=utf-8",
+                )
             old_status = vuln.status
             vuln.status = new_status
             vuln.save()
             if old_status != new_status:
+                details = {"from_status": old_status, "to_status": new_status}
+                if status_reason:
+                    details["status_reason"] = status_reason
                 log_vulnerability_event(
                     vuln,
                     "status_changed",
                     user=request.user,
-                    details={"from_status": old_status, "to_status": new_status},
+                    details=details,
                 )
-        if request.content_type == "application/json":
+        if is_json:
             return JsonResponse({"status": "ok"}, status=200)
         referer = request.META.get("HTTP_REFERER")
         if referer and url_has_allowed_host_and_scheme(
