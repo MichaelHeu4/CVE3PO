@@ -98,9 +98,29 @@
                 onEnd: function(evt) {
                     const vulnId = evt.item.getAttribute('data-id');
                     const newStatus = evt.to.getAttribute('data-status');
-                    updateStatus(vulnId, newStatus);
-                    updateCounts();
-                    sortColumn(evt.to);
+                    const oldStatus = evt.from.getAttribute('data-status');
+                    const oldIndex = evt.oldIndex;
+                    const newIndex = evt.newIndex;
+                    updateStatus(vulnId, newStatus)
+                        .then(() => {
+                            updateCounts();
+                            sortColumn(evt.to);
+                        })
+                        .catch(() => {
+                            const fromEl = evt.from;
+                            const toEl = evt.to;
+                            const card = evt.item;
+                            const restoreIndex = Math.min(oldIndex, fromEl.children.length);
+                            const referenceNode = fromEl.children[restoreIndex] || null;
+                            fromEl.insertBefore(card, referenceNode);
+                            updateCounts();
+                            if (toEl !== fromEl && newIndex >= 0) {
+                                sortColumn(toEl);
+                            }
+                            if (oldStatus !== newStatus) {
+                                alert('Status update rejected. Reason is required for Risk Accepted and False Positive.');
+                            }
+                        });
                 }
             });
         });
@@ -116,13 +136,30 @@
         }
 
         function updateStatus(vulnId, status) {
-            fetch(`/api/vulnerabilities/${vulnId}/status/`, {
+            let statusReason = '';
+            if (['risk_accepted', 'false_positive'].includes(status)) {
+                statusReason = (prompt('Reason is required for this status change:') || '').trim();
+                if (!statusReason) {
+                    return Promise.reject(new Error('reason_required'));
+                }
+            }
+
+            return fetch(`/api/vulnerabilities/${vulnId}/status/`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': '{{ csrf_token }}'
                 },
-                body: JSON.stringify({ status: status })
+                body: JSON.stringify({ status: status, status_reason: statusReason })
+            }).then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => {
+                        throw new Error(data?.message || 'update_failed');
+                    }).catch(() => {
+                        throw new Error('update_failed');
+                    });
+                }
+                return response;
             });
         }
 

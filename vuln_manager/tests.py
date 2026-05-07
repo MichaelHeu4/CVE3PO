@@ -264,6 +264,34 @@ class AuthAndStatusFlowTests(TestCase):
         self.vuln.refresh_from_db()
         self.assertEqual(self.vuln.status, "open")
 
+    def test_update_vuln_status_requires_reason_for_risk_accepted(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("api_update_vuln_status", args=[self.vuln.pk]),
+            data=json.dumps({"status": "risk_accepted"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.vuln.refresh_from_db()
+        self.assertEqual(self.vuln.status, "open")
+
+    def test_update_vuln_status_stores_reason_in_audit(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("api_update_vuln_status", args=[self.vuln.pk]),
+            data=json.dumps(
+                {"status": "risk_accepted", "status_reason": "Compensating control in place"}
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.vuln.refresh_from_db()
+        self.assertEqual(self.vuln.status, "risk_accepted")
+        event = VulnerabilityAuditEvent.objects.filter(
+            vulnerability=self.vuln, action="status_changed", user=self.user
+        ).latest("created_at")
+        self.assertEqual(event.details.get("status_reason"), "Compensating control in place")
+
     def test_dashboard_contains_extended_kpis(self):
         host = Host.objects.create(ip_address="10.0.0.20")
         sw = Software.objects.create(name="demo", version="1.0.0", vendor="acme")

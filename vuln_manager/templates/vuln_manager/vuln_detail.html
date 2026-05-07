@@ -55,14 +55,20 @@
                 </div>
                 <div class="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/5 flex flex-col justify-center">
                     <p class="text-[9px] uppercase tracking-[0.3em] text-outline/50 font-black mb-2">Update Lifecycle</p>
-                    <form action="{% url 'update_vuln_status' vuln.id %}" method="POST" class="relative">
+                    <form action="{% url 'update_vuln_status' vuln.id %}" method="POST" class="space-y-3" id="statusUpdateForm">
                         {% csrf_token %}
-                        <select name="status" onchange="this.form.submit()" class="w-full bg-surface-container-highest border border-outline-variant/10 rounded-xl px-4 py-2 text-xs font-black text-primary focus:ring-2 focus:ring-primary/20 cursor-pointer uppercase tracking-widest appearance-none transition-all hover:bg-surface-container-high">
+                        <div class="relative">
+                        <select name="status" id="statusSelect" class="w-full bg-surface-container-highest border border-outline-variant/10 rounded-xl px-4 py-2 text-xs font-black text-primary focus:ring-2 focus:ring-primary/20 cursor-pointer uppercase tracking-widest appearance-none transition-all hover:bg-surface-container-high">
                             {% for sk, sl in vuln.STATUS_CHOICES %}
                             <option value="{{ sk }}" {% if vuln.status == sk %}selected{% endif %}>Promote to {{ sl }}</option>
                             {% endfor %}
                         </select>
                         <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-primary pointer-events-none text-sm">unfold_more</span>
+                        </div>
+                        <textarea name="status_reason" id="statusReason" rows="2" placeholder="Reason for status change (required for Risk Accepted / False Positive)" class="w-full bg-surface-container-highest border border-outline-variant/10 rounded-xl px-4 py-2 text-xs text-on-surface focus:ring-2 focus:ring-primary/20"></textarea>
+                        <button type="submit" class="w-full py-2.5 rounded-xl border border-primary/20 text-primary text-[10px] font-black tracking-[0.2em] uppercase hover:bg-primary/10 transition-all">
+                            Update Status
+                        </button>
                     </form>
                     <form action="{% url 'triage_single_vulnerability' vuln.id %}" method="POST" class="mt-3">
                         {% csrf_token %}
@@ -253,11 +259,27 @@
 </div>
 
 <script>
+function updateStatusReasonRequirement() {
+    const select = document.getElementById('statusSelect');
+    const reason = document.getElementById('statusReason');
+    if (!select || !reason) return;
+    const required = ['risk_accepted', 'false_positive'].includes(select.value);
+    reason.required = required;
+}
+
 function copyPoc() {
     const text = document.getElementById('pocText').innerText;
     navigator.clipboard.writeText(text).then(() => {
         alert('Tactical payload copied to clipboard.');
     });
 }
+
+document.addEventListener('DOMContentLoaded', function () {
+    updateStatusReasonRequirement();
+    const select = document.getElementById('statusSelect');
+    if (select) {
+        select.addEventListener('change', updateStatusReasonRequirement);
+    }
+});
 </script>
 {% endblock %}
