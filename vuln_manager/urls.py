@@ -6,6 +6,7 @@ from .extensions import wazuh, agent
 
 urlpatterns = [
     path("agent/latest/<str:filename>", views.agent_latest_file, name="agent_latest_file"),
+    path("agent/install/", views.agent_install_guide, name="agent_install_guide"),
     path("", views.dashboard, name="dashboard"),
     path(
         "api/inventory/update/", agent.update_inventory_api, name="api_update_inventory"
@@ -55,6 +56,11 @@ urlpatterns = [
         "hosts/<int:pk>/criticality/",
         views.update_host_criticality,
         name="update_host_criticality",
+    ),
+    path(
+        "hosts/<int:pk>/exposure/",
+        views.update_host_exposure,
+        name="update_host_exposure",
     ),
     path("vulnerabilities/", views.vuln_list, name="vuln_list"),
     path("vulnerabilities/<int:pk>/", views.vuln_detail, name="vuln_detail"),

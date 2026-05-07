@@ -57,3 +57,17 @@ Optional (for password reset and email reporting): configure SMTP via `EMAIL_BAC
 
 ### 3. Create a user
 Navigate to http://localhost:8000/register/ to create a new user account.
+
+## 🤖 Agent Build (portable static binary)
+
+The Docker build now automatically compiles the Rust agent as a **statically linked MUSL** binary (`cve3po-agent-linux-amd64`) and generates `cve3po-agent-linux-amd64.sha256`.
+
+These files are available via:
+- `/agent/latest/cve3po-agent-linux-amd64`
+- `/agent/latest/cve3po-agent-linux-amd64.sha256`
+
+After changes in `software-agent/`, rebuild the app image:
+```bash
+docker compose build cve3po
+docker compose up -d
+```

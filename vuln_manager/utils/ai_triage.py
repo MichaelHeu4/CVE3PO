@@ -55,7 +55,7 @@ Entscheidungsmatrix (Bewerte exakt nach diesen 16 Pfaden):
 BEISPIEL_INPUT = """
 CVE: CVE-2024-3094 (xz-utils backdoor)
 CISA KEV: False
-EPSS: 0.08
+EPSS: 0.8
 CVSS Vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H
 CVE-Beschreibung: Malicious code in xz-utils allows unauthenticated remote code execution...
 Asset: Linux-Jump-Host
@@ -65,7 +65,7 @@ Business Criticality: High
 
 BEISPIEL_OUTPUT = json.dumps(
     {
-        "gedankengang_analyst": "1. Exploitation: CISA KEV ist False, aber der EPSS-Score von 0.08 liegt über dem Schwellenwert von 0.1, daher 'Active'. 2. Exposure:Das Asset ist Internet Facing, also 'Open'. 3. Utility: Der CVSS-Vektor zeigt AV:N, PR:N und UI:N, also 'Automated'. 4. Impact: Die CVE-Beschreibung deutet auf RCE hin und das Asset verarbeitet kritische Daten, daher 'High'. Laut Entscheidungsmatrix ergibt das 'Act'.",
+        "gedankengang_analyst": "1. Exploitation: CISA KEV ist False, aber der EPSS-Score von 0.8 liegt über dem Schwellenwert von 0.1, daher 'Active'. 2. Exposure:Das Asset ist Internet Facing, also 'Open'. 3. Utility: Der CVSS-Vektor zeigt AV:N, PR:N und UI:N, also 'Automated'. 4. Impact: Die CVE-Beschreibung deutet auf RCE hin und das Asset verarbeitet kritische Daten, daher 'High'. Laut Entscheidungsmatrix ergibt das 'Act'.",
         "ssvc_score": "Act",
         "patching_vorschlag": "Sofortiges Updaten des betroffenen Systems.",
     }
@@ -96,7 +96,9 @@ def _build_messages(current_finding):
 
 
 def _call_openrouter(messages, settings_obj):
-    api_key = (settings_obj.ai_openrouter_api_key or os.getenv("OPENROUTER_API_KEY", "")).strip()
+    api_key = (
+        settings_obj.ai_openrouter_api_key or os.getenv("OPENROUTER_API_KEY", "")
+    ).strip()
     if not api_key:
         raise RuntimeError("ai_triage_missing_openrouter_key")
     model = (settings_obj.ai_openrouter_model or "deepseek/deepseek-v4-flash").strip()
@@ -207,9 +209,7 @@ def triage(vuln: Vulnerability):
 
     # Exposure: In diesem Prototyp setzen wir Controlled als Standard,
     # außer wir haben Hinweise auf Internet-Exponierung.
-    exposure = "Controlled"
-    if host and host.ports.filter(port_number__in=[80, 443, 8080, 8443]).exists():
-        exposure = "Internet Facing (Detected via Open Ports)"
+    exposure = host.is_exposed if host.is_exposed else "Controlled"
 
     aktueller_fund = f"""
     CVE: {vuln.cve_id}
