@@ -138,6 +138,7 @@ urlpatterns = [
         name="send_email_report_now",
     ),
     path("users/", views.user_admin, name="user_admin"),
+    path("audit-trail/", views.audit_trail, name="audit_trail"),
     path("users/<int:pk>/staff/", views.set_user_staff, name="set_user_staff"),
     path("users/<int:pk>/delete/", views.delete_user, name="delete_user"),
     path("settings/sla/", views.save_sla_settings, name="save_sla_settings"),

@@ -1467,6 +1467,52 @@ def user_admin(request):
 
 
 @login_required
+def audit_trail(request):
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("forbidden")
+
+    query = (request.GET.get("q") or "").strip()
+    action_filter = (request.GET.get("action") or "").strip()
+    allowed_actions = {choice[0] for choice in VulnerabilityAuditEvent.ACTION_CHOICES}
+    if action_filter and action_filter not in allowed_actions:
+        action_filter = ""
+
+    events_query = VulnerabilityAuditEvent.objects.select_related(
+        "vulnerability",
+        "user",
+        "vulnerability__host",
+        "vulnerability__software",
+    ).order_by("-created_at")
+
+    if action_filter:
+        events_query = events_query.filter(action=action_filter)
+
+    if query:
+        events_query = events_query.filter(
+            Q(vulnerability__cve_id__icontains=query)
+            | Q(vulnerability__name__icontains=query)
+            | Q(user__username__icontains=query)
+            | Q(actor__icontains=query)
+            | Q(details__icontains=query)
+        )
+
+    paginator = Paginator(events_query, 50)
+    page_number = request.GET.get("page")
+    events = paginator.get_page(page_number)
+
+    return render(
+        request,
+        "vuln_manager/audit_trail.html",
+        {
+            "events": events,
+            "query": query,
+            "action_filter": action_filter,
+            "action_choices": VulnerabilityAuditEvent.ACTION_CHOICES,
+        },
+    )
+
+
+@login_required
 @require_POST
 def set_user_staff(request, pk):
     if not request.user.is_superuser:

@@ -341,6 +341,53 @@ class HostExposureFlagTests(TestCase):
         self.assertTrue(self.host.is_exposed)
 
 
+class GlobalAuditTrailPageTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_superuser(
+            username="audit-admin", email="audit-admin@example.com", password="pw12345"
+        )
+        self.user = User.objects.create_user(username="audit-user", password="pw12345")
+        self.scan = Scan.objects.create(scan_type="MANUAL")
+        self.vuln = Vulnerability.objects.create(
+            scan=self.scan,
+            cve_id="CVE-2026-77777",
+            severity="high",
+            status="open",
+            name="Audit trail test vuln",
+        )
+        VulnerabilityAuditEvent.objects.create(
+            vulnerability=self.vuln,
+            user=self.admin,
+            action="status_changed",
+            details={"from_status": "open", "to_status": "fixed", "status_reason": "patched"},
+        )
+        VulnerabilityAuditEvent.objects.create(
+            vulnerability=self.vuln,
+            actor="system",
+            action="updated",
+            details={"note": "metadata refresh"},
+        )
+
+    def test_superuser_can_access_global_audit_trail(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("audit_trail"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "CVE-2026-77777")
+        self.assertContains(response, "Status Changed")
+
+    def test_non_superuser_cannot_access_global_audit_trail(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("audit_trail"))
+        self.assertEqual(response.status_code, 403)
+
+    def test_global_audit_trail_action_filter(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("audit_trail") + "?action=updated")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "metadata refresh")
+        self.assertNotContains(response, "patched")
+
+
 class AgentPublicDownloadsTests(TestCase):
     def setUp(self):
         self.agent_extension = Extension.objects.create(name_id="agent_api", is_active=True)
