@@ -1,0 +1,93 @@
+{% extends 'vuln_manager/base.html' %}
+
+{% block title %}Audit Trail{% endblock %}
+{% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto space-y-8">
+    <section>
+        <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight mb-2">Global <span class="text-primary">Audit Trail</span></h1>
+        <p class="text-on-surface-variant text-sm">All vulnerability lifecycle and update events across the platform.</p>
+    </section>
+
+    <div class="bg-surface-container rounded-3xl p-6 shadow-xl">
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+            <div class="md:col-span-7">
+                <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline mb-2">Search</label>
+                <input type="text" name="q" value="{{ query }}" placeholder="CVE, finding name, user, actor, or details..." class="w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30">
+            </div>
+            <div class="md:col-span-3">
+                <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline mb-2">Action</label>
+                <select name="action" class="w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30">
+                    <option value="">All actions</option>
+                    {% for key, label in action_choices %}
+                    <option value="{{ key }}" {% if action_filter == key %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-2">
+                <button type="submit" class="w-full rounded-xl bg-primary text-surface py-3 text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all">
+                    Apply
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <div class="bg-surface-container rounded-3xl p-6 shadow-xl overflow-x-auto">
+        <table class="w-full text-left">
+            <thead>
+                <tr class="text-[9px] font-black uppercase tracking-[0.2em] text-outline/70 border-b border-outline-variant/20">
+                    <th class="px-4 py-3">Time</th>
+                    <th class="px-4 py-3">Action</th>
+                    <th class="px-4 py-3">CVE</th>
+                    <th class="px-4 py-3">Actor</th>
+                    <th class="px-4 py-3">Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for event in events %}
+                <tr class="border-b border-outline-variant/10 hover:bg-surface-container-high/40">
+                    <td class="px-4 py-3 text-[10px] text-on-surface-variant whitespace-nowrap">{{ event.created_at|date:"d M Y H:i:s" }}</td>
+                    <td class="px-4 py-3 text-[10px] font-black text-on-surface uppercase">{{ event.get_action_display }}</td>
+                    <td class="px-4 py-3 text-[10px]">
+                        {% if event.vulnerability %}
+                        <a href="{% url 'vuln_detail' event.vulnerability.id %}" class="text-primary font-black hover:underline">{{ event.vulnerability.cve_id }}</a>
+                        {% else %}
+                        <span class="text-outline">deleted_vulnerability</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 text-[10px] text-on-surface">
+                        {% if event.user %}{{ event.user.username }}{% elif event.actor %}{{ event.actor }}{% else %}-{% endif %}
+                    </td>
+                    <td class="px-4 py-3 text-[10px] text-on-surface-variant">
+                        {% if event.details %}
+                        <code class="break-all">{{ event.details }}</code>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="px-4 py-12 text-center text-[10px] font-black uppercase tracking-widest text-outline">No audit events found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if events.paginator.num_pages > 1 %}
+    <div class="flex items-center justify-between">
+        <p class="text-[9px] font-black text-outline uppercase tracking-widest">Page {{ events.number }} of {{ events.paginator.num_pages }}</p>
+        <div class="flex gap-2">
+            {% if events.has_previous %}
+            <a href="?page={{ events.previous_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if action_filter %}&action={{ action_filter }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5"><span class="material-symbols-outlined text-sm">chevron_left</span></a>
+            {% endif %}
+            {% if events.has_next %}
+            <a href="?page={{ events.next_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if action_filter %}&action={{ action_filter }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5"><span class="material-symbols-outlined text-sm">chevron_right</span></a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

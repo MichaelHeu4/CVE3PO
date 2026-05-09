@@ -162,6 +162,10 @@
                 <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'user_admin' %}font-variation-settings: 'FILL' 1;{% endif %}">admin_panel_settings</span>
                 <span class="font-bold text-xs uppercase tracking-[0.2em]">Users</span>
             </a>
+            <a href="{% url 'audit_trail' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.resolver_match.url_name == 'audit_trail' %}bg-primary/10 text-primary shadow-[0_0_20px_rgba(59,191,250,0.1)] border border-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface{% endif %}">
+                <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'audit_trail' %}font-variation-settings: 'FILL' 1;{% endif %}">history_toggle_off</span>
+                <span class="font-bold text-xs uppercase tracking-[0.2em]">Audit Trail</span>
+            </a>
             {% if agent_module_active %}
             <a href="{% url 'agent_install_guide' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.resolver_match.url_name == 'agent_install_guide' %}bg-primary/10 text-primary shadow-[0_0_20px_rgba(59,191,250,0.1)] border border-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface{% endif %}">
                 <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'agent_install_guide' %}font-variation-settings: 'FILL' 1;{% endif %}">terminal</span>
