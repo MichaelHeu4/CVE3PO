@@ -67,7 +67,7 @@ starlette==1.0.0
 tomli==2.0.2
 typing-inspection==0.4.2
 typing_extensions==4.15.0
-urllib3==2.6.3
+urllib3==2.7.0
 uvicorn==0.42.0
 wcmatch==8.5.2
 wrapt==1.17.3
