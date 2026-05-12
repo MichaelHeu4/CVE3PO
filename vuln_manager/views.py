@@ -289,7 +289,7 @@ def _is_agent_module_active():
 
 @login_required
 def agent_install_guide(request):
-    if not request.user.is_superuser:
+    if not request.user.is_staff:
         return HttpResponseForbidden("forbidden")
     if not _is_agent_module_active():
         return HttpResponseNotFound()
@@ -1450,7 +1450,7 @@ def toggle_extension(request, name_id):
 
 @login_required
 def user_admin(request):
-    if not request.user.is_superuser:
+    if not request.user.is_staff:
         return HttpResponseForbidden("forbidden")
     managed_users = User.objects.all().order_by("username")
     system_settings = get_system_settings()
@@ -1468,7 +1468,7 @@ def user_admin(request):
 
 @login_required
 def audit_trail(request):
-    if not request.user.is_superuser:
+    if not request.user.is_staff:
         return HttpResponseForbidden("forbidden")
 
     query = (request.GET.get("q") or "").strip()
@@ -1515,7 +1515,7 @@ def audit_trail(request):
 @login_required
 @require_POST
 def set_user_staff(request, pk):
-    if not request.user.is_superuser:
+    if not request.user.is_staff:
         return HttpResponseForbidden("forbidden")
     target_user = get_object_or_404(User, pk=pk)
     target_user.is_staff = request.POST.get("is_staff") == "1"
@@ -1526,12 +1526,12 @@ def set_user_staff(request, pk):
 @login_required
 @require_POST
 def delete_user(request, pk):
-    if not request.user.is_superuser:
+    if not request.user.is_staff:
         return HttpResponseForbidden("forbidden")
     target_user = get_object_or_404(User, pk=pk)
     if target_user.pk == request.user.pk:
         return HttpResponseForbidden("cannot_delete_current_user")
-    if target_user.is_superuser and User.objects.filter(is_superuser=True).count() <= 1:
+    if target_user.is_staff and User.objects.filter(is_superuser=True).count() <= 1:
         return HttpResponseForbidden("cannot_delete_last_superuser")
     target_user.delete()
     return redirect("user_admin")
@@ -1540,7 +1540,7 @@ def delete_user(request, pk):
 @login_required
 @require_POST
 def save_sla_settings(request):
-    if not request.user.is_superuser:
+    if not request.user.is_staff:
         return HttpResponseForbidden("forbidden")
     try:
         critical_days = int(request.POST.get("sla_critical_days", "7"))
@@ -1741,7 +1741,7 @@ def sync_wrike_ticket(request, pk):
 @login_required
 @require_POST
 def toggle_register(request):
-    if not request.user.is_superuser:
+    if not request.user.is_staff:
         return HttpResponseForbidden("forbidden")
     system_settings = get_system_settings()
     system_settings.disable_register = not system_settings.disable_register
@@ -1770,7 +1770,9 @@ def run_triage_background():
 
         if vuln.ai_last_criticality != current_crit:
             print(
-                f"[AI] Re-triaging {vuln.cve_id} due to criticality change: {vuln.ai_last_criticality} -> {current_crit}"
+                f"[AI] Re-triaging {vuln.cve_id} due to criticality change: {
+                    vuln.ai_last_criticality
+                } -> {current_crit}"
             )
             ai_triage.triage(vuln)
 
