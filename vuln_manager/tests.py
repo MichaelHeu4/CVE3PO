@@ -235,7 +235,7 @@ class AuthAndStatusFlowTests(TestCase):
             {"identifier": "a@example.com", "password": "pw12345"},
         )
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, "dashboard")
+        self.assertEqual(response.url, "/")
 
     def test_update_vuln_status_json_updates_and_audits(self):
         self.client.force_login(self.user)
