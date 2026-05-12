@@ -30,7 +30,7 @@ ALLOWED_HOSTS = [
     i for i in os.environ.get("DJANGO_ALLOWED_HOSTS", "127.0.0.1 localhost").split(" ")
 ]
 CSRF_TRUSTED_ORIGINS = [
-    i for i in os.environ.get("CSRF_TRUSTED_ORIGINS", "127.0.0.1 localhost").split(" ")
+    i for i in os.environ.get("CSRF_TRUSTED_ORIGINS", "http://localhost:8000 http://127.0.0.1:8000").split(" ")
 ]
 CSRF_COOKIE_SECURE = True
 
