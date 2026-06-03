@@ -114,9 +114,11 @@ def login_view(request):
                 },
             )
 
-        user = authenticate(request, username=login_identifier, password=password)
+        user = authenticate(
+            request, username=login_identifier, password=password)
         if user is None and "@" in login_identifier:
-            user_by_email = User.objects.filter(email__iexact=login_identifier).first()
+            user_by_email = User.objects.filter(
+                email__iexact=login_identifier).first()
             if user_by_email:
                 user = authenticate(
                     request, username=user_by_email.username, password=password
@@ -182,7 +184,8 @@ def _get_sla_thresholds():
 
 
 def _build_dashboard_report_context():
-    all_vulns = Vulnerability.objects.exclude(status__in=["fixed", "false_positive"])
+    all_vulns = Vulnerability.objects.exclude(
+        status__in=["fixed", "false_positive"])
     critical_count = all_vulns.filter(severity="critical").count()
     high_count = all_vulns.filter(severity="high").count()
     host_count = Host.objects.count()
@@ -201,11 +204,13 @@ def _build_dashboard_report_context():
         or 0
     )
     resolved_count = Vulnerability.objects.filter(status="fixed").count()
-    total_non_fp = Vulnerability.objects.exclude(status="false_positive").count()
+    total_non_fp = Vulnerability.objects.exclude(
+        status="false_positive").count()
     remediation_rate = (
         round((resolved_count / total_non_fp) * 100, 1) if total_non_fp else 0
     )
-    exposure_rate = round((vuln_hosts_count / host_count) * 100, 1) if host_count else 0
+    exposure_rate = round((vuln_hosts_count / host_count)
+                          * 100, 1) if host_count else 0
     avg_open_age_days = 0
     open_ages = [
         max((now() - opened_at).days, 0)
@@ -217,7 +222,8 @@ def _build_dashboard_report_context():
     oldest_open_days = max(open_ages) if open_ages else 0
     sla_critical_days, sla_high_days = _get_sla_thresholds()
     sla_breach_count = all_vulns.filter(
-        Q(severity="critical", first_seen__lt=now() - timedelta(days=sla_critical_days))
+        Q(severity="critical", first_seen__lt=now() -
+          timedelta(days=sla_critical_days))
         | Q(severity="high", first_seen__lt=now() - timedelta(days=sla_high_days))
     ).count()
     reopened_30d = VulnerabilityAuditEvent.objects.filter(
@@ -234,7 +240,8 @@ def _build_dashboard_report_context():
         Software.objects.annotate(
             num_vulns=Count(
                 "vulnerabilities",
-                filter=~Q(vulnerabilities__status__in=["fixed", "false_positive"]),
+                filter=~Q(vulnerabilities__status__in=[
+                          "fixed", "false_positive"]),
             )
         )
         .filter(num_vulns__gt=0)
@@ -377,8 +384,10 @@ def dashboard(request):
     )
     vuln_count = all_open_vulns.exclude(severity="info").count()
     resolved_count = Vulnerability.objects.filter(status="fixed").count()
-    ignored_count = Vulnerability.objects.filter(status="risk_accepted").count()
-    total_non_fp = Vulnerability.objects.exclude(status="false_positive").count()
+    ignored_count = Vulnerability.objects.filter(
+        status="risk_accepted").count()
+    total_non_fp = Vulnerability.objects.exclude(
+        status="false_positive").count()
     remediation_rate = (
         round((resolved_count / total_non_fp) * 100, 1) if total_non_fp else 0
     )
@@ -391,18 +400,21 @@ def dashboard(request):
         .count()
     )
     exposure_rate = (
-        round((impacted_assets_count / host_count) * 100, 1) if host_count else 0
+        round((impacted_assets_count / host_count)
+              * 100, 1) if host_count else 0
     )
     open_ages = [
         max((now() - opened_at).days, 0)
         for opened_at in all_open_vulns.values_list("first_seen", flat=True)
         if opened_at
     ]
-    avg_open_age_days = round(sum(open_ages) / len(open_ages), 1) if open_ages else 0
+    avg_open_age_days = round(
+        sum(open_ages) / len(open_ages), 1) if open_ages else 0
     oldest_open_days = max(open_ages) if open_ages else 0
     sla_critical_days, sla_high_days = _get_sla_thresholds()
     sla_breach_count = all_open_vulns.filter(
-        Q(severity="critical", first_seen__lt=now() - timedelta(days=sla_critical_days))
+        Q(severity="critical", first_seen__lt=now() -
+          timedelta(days=sla_critical_days))
         | Q(severity="high", first_seen__lt=now() - timedelta(days=sla_high_days))
     ).count()
     reopened_30d = VulnerabilityAuditEvent.objects.filter(
@@ -466,8 +478,10 @@ def dashboard(request):
                 "vulnerabilities", filter=Q(vulnerabilities__severity="critical")
             )
             * 10
-            + Count("vulnerabilities", filter=Q(vulnerabilities__severity="high")) * 5
-            + Count("vulnerabilities", filter=Q(vulnerabilities__severity="medium")) * 2
+            + Count("vulnerabilities",
+                    filter=Q(vulnerabilities__severity="high")) * 5
+            + Count("vulnerabilities",
+                    filter=Q(vulnerabilities__severity="medium")) * 2
         )
         .filter(risk_score__gt=0)
         .order_by("-risk_score")[:5]
@@ -478,7 +492,8 @@ def dashboard(request):
         Software.objects.annotate(
             active_vulns=Count(
                 "vulnerabilities",
-                filter=~Q(vulnerabilities__status__in=["fixed", "false_positive"]),
+                filter=~Q(vulnerabilities__status__in=[
+                          "fixed", "false_positive"]),
             )
         )
         .filter(active_vulns__gt=0)
@@ -570,10 +585,12 @@ def host_list(request):
     for host in hosts:
         latest_scan = host.ports.aggregate(latest=Max("scan_id"))["latest"]
         host.current_port_count = (
-            host.ports.filter(scan_id=latest_scan).count() if latest_scan else 0
+            host.ports.filter(
+                scan_id=latest_scan).count() if latest_scan else 0
         )
         inherited_q = (
-            Vulnerability.objects.filter(Q(host=host) | Q(software__hosts=host))
+            Vulnerability.objects.filter(
+                Q(host=host) | Q(software__hosts=host))
             .exclude(status__in=["fixed", "false_positive"])
             .distinct()
         )
@@ -590,7 +607,8 @@ def host_list(request):
 def host_detail(request, pk):
     host = get_object_or_404(Host, pk=pk)
     latest_scan_id = host.ports.aggregate(latest=Max("scan_id"))["latest"]
-    active_ports = host.ports.filter(scan_id=latest_scan_id).order_by("port_number")
+    active_ports = host.ports.filter(
+        scan_id=latest_scan_id).order_by("port_number")
     historic_ports = (
         host.ports.exclude(scan_id=latest_scan_id)
         .values("port_number", "service_name")
@@ -602,7 +620,8 @@ def host_detail(request, pk):
     ]
     show_mode = request.GET.get("mode", "all")
     severity_filter = (request.GET.get("severity") or "").lower()
-    allowed_severities = {choice[0] for choice in Vulnerability.SEVERITY_CHOICES}
+    allowed_severities = {choice[0]
+                          for choice in Vulnerability.SEVERITY_CHOICES}
     if severity_filter and severity_filter not in allowed_severities:
         severity_filter = ""
     if show_mode == "direct":
@@ -611,7 +630,8 @@ def host_detail(request, pk):
         )
     else:
         vulns_query = (
-            Vulnerability.objects.filter(Q(host=host) | Q(software__hosts=host))
+            Vulnerability.objects.filter(
+                Q(host=host) | Q(software__hosts=host))
             .exclude(status="false_positive")
             .distinct()
             .order_by("-severity")
@@ -639,7 +659,8 @@ def host_detail(request, pk):
         active_vulns=Count(
             "vulnerabilities",
             filter=(
-                Q(vulnerabilities__host=host) | Q(vulnerabilities__software__hosts=host)
+                Q(vulnerabilities__host=host) | Q(
+                    vulnerabilities__software__hosts=host)
             )
             & ~Q(vulnerabilities__status__in=["fixed", "false_positive"]),
         )
@@ -713,7 +734,8 @@ def software_detail(request, pk):
     item = get_object_or_404(Software, pk=pk)
     hosts = item.hosts.all()
     severity_filter = (request.GET.get("severity") or "").lower()
-    allowed_severities = {choice[0] for choice in Vulnerability.SEVERITY_CHOICES}
+    allowed_severities = {choice[0]
+                          for choice in Vulnerability.SEVERITY_CHOICES}
     if severity_filter and severity_filter not in allowed_severities:
         severity_filter = ""
     vulns = (
@@ -869,7 +891,8 @@ def vuln_add(request):
         if ip_address:
             host_obj, _ = Host.objects.get_or_create(ip_address=ip_address)
         manual_scan = (
-            Scan.objects.filter(scan_type="MANUAL").order_by("-uploaded_at").first()
+            Scan.objects.filter(scan_type="MANUAL").order_by(
+                "-uploaded_at").first()
         )
         if not manual_scan:
             manual_scan = Scan.objects.create(scan_type="MANUAL")
@@ -954,8 +977,10 @@ def host_form(request, pk=None):
 
 @login_required
 def port_list(request):
-    latest_scan_ids = Port.objects.values("host").annotate(latest=Max("scan_id"))
-    active_port_ids = [item["latest"] for item in latest_scan_ids if item["latest"]]
+    latest_scan_ids = Port.objects.values(
+        "host").annotate(latest=Max("scan_id"))
+    active_port_ids = [item["latest"]
+                       for item in latest_scan_ids if item["latest"]]
     active_ports = (
         Port.objects.filter(scan_id__in=active_port_ids)
         .select_related("host")
@@ -1086,7 +1111,8 @@ def kanban_board(request):
         sev_score=severity_order
     )
     severity_filter = (request.GET.get("severity") or "").lower()
-    allowed_severities = {choice[0] for choice in Vulnerability.SEVERITY_CHOICES}
+    allowed_severities = {choice[0]
+                          for choice in Vulnerability.SEVERITY_CHOICES}
     if severity_filter and severity_filter not in allowed_severities:
         severity_filter = ""
     if severity_filter:
@@ -1176,7 +1202,8 @@ def update_vuln_status(request, pk):
 def vuln_list(request):
     query = (request.GET.get("q") or "").strip()
     severity = (request.GET.get("severity") or "").lower()
-    allowed_severities = {choice[0] for choice in Vulnerability.SEVERITY_CHOICES}
+    allowed_severities = {choice[0]
+                          for choice in Vulnerability.SEVERITY_CHOICES}
     if severity and severity not in allowed_severities:
         severity = ""
     status_filter = request.GET.get("status", "active")
@@ -1270,7 +1297,8 @@ def scan_import(request):
         software_id = request.POST.get("software_id")
         sw_obj = Software.objects.get(pk=software_id) if software_id else None
         if scan_type and raw_file:
-            scan_obj = Scan.objects.create(scan_type=scan_type, raw_file=raw_file)
+            scan_obj = Scan.objects.create(
+                scan_type=scan_type, raw_file=raw_file)
             file_path = scan_obj.raw_file.path
             if scan_type == "NMAP":
                 nmap.parse_nmap_xml(file_path, scan_obj)
@@ -1279,11 +1307,14 @@ def scan_import(request):
             elif scan_type == "OPENVAS":
                 openvas.parse_openvas_xml(file_path, scan_obj)
             elif scan_type == "SEMGREP":
-                semgrep.parse_semgrep_json(file_path, scan_obj, software_obj=sw_obj)
+                semgrep.parse_semgrep_json(
+                    file_path, scan_obj, software_obj=sw_obj)
             elif scan_type == "OSV":
-                osvscanner.parse_osv_json(file_path, scan_obj, software_obj=sw_obj)
+                osvscanner.parse_osv_json(
+                    file_path, scan_obj, software_obj=sw_obj)
             elif scan_type == "CYCLONEDX":
-                cyclonedx.parse_cyclonedx_json(file_path, scan_obj, software_obj=sw_obj)
+                cyclonedx.parse_cyclonedx_json(
+                    file_path, scan_obj, software_obj=sw_obj)
             if sw_obj:
                 return redirect("software_detail", pk=sw_obj.id)
             return redirect("dashboard")
@@ -1346,7 +1377,8 @@ def ki_dashboard(request):
     elif provider == "azure":
         model_label = f"Azure AI · {settings_obj.ai_azure_model or 'N/A'}"
     else:
-        model_label = f"OpenRouter · {settings_obj.ai_openrouter_model or 'N/A'}"
+        model_label = f"OpenRouter · {
+            settings_obj.ai_openrouter_model or 'N/A'}"
     ai = {"model": model_label, "proc_time": round(avg_proc_time_ms / 1000, 2)}
     context = {
         "triaged_vulns": triaged_vulns,
@@ -1473,7 +1505,8 @@ def audit_trail(request):
 
     query = (request.GET.get("q") or "").strip()
     action_filter = (request.GET.get("action") or "").strip()
-    allowed_actions = {choice[0] for choice in VulnerabilityAuditEvent.ACTION_CHOICES}
+    allowed_actions = {choice[0]
+                       for choice in VulnerabilityAuditEvent.ACTION_CHOICES}
     if action_filter and action_filter not in allowed_actions:
         action_filter = ""
 
@@ -1531,7 +1564,9 @@ def delete_user(request, pk):
     target_user = get_object_or_404(User, pk=pk)
     if target_user.pk == request.user.pk:
         return HttpResponseForbidden("cannot_delete_current_user")
-    if target_user.is_staff and User.objects.filter(is_superuser=True).count() <= 1:
+    if target_user.is_staff and User.objects.filter(is_staff=True).count() <= 1:
+        return HttpResponseForbidden("cannot_delete_last_staff")
+    if target_user.is_superuser and User.objects.filter(is_staff=True).count() <= 1:
         return HttpResponseForbidden("cannot_delete_last_superuser")
     target_user.delete()
     return redirect("user_admin")
@@ -1589,15 +1624,18 @@ def save_email_reporting_config(request):
 def save_ai_triage_config(request):
     if not request.user.is_staff:
         return HttpResponseForbidden("forbidden")
-    provider = (request.POST.get("ai_triage_provider") or "openrouter").strip().lower()
+    provider = (request.POST.get("ai_triage_provider")
+                or "openrouter").strip().lower()
     if provider not in {"openrouter", "azure"}:
         return HttpResponseForbidden("invalid_provider")
     openrouter_model = (
         request.POST.get("ai_openrouter_model") or "deepseek/deepseek-v4-flash"
     ).strip()
-    azure_endpoint = (request.POST.get("ai_azure_endpoint") or "").strip() or None
+    azure_endpoint = (request.POST.get(
+        "ai_azure_endpoint") or "").strip() or None
     azure_model = (request.POST.get("ai_azure_model") or "").strip() or None
-    azure_api_version = (request.POST.get("ai_azure_api_version") or "").strip()
+    azure_api_version = (request.POST.get(
+        "ai_azure_api_version") or "").strip()
     openrouter_key = (request.POST.get("ai_openrouter_api_key") or "").strip()
     azure_key = (request.POST.get("ai_azure_api_key") or "").strip()
 
@@ -1699,7 +1737,8 @@ def sync_wrike_ticket(request, pk):
     if not vuln.wrike_task_id:
         return HttpResponseForbidden("wrike_ticket_missing")
     try:
-        task = wrike_ext.get_task(wrike_extension.api_token, vuln.wrike_task_id)
+        task = wrike_ext.get_task(
+            wrike_extension.api_token, vuln.wrike_task_id)
         if task.get("completed"):
             if vuln.status != "fixed":
                 old_status = vuln.status

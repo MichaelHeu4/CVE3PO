@@ -115,6 +115,7 @@ def extract_poc_from_description(description):
 
 
 def parse_osv_json(file_path, scan_obj, software_obj=None):
+    from vuln_manager.utils.osv_auto import query_nvd_by_cve_id, extract_nvd_description
     with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
@@ -133,19 +134,27 @@ def parse_osv_json(file_path, scan_obj, software_obj=None):
         vulnerabilities.append(data)
 
     for vuln in vulnerabilities:
+        cve_id = extract_cve_id(vuln)
         description = vuln.get("details", "No description provided.")
         summary = vuln.get("summary", "No summary provided.")
+
+        if summary == "No summary provided." and cve_id.startswith("CVE-"):
+            nvd_cve = query_nvd_by_cve_id(cve_id)
+            if nvd_cve:
+                nvd_desc = extract_nvd_description(nvd_cve)
+                if nvd_desc and nvd_desc != "No description provided.":
+                    summary = nvd_desc[:100] + "..." if len(nvd_desc) > 100 else nvd_desc
 
         description, poc = extract_poc_from_description(description)
 
         cvss_score, severity = extract_severity(vuln)
         if (cvss_score):
-            print(extract_cve_id(vuln) + " CVSS: " + cvss_score)
+            print(cve_id + " CVSS: " + cvss_score)
         
         create_or_update_vulnerability(
             scan=scan_obj,
             software=software_obj,
-            cve_id=extract_cve_id(vuln),
+            cve_id=cve_id,
             cvss=cvss_score,
             severity=severity,
             name=f"OSV: {summary}",

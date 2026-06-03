@@ -1,3 +1,4 @@
+from .enrichment import get_epss_score, is_cisa_kev, get_cve_details
 from vuln_manager.models import Extension, SystemSettings, Vulnerability
 import os
 import json
@@ -71,8 +72,6 @@ BEISPIEL_OUTPUT = json.dumps(
     }
 )
 
-from .enrichment import get_epss_score, is_cisa_kev, get_cve_details
-
 
 def _get_ai_config():
     ext, _ = Extension.objects.get_or_create(name_id="ai_triage")
@@ -97,7 +96,8 @@ def _build_messages(current_finding):
 
 def _call_openrouter(messages, settings_obj):
     api_key = (
-        settings_obj.ai_openrouter_api_key or os.getenv("OPENROUTER_API_KEY", "")
+        settings_obj.ai_openrouter_api_key or os.getenv(
+            "OPENROUTER_API_KEY", "")
     ).strip()
     if not api_key:
         raise RuntimeError("ai_triage_missing_openrouter_key")
@@ -128,7 +128,8 @@ def _call_azure_ai(messages, settings_obj):
             api_key=api_key,
             api_version=api_version or "2025-01-01-preview",
         )
-        client = instructor.from_openai(azure_client, mode=instructor.Mode.JSON)
+        client = instructor.from_openai(
+            azure_client, mode=instructor.Mode.JSON)
         return client.chat.completions.create(
             model=deployment,
             response_model=TriageErgebnis,
@@ -156,7 +157,8 @@ def _call_azure_ai(messages, settings_obj):
         else:
             azure_messages.append(UserMessage(msg["content"]))
 
-    response = client.complete(messages=azure_messages, model=deployment, temperature=0)
+    response = client.complete(
+        messages=azure_messages, model=deployment, temperature=0)
     content = response.choices[0].message.content
     if isinstance(content, list):
         text = "".join(part.text for part in content if hasattr(part, "text"))
@@ -209,7 +211,9 @@ def triage(vuln: Vulnerability):
 
     # Exposure: In diesem Prototyp setzen wir Controlled als Standard,
     # außer wir haben Hinweise auf Internet-Exponierung.
-    exposure = host.is_exposed if host.is_exposed else "Controlled"
+    exposure = "Controlled"
+    if host:
+        exposure = host.is_exposed if host.is_exposed
 
     aktueller_fund = f"""
     CVE: {vuln.cve_id}

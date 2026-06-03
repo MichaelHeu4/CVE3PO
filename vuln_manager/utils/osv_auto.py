@@ -59,8 +59,16 @@ def _candidate_ecosystems(software):
         ecosystems.append("Packagist")
 
     if not ecosystems:
-        ecosystems = ["Debian", "Ubuntu", "PyPI",
-                      "npm", "Maven", "Go", "crates.io"]
+        ecosystems = [
+            "Debian",
+            "Ubuntu",
+            "PyPI",
+            "npm",
+            "Maven",
+            "Go",
+            "crates.io",
+            "GIT",
+        ]
 
     seen = set()
     deduped = []
@@ -113,6 +121,26 @@ def _candidate_nvd_keywords(software):
     return deduped
 
 
+def query_nvd_by_cve_id(cve_id):
+    if not cve_id or not cve_id.startswith("CVE-"):
+        return None
+
+    try:
+        response = requests.get(
+            NVD_QUERY_URL,
+            params={"cveId": cve_id},
+            headers=_nvd_headers(),
+            timeout=10,
+        )
+        response.raise_for_status()
+        records = response.json().get("vulnerabilities", [])
+        if records:
+            return records[0].get("cve")
+    except Exception:
+        logger.debug("NVD lookup failed for %s", cve_id)
+    return None
+
+
 def _query_nvd_by_keyword(keyword):
     response = requests.get(
         NVD_QUERY_URL,
@@ -126,7 +154,7 @@ def _query_nvd_by_keyword(keyword):
     return [entry.get("cve", {}) for entry in records if entry.get("cve")]
 
 
-def _extract_nvd_description(cve):
+def extract_nvd_description(cve):
     for description in cve.get("descriptions", []):
         if description.get("lang") == "en" and description.get("value"):
             return description["value"]
@@ -240,7 +268,7 @@ def _cve_matches_software(cve, software):
     if has_cpes:
         return False
 
-    description = _extract_nvd_description(cve).lower()
+    description = extract_nvd_description(cve).lower()
     if name and name not in description:
         return False
     if version_str and version_str not in description:
@@ -297,15 +325,27 @@ def enrich_software_with_feeds(software_id):
             continue
 
         for vuln in vulns:
+            cve_id = extract_cve_id(vuln)
             description = vuln.get("details", "No description provided.")
             summary = vuln.get("summary", "No summary provided.")
+
+            if "No summary provided." in summary and cve_id.startswith("CVE-"):
+                nvd_cve = query_nvd_by_cve_id(cve_id)
+                if nvd_cve:
+                    nvd_desc = extract_nvd_description(nvd_cve)
+                    if nvd_desc and nvd_desc != "No description provided.":
+                        summary = (
+                            nvd_desc[:100] +
+                            "..." if len(nvd_desc) > 100 else nvd_desc
+                        )
+
             description, poc = extract_poc_from_description(description)
             cvss_score, severity = extract_severity(vuln)
 
             create_or_update_vulnerability(
                 scan=scan_obj,
                 software=software,
-                cve_id=extract_cve_id(vuln),
+                cve_id=cve_id,
                 cvss=cvss_score,
                 severity=severity,
                 name=f"OSV: {summary}",
@@ -320,7 +360,7 @@ def enrich_software_with_feeds(software_id):
     )
     for cve in _collect_nvd_vulns(software):
         cve_id = (cve.get("id") or "CVE-Unknown").upper()
-        description = _extract_nvd_description(cve)
+        description = extract_nvd_description(cve)
         cvss_score, severity = _extract_nvd_cvss_and_severity(cve)
 
         create_or_update_vulnerability(
