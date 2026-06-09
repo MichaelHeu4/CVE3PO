@@ -213,7 +213,7 @@ def triage(vuln: Vulnerability):
     # außer wir haben Hinweise auf Internet-Exponierung.
     exposure = "Controlled"
     if host:
-        exposure = host.is_exposed if host.is_exposed
+        exposure = "Open" if host.is_exposed else "Controlled"
 
     aktueller_fund = f"""
     CVE: {vuln.cve_id}

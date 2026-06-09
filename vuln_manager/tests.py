@@ -743,6 +743,93 @@ class WazuhWebhookAuthTests(TestCase):
         )
         self.assertEqual(response.status_code, 401)
 
+    def test_wazuh_webhook_handles_robust_format(self):
+        # A more realistic/complex Wazuh alert format
+        payload = {
+            "rule": {"id": "23501", "description": "Vulnerability found in libc6"},
+            "agent": {"id": "001", "name": "ubuntu-host", "ip": "10.0.0.5"},
+            "data": {
+                "vulnerability": {
+                    "cve": "CVE-2026-8888",
+                    "severity": "Critical",
+                    "status": "Active",
+                    "cvss": {
+                        "cvss3": {
+                            "base_score": "9.8"
+                        }
+                    },
+                    "package": {
+                        "name": "libc6",
+                        "version": "2.31-0ubuntu9"
+                    }
+                }
+            }
+        }
+        response = self.client.post(
+            self.url,
+            data=json.dumps(payload),
+            content_type="application/json",
+            HTTP_X_API_KEY="wazuh-token-123",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("status"), "upserted")
+        
+        # Verify vulnerability was created with extracted data
+        from vuln_manager.models import Vulnerability, Software
+        vuln = Vulnerability.objects.get(cve_id="CVE-2026-8888")
+        self.assertEqual(vuln.severity, "critical")
+        self.assertEqual(vuln.cvss, "9.8")
+        self.assertEqual(vuln.name, "Vulnerability found in libc6")
+        self.assertEqual(vuln.software.name, "libc6")
+        self.assertEqual(vuln.software.version, "2.31-0ubuntu9")
+
+
+    def test_wazuh_webhook_handles_solved_status(self):
+        # First, create an open vulnerability
+        payload_open = {
+            "agent": {"ip": "10.0.0.6", "name": "solved-host"},
+            "data": {
+                "vulnerability": {
+                    "cve": "CVE-2026-7777",
+                    "severity": "High",
+                    "status": "Active"
+                }
+            }
+        }
+        self.client.post(
+            self.url,
+            data=json.dumps(payload_open),
+            content_type="application/json",
+            HTTP_X_API_KEY="wazuh-token-123",
+        )
+        
+        from vuln_manager.models import Vulnerability
+        vuln = Vulnerability.objects.get(cve_id="CVE-2026-7777")
+        self.assertEqual(vuln.status, "open")
+
+        # Now send a solved alert
+        payload_solved = {
+            "rule": {"id": "23502", "description": "Vulnerability solved"},
+            "agent": {"ip": "10.0.0.6", "name": "solved-host"},
+            "data": {
+                "vulnerability": {
+                    "cve": "CVE-2026-7777",
+                    "status": "Solved"
+                }
+            }
+        }
+        response = self.client.post(
+            self.url,
+            data=json.dumps(payload_solved),
+            content_type="application/json",
+            HTTP_X_API_KEY="wazuh-token-123",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("status"), "updated")
+        
+        vuln.refresh_from_db()
+        self.assertEqual(vuln.status, "fixed")
+
 
 class ManualVulnerabilityEnrichmentTests(TestCase):
     def setUp(self):
