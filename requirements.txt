@@ -63,7 +63,7 @@ semantic-version==2.10.0
 semgrep==1.156.0
 sqlparse==0.5.5
 sse-starlette==3.3.4
-starlette==1.0.0
+starlette==1.0.1
 tomli==2.0.2
 typing-inspection==0.4.2
 typing_extensions==4.15.0
