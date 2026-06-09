@@ -1377,8 +1377,7 @@ def ki_dashboard(request):
     elif provider == "azure":
         model_label = f"Azure AI · {settings_obj.ai_azure_model or 'N/A'}"
     else:
-        model_label = f"OpenRouter · {
-            settings_obj.ai_openrouter_model or 'N/A'}"
+        model_label = f"OpenRouter · {settings_obj.ai_openrouter_model or 'N/A'}"
     ai = {"model": model_label, "proc_time": round(avg_proc_time_ms / 1000, 2)}
     context = {
         "triaged_vulns": triaged_vulns,
@@ -1809,9 +1808,7 @@ def run_triage_background():
 
         if vuln.ai_last_criticality != current_crit:
             print(
-                f"[AI] Re-triaging {vuln.cve_id} due to criticality change: {
-                    vuln.ai_last_criticality
-                } -> {current_crit}"
+                f"[AI] Re-triaging {vuln.cve_id} due to criticality change: {vuln.ai_last_criticality} -> {current_crit}"
             )
             ai_triage.triage(vuln)
 
