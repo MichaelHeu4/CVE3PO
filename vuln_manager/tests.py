@@ -932,6 +932,25 @@ class SeverityFilterAndSingleTriageTests(TestCase):
         self.assertEqual(len(vulns), 1)
         self.assertEqual(vulns[0].cve_id, "CVE-2026-30002")
 
+    def test_software_detail_host_clustering(self):
+        h1 = Host.objects.create(ip_address="10.0.0.101", criticality="Critical", is_exposed=True)
+        h2 = Host.objects.create(ip_address="10.0.0.102", criticality="Low", is_exposed=True)
+        h3 = Host.objects.create(ip_address="10.0.0.103", criticality="High", is_exposed=False)
+        h4 = Host.objects.create(ip_address="10.0.0.104", criticality="Medium", is_exposed=False)
+
+        self.software.hosts.add(h1, h2, h3, h4)
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse("software_detail", args=[self.software.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(h1, response.context["cluster_1"])
+        self.assertIn(h2, response.context["cluster_2"])
+        self.assertIn(h3, response.context["cluster_3"])
+        self.assertIn(h4, response.context["cluster_4"])
+        self.assertIn(self.host, response.context["cluster_4"])
+
     def test_kanban_filters_by_severity(self):
         self.client.force_login(self.user)
         response = self.client.get(reverse("kanban_board") + "?severity=critical")
@@ -963,6 +982,17 @@ class SeverityFilterAndSingleTriageTests(TestCase):
             vulnerability=self.v_critical, action="updated", user=self.user
         ).latest("created_at")
         self.assertEqual(event.details.get("source"), "manual_retriage")
+
+    @patch("vuln_manager.views.threading.Thread")
+    def test_single_software_retriage_endpoint(self, thread_cls):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("triage_single_software", args=[self.software.pk])
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("software_detail", args=[self.software.pk]))
+        thread_cls.assert_called_once()
+        thread_cls.return_value.start.assert_called_once()
 
 
 class ScanDiffViewTests(TestCase):
@@ -1140,6 +1170,8 @@ class AITriageModuleConfigTests(TestCase):
                 "ai_azure_model": "gpt-4o-mini",
                 "ai_azure_api_version": "2024-06-01",
                 "ai_azure_api_key": "azure-secret",
+                "ai_cve_system_prompt": "Custom CVE system prompt context",
+                "ai_software_system_prompt": "Custom SW system prompt context",
             },
         )
         self.assertEqual(response.status_code, 302)
@@ -1151,6 +1183,8 @@ class AITriageModuleConfigTests(TestCase):
         self.assertEqual(
             settings_obj.ai_azure_endpoint, "https://example-resource.inference.ai.azure.com"
         )
+        self.assertEqual(settings_obj.ai_cve_system_prompt, "Custom CVE system prompt context")
+        self.assertEqual(settings_obj.ai_software_system_prompt, "Custom SW system prompt context")
 
     @patch("vuln_manager.views.threading.Thread")
     def test_single_triage_forbidden_when_module_disabled(self, thread_cls):
@@ -1161,6 +1195,126 @@ class AITriageModuleConfigTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.content.decode(), "ai_triage_disabled")
         thread_cls.assert_not_called()
+
+    @patch("vuln_manager.views.threading.Thread")
+    def test_single_software_triage_forbidden_when_module_disabled(self, thread_cls):
+        self.client.force_login(self.user)
+        sw = Software.objects.create(name="disabled-sw", version="1.0")
+        response = self.client.post(
+            reverse("triage_single_software", args=[sw.pk])
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.content.decode(), "ai_triage_disabled")
+        thread_cls.assert_not_called()
+
+    @patch("vuln_manager.utils.ai_triage._call_openrouter")
+    @patch("vuln_manager.utils.ai_triage.triage")
+    def test_triage_software_business_logic(self, mock_triage, mock_call):
+        from vuln_manager.utils.ai_triage import triage_software, SoftwareTriageErgebnis
+        
+        ext = Extension.objects.get(name_id="ai_triage")
+        ext.is_active = True
+        ext.save()
+        settings_obj, _ = SystemSettings.objects.get_or_create(pk=1)
+        settings_obj.ai_triage_provider = "openrouter"
+        settings_obj.save()
+
+        sw = Software.objects.create(name="logic-sw", version="2.0")
+        v = Vulnerability.objects.create(
+            scan=self.scan,
+            software=sw,
+            cve_id="CVE-2026-9999",
+            severity="high",
+            status="open",
+            name="Logic test vuln",
+        )
+
+        mock_call.return_value = SoftwareTriageErgebnis(
+            gedankengang_analyst="All OK",
+            cluster_1_score="Act",
+            cluster_2_score="Attend",
+            cluster_3_score="Track",
+            cluster_4_score="Track",
+        )
+
+        triage_software(sw)
+
+        sw.refresh_from_db()
+        self.assertEqual(sw.ai_reason, "All OK")
+        self.assertEqual(sw.ai_result_cluster_1, "Act")
+        self.assertEqual(sw.ai_result_cluster_2, "Attend")
+        self.assertEqual(sw.ai_result_cluster_3, "Track")
+        self.assertEqual(sw.ai_result_cluster_4, "Track")
+        self.assertIsNotNone(sw.ai_triage_time)
+        mock_triage.assert_called_once_with(v)
+
+    @patch("vuln_manager.utils.ai_triage._call_openrouter")
+    @patch("vuln_manager.utils.ai_triage.triage")
+    def test_triage_software_escalation_rules(self, mock_triage, mock_call):
+        from vuln_manager.utils.ai_triage import triage_software, SoftwareTriageErgebnis
+        
+        ext = Extension.objects.get(name_id="ai_triage")
+        ext.is_active = True
+        ext.save()
+        settings_obj, _ = SystemSettings.objects.get_or_create(pk=1)
+        settings_obj.ai_triage_provider = "openrouter"
+        settings_obj.save()
+
+        # Rule 1 test: > 10 CVEs escalates Track -> Attend
+        sw1 = Software.objects.create(name="esc-sw-1")
+        for i in range(11):
+            Vulnerability.objects.create(
+                scan=self.scan,
+                software=sw1,
+                cve_id=f"CVE-2026-100{i}",
+                severity="high",
+                status="open",
+                name="T",
+                ai_result="Track",
+            )
+
+        mock_call.return_value = SoftwareTriageErgebnis(
+            gedankengang_analyst="R1",
+            cluster_1_score="Track",
+            cluster_2_score="Track",
+            cluster_3_score="Track",
+            cluster_4_score="Track",
+        )
+
+        triage_software(sw1)
+        sw1.refresh_from_db()
+        self.assertEqual(sw1.ai_result_cluster_1, "Attend")
+        self.assertEqual(sw1.ai_result_cluster_2, "Attend")
+        self.assertEqual(sw1.ai_result_cluster_3, "Attend")
+        self.assertEqual(sw1.ai_result_cluster_4, "Attend")
+
+        # Rule 2 test: > 3 CVEs with individual status Attend or Act escalates Attend -> Act
+        sw2 = Software.objects.create(name="esc-sw-2")
+        for i in range(4):
+            Vulnerability.objects.create(
+                scan=self.scan,
+                software=sw2,
+                cve_id=f"CVE-2026-200{i}",
+                severity="high",
+                status="open",
+                name="T",
+                ai_result="Attend",
+            )
+
+        mock_call.return_value = SoftwareTriageErgebnis(
+            gedankengang_analyst="R2",
+            cluster_1_score="Attend",
+            cluster_2_score="Attend",
+            cluster_3_score="Attend",
+            cluster_4_score="Attend",
+        )
+
+        triage_software(sw2)
+        sw2.refresh_from_db()
+        self.assertEqual(sw2.ai_result_cluster_1, "Act")
+        self.assertEqual(sw2.ai_result_cluster_2, "Act")
+        self.assertEqual(sw2.ai_result_cluster_3, "Act")
+        self.assertEqual(sw2.ai_result_cluster_4, "Act")
 
     def test_bulk_triage_forbidden_when_module_disabled(self):
         self.client.force_login(self.user)
@@ -1183,6 +1337,60 @@ class AITriageModuleConfigTests(TestCase):
         self.assertEqual(response.status_code, 302)
         settings_obj = SystemSettings.objects.get(pk=1)
         self.assertEqual(settings_obj.ai_azure_api_version, "")
+
+    @patch("vuln_manager.utils.ai_triage._call_openrouter")
+    def test_custom_prompts_are_used_by_ai_triage(self, mock_call):
+        from vuln_manager.utils.ai_triage import triage, triage_software, SoftwareTriageErgebnis, TriageErgebnis
+        
+        ext = Extension.objects.get(name_id="ai_triage")
+        ext.is_active = True
+        ext.save()
+        
+        settings_obj, _ = SystemSettings.objects.get_or_create(pk=1)
+        settings_obj.ai_triage_provider = "openrouter"
+        settings_obj.ai_cve_system_prompt = "CUSTOM CVE PROMPT"
+        settings_obj.ai_software_system_prompt = "CUSTOM SOFTWARE PROMPT"
+        settings_obj.save()
+
+        # 1. Test CVE Triage uses custom prompt
+        mock_call.return_value = TriageErgebnis(
+            gedankengang_analyst="Gedanke",
+            ssvc_score="Track",
+            patching_vorschlag="Vorschlag"
+        )
+        triage(self.vuln)
+        
+        called_messages = mock_call.call_args[0][0]
+        self.assertEqual(called_messages[0]["content"], "CUSTOM CVE PROMPT")
+
+        # 2. Test Software Triage uses custom prompt
+        mock_call.reset_mock()
+        mock_call.side_effect = [
+            TriageErgebnis(
+                gedankengang_analyst="Gedanke",
+                ssvc_score="Track",
+                patching_vorschlag="Vorschlag"
+            ),
+            SoftwareTriageErgebnis(
+                gedankengang_analyst="Gedanke SW",
+                cluster_1_score="Track",
+                cluster_2_score="Track",
+                cluster_3_score="Track",
+                cluster_4_score="Track",
+            )
+        ]
+        
+        sw = Software.objects.create(name="test-sw-prompts")
+        self.vuln.software = sw
+        self.vuln.save()
+        
+        triage_software(sw)
+        
+        self.assertEqual(mock_call.call_count, 2)
+        vuln_messages = mock_call.call_args_list[0][0][0]
+        sw_messages = mock_call.call_args_list[1][0][0]
+        self.assertEqual(vuln_messages[0]["content"], "CUSTOM CVE PROMPT")
+        self.assertEqual(sw_messages[0]["content"], "CUSTOM SOFTWARE PROMPT")
 
 
 class CycloneDxImportTests(TestCase):
@@ -1238,3 +1446,38 @@ class CycloneDxImportTests(TestCase):
         vuln = Vulnerability.objects.get(cve_id="CVE-2024-99999", software=sw)
         self.assertEqual(vuln.scan.scan_type, "CYCLONEDX")
         self.assertEqual(vuln.severity, "high")
+
+
+class ThreatIntelCachingTests(TestCase):
+    def test_cisa_kev_caching(self):
+        from vuln_manager.models import CisaKevEntry
+        from vuln_manager.utils.enrichment import is_cisa_kev
+        
+        CisaKevEntry.objects.create(cve_id="CVE-2026-99999")
+        self.assertTrue(is_cisa_kev("CVE-2026-99999"))
+        self.assertFalse(is_cisa_kev("CVE-2026-00000"))
+
+    @patch("requests.get")
+    def test_epss_caching(self, mock_get):
+        from unittest.mock import MagicMock
+        from vuln_manager.models import EpssEntry
+        from vuln_manager.utils.enrichment import get_epss_score
+        
+        EpssEntry.objects.create(cve_id="CVE-2026-11111", score=0.85, percentile=0.99)
+        score = get_epss_score("CVE-2026-11111")
+        self.assertEqual(score, 0.85)
+        mock_get.assert_not_called()
+        
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": [{"cve": "CVE-2026-22222", "epss": "0.45", "percentile": "0.91"}]
+        }
+        mock_get.return_value = mock_response
+        
+        score2 = get_epss_score("CVE-2026-22222")
+        self.assertEqual(score2, 0.45)
+        mock_get.assert_called_once_with("https://api.first.org/data/v1/epss?cve=CVE-2026-22222", timeout=5)
+        
+        entry = EpssEntry.objects.get(cve_id="CVE-2026-22222")
+        self.assertEqual(entry.score, 0.45)

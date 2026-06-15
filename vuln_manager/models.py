@@ -35,6 +35,9 @@ class SystemSettings(models.Model):
     ai_azure_api_version = models.CharField(
         max_length=40, default="2024-05-01-preview"
     )
+    ai_cve_system_prompt = models.TextField(blank=True, null=True)
+    ai_software_system_prompt = models.TextField(blank=True, null=True)
+
 
     def __str__(self):
         return f"SystemSettings(disable_register={self.disable_register})"
@@ -96,6 +99,29 @@ class Software(models.Model):
         max_length=15, null=True, choices=CRITICALITY_CHOICES
     )
     hosts = models.ManyToManyField(Host, related_name="software_inventory")
+
+    # AI Triage Fields
+    AI_RESULTS = (
+        ("Track", "Track"),
+        ("Track*", "Track*"),
+        ("Attend", "Attend"),
+        ("Act", "Act"),
+        ("tbd", "tbd")
+    )
+    ai_reason = models.TextField(blank=True, null=True)
+    ai_result_cluster_1 = models.CharField(
+        max_length=10, choices=AI_RESULTS, default="tbd"
+    )
+    ai_result_cluster_2 = models.CharField(
+        max_length=10, choices=AI_RESULTS, default="tbd"
+    )
+    ai_result_cluster_3 = models.CharField(
+        max_length=10, choices=AI_RESULTS, default="tbd"
+    )
+    ai_result_cluster_4 = models.CharField(
+        max_length=10, choices=AI_RESULTS, default="tbd"
+    )
+    ai_triage_time = models.DateTimeField(blank=True, null=True)
 
     class Meta:
         verbose_name_plural = "Software"
@@ -270,3 +296,29 @@ class VulnerabilityAuditEvent(models.Model):
     def __str__(self):
         target = self.vulnerability.cve_id if self.vulnerability else "deleted_vulnerability"
         return f"{self.action} - {target}"
+
+
+class CisaKevEntry(models.Model):
+    cve_id = models.CharField(max_length=50, unique=True)
+    added_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "CISA KEV Entry"
+        verbose_name_plural = "CISA KEV Entries"
+
+    def __str__(self):
+        return self.cve_id
+
+
+class EpssEntry(models.Model):
+    cve_id = models.CharField(max_length=50, unique=True)
+    score = models.FloatField()
+    percentile = models.FloatField(null=True, blank=True)
+    last_updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "EPSS Entry"
+        verbose_name_plural = "EPSS Entries"
+
+    def __str__(self):
+        return f"{self.cve_id} (Score: {self.score})"

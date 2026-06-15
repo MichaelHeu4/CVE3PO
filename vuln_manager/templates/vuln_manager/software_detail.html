@@ -66,40 +66,370 @@
                 {% if not osv_rescan_possible %}
                 <p class="text-[9px] text-outline uppercase tracking-wider mt-2">Version required for OSV/NVD lookup.</p>
                 {% endif %}
+                
+                {% if ai_triage_active %}
+                <form action="{% url 'triage_single_software' software.id %}" method="POST" class="mt-3">
+                    {% csrf_token %}
+                    <button type="submit" class="bg-gradient-to-r from-tertiary to-tertiary-container text-surface w-full py-3 rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg shadow-tertiary/20 hover:brightness-110 transition-all flex items-center justify-center gap-2">
+                        <span class="material-symbols-outlined text-sm">psychology</span> Run AI Triage
+                    </button>
+                </form>
+                {% endif %}
             </div>
         </div>
+
+        {% if software.ai_triage_time %}
+        <div class="bg-surface-container rounded-3xl p-8 border border-outline-variant/5 shadow-xl shadow-black/20">
+            <div class="flex items-center justify-between mb-8">
+                <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-tertiary flex items-center gap-2">
+                    <span class="material-symbols-outlined text-sm">psychology</span> AI Triage
+                </h5>
+                <span class="text-[9px] text-outline uppercase tracking-wider">
+                    {{ software.ai_triage_time|date:"Y-m-d H:i" }}
+                </span>
+            </div>
+            
+            <div class="space-y-4">
+                <div>
+                    <span class="block text-outline text-[9px] uppercase tracking-wider mb-1">Analyst Reasoning</span>
+                    <p class="p-4 bg-surface-container-low rounded-2xl text-on-surface-variant font-body leading-relaxed text-xs max-h-40 overflow-y-auto">
+                        {{ software.ai_reason }}
+                    </p>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-3 pt-2">
+                    <div class="p-3 bg-surface-container-low rounded-xl">
+                        <span class="block text-[8px] text-outline uppercase mb-1">Cluster 1 (Open/High)</span>
+                        <span class="inline-flex px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider
+                            {% if software.ai_result_cluster_1 == 'Act' %}bg-error/20 text-error border border-error/30 shadow-[0_0_10px_rgba(255,113,108,0.15)]
+                            {% elif software.ai_result_cluster_1 == 'Attend' %}bg-tertiary/20 text-tertiary border border-tertiary/30
+                            {% else %}bg-primary/20 text-primary border border-primary/30{% endif %}">
+                            {{ software.ai_result_cluster_1 }}
+                        </span>
+                    </div>
+                    <div class="p-3 bg-surface-container-low rounded-xl">
+                        <span class="block text-[8px] text-outline uppercase mb-1">Cluster 2 (Open/Low)</span>
+                        <span class="inline-flex px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider
+                            {% if software.ai_result_cluster_2 == 'Act' %}bg-error/20 text-error border border-error/30 shadow-[0_0_10px_rgba(255,113,108,0.15)]
+                            {% elif software.ai_result_cluster_2 == 'Attend' %}bg-tertiary/20 text-tertiary border border-tertiary/30
+                            {% else %}bg-primary/20 text-primary border border-primary/30{% endif %}">
+                            {{ software.ai_result_cluster_2 }}
+                        </span>
+                    </div>
+                    <div class="p-3 bg-surface-container-low rounded-xl">
+                        <span class="block text-[8px] text-outline uppercase mb-1">Cluster 3 (Ctrl/High)</span>
+                        <span class="inline-flex px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider
+                            {% if software.ai_result_cluster_3 == 'Act' %}bg-error/20 text-error border border-error/30 shadow-[0_0_10px_rgba(255,113,108,0.15)]
+                            {% elif software.ai_result_cluster_3 == 'Attend' %}bg-tertiary/20 text-tertiary border border-tertiary/30
+                            {% else %}bg-primary/20 text-primary border border-primary/30{% endif %}">
+                            {{ software.ai_result_cluster_3 }}
+                        </span>
+                    </div>
+                    <div class="p-3 bg-surface-container-low rounded-xl">
+                        <span class="block text-[8px] text-outline uppercase mb-1">Cluster 4 (Ctrl/Low)</span>
+                        <span class="inline-flex px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider
+                            {% if software.ai_result_cluster_4 == 'Act' %}bg-error/20 text-error border border-error/30 shadow-[0_0_10px_rgba(255,113,108,0.15)]
+                            {% elif software.ai_result_cluster_4 == 'Attend' %}bg-tertiary/20 text-tertiary border border-tertiary/30
+                            {% else %}bg-primary/20 text-primary border border-primary/30{% endif %}">
+                            {{ software.ai_result_cluster_4 }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
         <div class="bg-surface-container rounded-3xl p-8 shadow-xl shadow-black/20">
-          <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-8">Deployments</h5>
+          <div class="flex items-center justify-between mb-8">
+              <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline">Deployments</h5>
+              <span class="px-2.5 py-0.5 rounded-full bg-surface-container-highest text-outline text-[10px] font-black uppercase tracking-wider">
+                  {{ hosts|length }} Asset{{ hosts|length|pluralize }}
+              </span>
+          </div>
+          
           <div class="space-y-4">
-              {% for host in hosts %}
-              <div class="flex items-center justify-between p-6 bg-surface-container-low rounded-2xl hover:bg-surface-container-high transition-all group">
-                  <div class="flex items-center gap-6">
-                      <div class="w-12 h-12 rounded-2xl bg-surface-container-highest flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
-                          <span class="material-symbols-outlined">dns</span>
-                      </div>
-                      <div>
-                          <a href="{% url 'host_detail' host.id %}" class="font-black text-on-surface hover:text-primary transition-colors block">{{ host.ip_address }}</a>
-                          <p class="text-[10px] text-outline uppercase tracking-widest mt-0.5">{{ host.hostname|default:"Anonymous Host" }}</p>
-                      </div>
-                  </div>
-                  <div class="flex items-center gap-4">
-                      <a href="{% url 'host_detail' host.id %}" class="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center text-outline hover:text-primary hover:bg-primary/10 transition-all">
-                          <span class="material-symbols-outlined text-sm">visibility</span>
-                      </a>
-                      <form action="{% url 'remove_host_from_software' software.id host.id %}" method="POST" onsubmit="return confirm('Remove host association with this software?')">
-                          {% csrf_token %}
-                          <button type="submit" class="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center text-error/50 hover:text-error hover:bg-error/10 transition-all">
-                              <span class="material-symbols-outlined text-sm">link_off</span>
-                          </button>
-                      </form>
-                  </div>
-              </div>
-              {% empty %}
+              {% if not hosts %}
               <div class="text-center py-20">
                   <span class="material-symbols-outlined text-outline-variant text-6xl mb-4 opacity-20">inventory</span>
                   <p class="text-outline text-[10px] font-black uppercase tracking-widest">No Host Deployments Found</p>
               </div>
-              {% endfor %}
+              {% else %}
+              
+              <!-- Cluster 1: Critical & Exposed -->
+              <details class="group border border-error/10 rounded-2xl bg-surface-container-low overflow-hidden transition-all duration-300" {% if cluster_1 %}open{% endif %}>
+                  <summary class="flex items-center justify-between p-5 cursor-pointer list-none select-none hover:bg-surface-container-high/50 transition-colors">
+                      <div class="flex items-center gap-4">
+                          <div class="w-10 h-10 rounded-xl bg-error/10 text-error flex items-center justify-center">
+                              <span class="material-symbols-outlined">gpp_bad</span>
+                          </div>
+                          <div>
+                              <span class="block text-xs font-black text-on-surface uppercase tracking-wider text-left">Critical & Exposed</span>
+                              <span class="inline-flex mt-1 items-center gap-1.5 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest bg-error/15 text-error border border-error/30 shadow-[0_0_10px_rgba(255,113,108,0.15)]">
+                                  Critical Risk
+                              </span>
+                          </div>
+                      </div>
+                      <div class="flex items-center gap-3">
+                          {% if software.ai_triage_time %}
+                          <span class="inline-flex items-center px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider
+                              {% if software.ai_result_cluster_1 == 'Act' %}bg-error/20 text-error border border-error/30 shadow-[0_0_10px_rgba(255,113,108,0.15)]
+                              {% elif software.ai_result_cluster_1 == 'Attend' %}bg-tertiary/20 text-tertiary border border-tertiary/30
+                              {% else %}bg-primary/20 text-primary border border-primary/30{% endif %}">
+                              AI: {{ software.ai_result_cluster_1 }}
+                          </span>
+                          {% endif %}
+                          <span class="px-2 py-0.5 rounded bg-error/10 text-error text-[10px] font-black uppercase">
+                              {{ cluster_1|length }}
+                          </span>
+                          <span class="material-symbols-outlined text-outline transition-transform duration-300 group-open:rotate-180">expand_more</span>
+                      </div>
+                  </summary>
+                  <div class="p-5 border-t border-error/10 space-y-3 bg-surface-container-lowest/30">
+                      {% for host in cluster_1 %}
+                      <div class="flex items-center justify-between p-4 bg-surface-container/50 hover:bg-surface-container-high rounded-xl transition-all group/host">
+                          <div class="flex items-center gap-4">
+                              <div class="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center text-primary group-hover/host:scale-105 transition-transform">
+                                  <span class="material-symbols-outlined">dns</span>
+                              </div>
+                              <div>
+                                  <a href="{% url 'host_detail' host.id %}" class="font-black text-on-surface hover:text-primary transition-colors block text-xs">{{ host.ip_address }}</a>
+                                  <div class="flex items-center gap-2 mt-0.5">
+                                      <p class="text-[9px] text-outline uppercase tracking-widest">{{ host.hostname|default:"Anonymous Host" }}</p>
+                                      {% if software.ai_triage_time %}
+                                      <span class="inline-flex items-center px-1.5 py-0.2 rounded text-[7px] font-black uppercase tracking-wider
+                                          {% if software.ai_result_cluster_1 == 'Act' %}bg-error/10 text-error border border-error/20
+                                          {% elif software.ai_result_cluster_1 == 'Attend' %}bg-tertiary/10 text-tertiary border border-tertiary/20
+                                          {% else %}bg-primary/10 text-primary border border-primary/20{% endif %}">
+                                          Priority: {{ software.ai_result_cluster_1 }}
+                                      </span>
+                                      {% endif %}
+                                  </div>
+                              </div>
+                          </div>
+                          <div class="flex items-center gap-2">
+                              <a href="{% url 'host_detail' host.id %}" class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-outline hover:text-primary hover:bg-primary/10 transition-all">
+                                  <span class="material-symbols-outlined text-[16px]">visibility</span>
+                              </a>
+                              <form action="{% url 'remove_host_from_software' software.id host.id %}" method="POST" onsubmit="return confirm('Remove host association with this software?')">
+                                  {% csrf_token %}
+                                  <button type="submit" class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-error/50 hover:text-error hover:bg-error/10 transition-all">
+                                      <span class="material-symbols-outlined text-[16px]">link_off</span>
+                                  </button>
+                              </form>
+                          </div>
+                      </div>
+                      {% empty %}
+                      <p class="text-[10px] text-outline text-center py-2 uppercase font-bold tracking-widest opacity-50">No Assets</p>
+                      {% endfor %}
+                  </div>
+              </details>
+
+              <!-- Cluster 2: Medium/Low & Open -->
+              <details class="group border border-tertiary/10 rounded-2xl bg-surface-container-low overflow-hidden transition-all duration-300" {% if cluster_2 %}open{% endif %}>
+                  <summary class="flex items-center justify-between p-5 cursor-pointer list-none select-none hover:bg-surface-container-high/50 transition-colors">
+                      <div class="flex items-center gap-4">
+                          <div class="w-10 h-10 rounded-xl bg-tertiary/10 text-tertiary flex items-center justify-center">
+                              <span class="material-symbols-outlined">warning</span>
+                          </div>
+                          <div>
+                              <span class="block text-xs font-black text-on-surface uppercase tracking-wider text-left">Medium/Low & Exposed</span>
+                              <span class="inline-flex mt-1 items-center gap-1.5 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest bg-tertiary/15 text-tertiary border border-tertiary/30">
+                                  High Risk
+                              </span>
+                          </div>
+                      </div>
+                      <div class="flex items-center gap-3">
+                          {% if software.ai_triage_time %}
+                          <span class="inline-flex items-center px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider
+                              {% if software.ai_result_cluster_2 == 'Act' %}bg-error/20 text-error border border-error/30 shadow-[0_0_10px_rgba(255,113,108,0.15)]
+                              {% elif software.ai_result_cluster_2 == 'Attend' %}bg-tertiary/20 text-tertiary border border-tertiary/30
+                              {% else %}bg-primary/20 text-primary border border-primary/30{% endif %}">
+                              AI: {{ software.ai_result_cluster_2 }}
+                          </span>
+                          {% endif %}
+                          <span class="px-2 py-0.5 rounded bg-tertiary/10 text-tertiary text-[10px] font-black uppercase">
+                              {{ cluster_2|length }}
+                          </span>
+                          <span class="material-symbols-outlined text-outline transition-transform duration-300 group-open:rotate-180">expand_more</span>
+                      </div>
+                  </summary>
+                  <div class="p-5 border-t border-tertiary/10 space-y-3 bg-surface-container-lowest/30">
+                      {% for host in cluster_2 %}
+                      <div class="flex items-center justify-between p-4 bg-surface-container/50 hover:bg-surface-container-high rounded-xl transition-all group/host">
+                          <div class="flex items-center gap-4">
+                              <div class="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center text-primary group-hover/host:scale-105 transition-transform">
+                                  <span class="material-symbols-outlined">dns</span>
+                              </div>
+                              <div>
+                                  <a href="{% url 'host_detail' host.id %}" class="font-black text-on-surface hover:text-primary transition-colors block text-xs">{{ host.ip_address }}</a>
+                                  <div class="flex items-center gap-2 mt-0.5">
+                                      <p class="text-[9px] text-outline uppercase tracking-widest">{{ host.hostname|default:"Anonymous Host" }}</p>
+                                      {% if software.ai_triage_time %}
+                                      <span class="inline-flex items-center px-1.5 py-0.2 rounded text-[7px] font-black uppercase tracking-wider
+                                          {% if software.ai_result_cluster_2 == 'Act' %}bg-error/10 text-error border border-error/20
+                                          {% elif software.ai_result_cluster_2 == 'Attend' %}bg-tertiary/10 text-tertiary border border-tertiary/20
+                                          {% else %}bg-primary/10 text-primary border border-primary/20{% endif %}">
+                                          Priority: {{ software.ai_result_cluster_2 }}
+                                      </span>
+                                      {% endif %}
+                                  </div>
+                              </div>
+                          </div>
+                          <div class="flex items-center gap-2">
+                              <a href="{% url 'host_detail' host.id %}" class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-outline hover:text-primary hover:bg-primary/10 transition-all">
+                                  <span class="material-symbols-outlined text-[16px]">visibility</span>
+                              </a>
+                              <form action="{% url 'remove_host_from_software' software.id host.id %}" method="POST" onsubmit="return confirm('Remove host association with this software?')">
+                                  {% csrf_token %}
+                                  <button type="submit" class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-error/50 hover:text-error hover:bg-error/10 transition-all">
+                                      <span class="material-symbols-outlined text-[16px]">link_off</span>
+                                  </button>
+                              </form>
+                          </div>
+                      </div>
+                      {% empty %}
+                      <p class="text-[10px] text-outline text-center py-2 uppercase font-bold tracking-widest opacity-50">No Assets</p>
+                      {% endfor %}
+                  </div>
+              </details>
+
+              <!-- Cluster 3: Critical & Controlled -->
+              <details class="group border border-secondary/15 rounded-2xl bg-surface-container-low overflow-hidden transition-all duration-300" {% if cluster_3 %}open{% endif %}>
+                  <summary class="flex items-center justify-between p-5 cursor-pointer list-none select-none hover:bg-surface-container-high/50 transition-colors">
+                      <div class="flex items-center gap-4">
+                          <div class="w-10 h-10 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center">
+                              <span class="material-symbols-outlined">security</span>
+                          </div>
+                          <div>
+                              <span class="block text-xs font-black text-on-surface uppercase tracking-wider text-left">Critical & Controlled</span>
+                              <span class="inline-flex mt-1 items-center gap-1.5 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest bg-secondary/15 text-secondary border border-secondary/30">
+                                  Medium Risk
+                              </span>
+                          </div>
+                      </div>
+                      <div class="flex items-center gap-3">
+                          {% if software.ai_triage_time %}
+                          <span class="inline-flex items-center px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider
+                              {% if software.ai_result_cluster_3 == 'Act' %}bg-error/20 text-error border border-error/30 shadow-[0_0_10px_rgba(255,113,108,0.15)]
+                              {% elif software.ai_result_cluster_3 == 'Attend' %}bg-tertiary/20 text-tertiary border border-tertiary/30
+                              {% else %}bg-primary/20 text-primary border border-primary/30{% endif %}">
+                              AI: {{ software.ai_result_cluster_3 }}
+                          </span>
+                          {% endif %}
+                          <span class="px-2 py-0.5 rounded bg-secondary/10 text-secondary text-[10px] font-black uppercase">
+                              {{ cluster_3|length }}
+                          </span>
+                          <span class="material-symbols-outlined text-outline transition-transform duration-300 group-open:rotate-180">expand_more</span>
+                      </div>
+                  </summary>
+                  <div class="p-5 border-t border-secondary/15 space-y-3 bg-surface-container-lowest/30">
+                      {% for host in cluster_3 %}
+                      <div class="flex items-center justify-between p-4 bg-surface-container/50 hover:bg-surface-container-high rounded-xl transition-all group/host">
+                          <div class="flex items-center gap-4">
+                              <div class="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center text-primary group-hover/host:scale-105 transition-transform">
+                                  <span class="material-symbols-outlined">dns</span>
+                              </div>
+                              <div>
+                                  <a href="{% url 'host_detail' host.id %}" class="font-black text-on-surface hover:text-primary transition-colors block text-xs">{{ host.ip_address }}</a>
+                                  <div class="flex items-center gap-2 mt-0.5">
+                                      <p class="text-[9px] text-outline uppercase tracking-widest">{{ host.hostname|default:"Anonymous Host" }}</p>
+                                      {% if software.ai_triage_time %}
+                                      <span class="inline-flex items-center px-1.5 py-0.2 rounded text-[7px] font-black uppercase tracking-wider
+                                          {% if software.ai_result_cluster_3 == 'Act' %}bg-error/10 text-error border border-error/20
+                                          {% elif software.ai_result_cluster_3 == 'Attend' %}bg-tertiary/10 text-tertiary border border-tertiary/20
+                                          {% else %}bg-primary/10 text-primary border border-primary/20{% endif %}">
+                                          Priority: {{ software.ai_result_cluster_3 }}
+                                      </span>
+                                      {% endif %}
+                                  </div>
+                              </div>
+                          </div>
+                          <div class="flex items-center gap-2">
+                              <a href="{% url 'host_detail' host.id %}" class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-outline hover:text-primary hover:bg-primary/10 transition-all">
+                                  <span class="material-symbols-outlined text-[16px]">visibility</span>
+                              </a>
+                              <form action="{% url 'remove_host_from_software' software.id host.id %}" method="POST" onsubmit="return confirm('Remove host association with this software?')">
+                                  {% csrf_token %}
+                                  <button type="submit" class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-error/50 hover:text-error hover:bg-error/10 transition-all">
+                                      <span class="material-symbols-outlined text-[16px]">link_off</span>
+                                  </button>
+                              </form>
+                          </div>
+                      </div>
+                      {% empty %}
+                      <p class="text-[10px] text-outline text-center py-2 uppercase font-bold tracking-widest opacity-50">No Assets</p>
+                      {% endfor %}
+                  </div>
+              </details>
+
+              <!-- Cluster 4: Medium/Low & Controlled -->
+              <details class="group border border-outline-variant/30 rounded-2xl bg-surface-container-low overflow-hidden transition-all duration-300" {% if cluster_4 %}open{% endif %}>
+                  <summary class="flex items-center justify-between p-5 cursor-pointer list-none select-none hover:bg-surface-container-high/50 transition-colors">
+                      <div class="flex items-center gap-4">
+                          <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                              <span class="material-symbols-outlined">verified_user</span>
+                          </div>
+                          <div>
+                              <span class="block text-xs font-black text-on-surface uppercase tracking-wider text-left">Medium/Low & Controlled</span>
+                              <span class="inline-flex mt-1 items-center gap-1.5 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest bg-primary/15 text-primary border border-primary/30">
+                                  Low Risk
+                              </span>
+                          </div>
+                      </div>
+                      <div class="flex items-center gap-3">
+                          {% if software.ai_triage_time %}
+                          <span class="inline-flex items-center px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider
+                              {% if software.ai_result_cluster_4 == 'Act' %}bg-error/20 text-error border border-error/30 shadow-[0_0_10px_rgba(255,113,108,0.15)]
+                              {% elif software.ai_result_cluster_4 == 'Attend' %}bg-tertiary/20 text-tertiary border border-tertiary/30
+                              {% else %}bg-primary/20 text-primary border border-primary/30{% endif %}">
+                              AI: {{ software.ai_result_cluster_4 }}
+                          </span>
+                          {% endif %}
+                          <span class="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-black uppercase">
+                              {{ cluster_4|length }}
+                          </span>
+                          <span class="material-symbols-outlined text-outline transition-transform duration-300 group-open:rotate-180">expand_more</span>
+                      </div>
+                  </summary>
+                  <div class="p-5 border-t border-outline-variant/30 space-y-3 bg-surface-container-lowest/30">
+                      {% for host in cluster_4 %}
+                      <div class="flex items-center justify-between p-4 bg-surface-container/50 hover:bg-surface-container-high rounded-xl transition-all group/host">
+                          <div class="flex items-center gap-4">
+                              <div class="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center text-primary group-hover/host:scale-105 transition-transform">
+                                  <span class="material-symbols-outlined">dns</span>
+                              </div>
+                              <div>
+                                  <a href="{% url 'host_detail' host.id %}" class="font-black text-on-surface hover:text-primary transition-colors block text-xs">{{ host.ip_address }}</a>
+                                  <div class="flex items-center gap-2 mt-0.5">
+                                      <p class="text-[9px] text-outline uppercase tracking-widest">{{ host.hostname|default:"Anonymous Host" }}</p>
+                                      {% if software.ai_triage_time %}
+                                      <span class="inline-flex items-center px-1.5 py-0.2 rounded text-[7px] font-black uppercase tracking-wider
+                                          {% if software.ai_result_cluster_4 == 'Act' %}bg-error/10 text-error border border-error/20
+                                          {% elif software.ai_result_cluster_4 == 'Attend' %}bg-tertiary/10 text-tertiary border border-tertiary/20
+                                          {% else %}bg-primary/10 text-primary border border-primary/20{% endif %}">
+                                          Priority: {{ software.ai_result_cluster_4 }}
+                                      </span>
+                                      {% endif %}
+                                  </div>
+                              </div>
+                          </div>
+                          <div class="flex items-center gap-2">
+                              <a href="{% url 'host_detail' host.id %}" class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-outline hover:text-primary hover:bg-primary/10 transition-all">
+                                  <span class="material-symbols-outlined text-[16px]">visibility</span>
+                              </a>
+                              <form action="{% url 'remove_host_from_software' software.id host.id %}" method="POST" onsubmit="return confirm('Remove host association with this software?')">
+                                  {% csrf_token %}
+                                  <button type="submit" class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-error/50 hover:text-error hover:bg-error/10 transition-all">
+                                      <span class="material-symbols-outlined text-[16px]">link_off</span>
+                                  </button>
+                              </form>
+                          </div>
+                      </div>
+                      {% empty %}
+                      <p class="text-[10px] text-outline text-center py-2 uppercase font-bold tracking-widest opacity-50">No Assets</p>
+                      {% endfor %}
+                  </div>
+              </details>
+              {% endif %}
           </div>
         </div>
     </div>

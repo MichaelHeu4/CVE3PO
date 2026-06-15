@@ -145,6 +145,134 @@
     </div>
 </section>
 
+<!-- Host Cluster Heatmap & SLA Countdown -->
+<section class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
+    <!-- 2x2 Cluster Matrix -->
+    <div class="lg:col-span-2 bg-surface-container rounded-3xl p-8 shadow-xl">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="font-headline font-bold text-xl text-on-surface">Host Cluster Posture</h3>
+                <p class="text-[10px] text-outline uppercase tracking-widest mt-1">2x2 Exposure & Criticality Grid</p>
+            </div>
+            <span class="text-[10px] text-outline font-black uppercase tracking-widest">Active Status</span>
+        </div>
+        
+        <div class="grid grid-cols-2 gap-4">
+            <!-- Cluster 1: Open + High -->
+            <div class="bg-error/5 border border-error/20 rounded-2xl p-5 relative overflow-hidden group hover:bg-error/10 transition-all">
+                <div class="absolute right-4 top-4 text-error opacity-20">
+                    <span class="material-symbols-outlined text-4xl">gpp_maybe</span>
+                </div>
+                <h4 class="text-xs font-black uppercase tracking-widest text-error mb-3">Cluster 1: Open + High</h4>
+                <div class="flex justify-between items-end mt-4">
+                    <div>
+                        <p class="text-2xl font-headline font-black text-on-surface">{{ cluster_1_count }}</p>
+                        <p class="text-[9px] text-outline uppercase tracking-widest">Hosts</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-2xl font-headline font-black text-error">{{ cluster_1_vuln_count }}</p>
+                        <p class="text-[9px] text-outline uppercase tracking-widest">Vulnerabilities</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cluster 2: Open + Low -->
+            <div class="bg-tertiary/5 border border-tertiary/20 rounded-2xl p-5 relative overflow-hidden group hover:bg-tertiary/10 transition-all">
+                <div class="absolute right-4 top-4 text-tertiary opacity-20">
+                    <span class="material-symbols-outlined text-4xl">public</span>
+                </div>
+                <h4 class="text-xs font-black uppercase tracking-widest text-tertiary mb-3">Cluster 2: Open + Low</h4>
+                <div class="flex justify-between items-end mt-4">
+                    <div>
+                        <p class="text-2xl font-headline font-black text-on-surface">{{ cluster_2_count }}</p>
+                        <p class="text-[9px] text-outline uppercase tracking-widest">Hosts</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-2xl font-headline font-black text-tertiary">{{ cluster_2_vuln_count }}</p>
+                        <p class="text-[9px] text-outline uppercase tracking-widest">Vulnerabilities</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cluster 3: Controlled + High -->
+            <div class="bg-primary/5 border border-primary/20 rounded-2xl p-5 relative overflow-hidden group hover:bg-primary/10 transition-all">
+                <div class="absolute right-4 top-4 text-primary opacity-20">
+                    <span class="material-symbols-outlined text-4xl">shield</span>
+                </div>
+                <h4 class="text-xs font-black uppercase tracking-widest text-primary mb-3">Cluster 3: Controlled + High</h4>
+                <div class="flex justify-between items-end mt-4">
+                    <div>
+                        <p class="text-2xl font-headline font-black text-on-surface">{{ cluster_3_count }}</p>
+                        <p class="text-[9px] text-outline uppercase tracking-widest">Hosts</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-2xl font-headline font-black text-primary">{{ cluster_3_vuln_count }}</p>
+                        <p class="text-[9px] text-outline uppercase tracking-widest">Vulnerabilities</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cluster 4: Controlled + Low -->
+            <div class="bg-outline/5 border border-outline/20 rounded-2xl p-5 relative overflow-hidden group hover:bg-outline/10 transition-all">
+                <div class="absolute right-4 top-4 text-outline opacity-20">
+                    <span class="material-symbols-outlined text-4xl">dns</span>
+                </div>
+                <h4 class="text-xs font-black uppercase tracking-widest text-outline mb-3">Cluster 4: Controlled + Low</h4>
+                <div class="flex justify-between items-end mt-4">
+                    <div>
+                        <p class="text-2xl font-headline font-black text-on-surface">{{ cluster_4_count }}</p>
+                        <p class="text-[9px] text-outline uppercase tracking-widest">Hosts</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-2xl font-headline font-black text-outline">{{ cluster_4_vuln_count }}</p>
+                        <p class="text-[9px] text-outline uppercase tracking-widest">Vulnerabilities</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLA Countdown Chart / Gauge -->
+    <div class="bg-surface-container rounded-3xl p-8 flex flex-col shadow-xl">
+        <div class="flex items-center justify-between mb-8">
+            <h3 class="font-headline font-bold text-xl text-on-surface">SLA Status</h3>
+            <span class="text-[10px] text-outline font-black uppercase tracking-widest">Compliance</span>
+        </div>
+        <div class="flex-grow flex items-center justify-center relative">
+            <div style="height: 180px; width: 180px;">
+                <canvas id="slaDoughnut"></canvas>
+            </div>
+            <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <p class="text-3xl font-black font-headline text-on-surface leading-none">{{ vuln_count }}</p>
+                <p class="text-[9px] text-outline uppercase tracking-widest mt-1">Open Vulns</p>
+            </div>
+        </div>
+        <div class="mt-8 space-y-2">
+            <div class="flex justify-between items-center p-3 rounded-xl bg-surface-container-low text-[10px] uppercase font-bold tracking-widest">
+                <div class="flex items-center gap-3">
+                    <span class="w-2 h-2 rounded-full bg-error shadow-[0_0_8px_#fc4563]"></span>
+                    <span>SLA Breached</span>
+                </div>
+                <span class="font-black text-on-surface text-sm">{{ sla_breach_count }}</span>
+            </div>
+            <div class="flex justify-between items-center p-3 rounded-xl bg-surface-container-low text-[10px] uppercase font-bold tracking-widest">
+                <div class="flex items-center gap-3">
+                    <span class="w-2 h-2 rounded-full bg-tertiary"></span>
+                    <span>Approaching Breach</span>
+                </div>
+                <span class="font-black text-on-surface text-sm">{{ sla_approaching_count }}</span>
+            </div>
+            <div class="flex justify-between items-center p-3 rounded-xl bg-surface-container-low text-[10px] uppercase font-bold tracking-widest">
+                <div class="flex items-center gap-3">
+                    <span class="w-2 h-2 rounded-full bg-primary"></span>
+                    <span>In SLA Compliance</span>
+                </div>
+                <span class="font-black text-on-surface text-sm">{{ sla_compliant_count }}</span>
+            </div>
+        </div>
+    </div>
+</section>
+
 <!-- Operational KPIs -->
 <section class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
     <div class="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -369,6 +497,31 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 cutout: '74%',
+                plugins: { legend: { display: false } }
+            }
+        });
+
+        // SLA Status Doughnut
+        const slaCtx = document.getElementById('slaDoughnut').getContext('2d');
+        new Chart(slaCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['SLA Breached', 'Approaching Breach', 'In SLA Compliance'],
+                datasets: [{
+                    data: [
+                        {{ sla_breach_count }},
+                        {{ sla_approaching_count }},
+                        {{ sla_compliant_count }}
+                    ],
+                    backgroundColor: ['#fc4563', '#8950fc', '#3bbffa'],
+                    borderWidth: 0,
+                    hoverOffset: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '82%',
                 plugins: { legend: { display: false } }
             }
         });
