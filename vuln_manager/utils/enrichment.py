@@ -4,32 +4,89 @@ from html import unescape
 
 _kev_cache = None
 
+def sync_cisa_kev_to_db():
+    from vuln_manager.models import CisaKevEntry
+    try:
+        url = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            vulns = data.get("vulnerabilities", [])
+            
+            existing = set(CisaKevEntry.objects.values_list('cve_id', flat=True))
+            new_entries = []
+            for v in vulns:
+                cve_id = v.get("cveID", "").upper()
+                if cve_id and cve_id not in existing:
+                    new_entries.append(CisaKevEntry(cve_id=cve_id))
+                    existing.add(cve_id)
+            
+            if new_entries:
+                CisaKevEntry.objects.bulk_create(new_entries)
+            return len(new_entries)
+    except Exception as e:
+        print(f"Error bulk syncing CISA KEV: {e}")
+    return 0
+
+
 def get_epss_score(cve_id):
     """
-    Holt den EPSS-Score von der FIRST.org API.
+    Holt den EPSS-Score von der FIRST.org API mit DB-Caching.
     """
     if not cve_id or not cve_id.startswith("CVE-"):
         return 0.0
+    
+    cve_upper = cve_id.upper()
+    try:
+        from vuln_manager.models import EpssEntry
+        cached = EpssEntry.objects.filter(cve_id=cve_upper).first()
+        if cached:
+            return cached.score
+    except Exception as e:
+        print(f"Error reading EPSS cache: {e}")
+
     try:
         url = f"https://api.first.org/data/v1/epss?cve={cve_id}"
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
             data = response.json()
             if data.get("data"):
-                return float(data["data"][0].get("epss", 0.0))
+                score = float(data["data"][0].get("epss", 0.0))
+                percentile = float(data["data"][0].get("percentile", 0.0))
+                try:
+                    from vuln_manager.models import EpssEntry
+                    EpssEntry.objects.update_or_create(
+                        cve_id=cve_upper,
+                        defaults={"score": score, "percentile": percentile}
+                    )
+                except Exception as ex:
+                    print(f"Error saving EPSS to cache: {ex}")
+                return score
     except Exception as e:
         print(f"Error fetching EPSS for {cve_id}: {e}")
     return 0.0
 
+
 def is_cisa_kev(cve_id):
     """
     Prüft, ob eine CVE in der CISA Known Exploited Vulnerabilities Liste steht.
-    Nutzt einen einfachen In-Memory Cache für den aktuellen Lauf.
+    Nutzt lokalen DB-Cache und JIT Sync falls DB leer.
     """
-    global _kev_cache
     if not cve_id or not cve_id.startswith("CVE-"):
         return False
     
+    cve_upper = cve_id.upper()
+    try:
+        from vuln_manager.models import CisaKevEntry
+        if CisaKevEntry.objects.count() == 0:
+            print("CISA KEV Cache ist leer. Starte JIT Sync...")
+            sync_cisa_kev_to_db()
+        
+        return CisaKevEntry.objects.filter(cve_id=cve_upper).exists()
+    except Exception as e:
+        print(f"Error checking CISA KEV cache for {cve_id}: {e}")
+        
+    global _kev_cache
     if _kev_cache is None:
         try:
             url = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
@@ -42,7 +99,7 @@ def is_cisa_kev(cve_id):
         except Exception as e:
             print(f"Error fetching CISA KEV: {e}")
             _kev_cache = []
-    return cve_id.upper() in {entry.upper() for entry in _kev_cache if entry}
+    return cve_upper in {entry.upper() for entry in _kev_cache if entry}
             
 def get_cve_details(cve_id):
     """

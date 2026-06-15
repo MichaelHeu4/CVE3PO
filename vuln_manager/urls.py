@@ -113,6 +113,11 @@ urlpatterns = [
         name="triage_single_vulnerability",
     ),
     path(
+        "software/<int:pk>/triage/",
+        views.triage_single_software,
+        name="triage_single_software",
+    ),
+    path(
         "vulnerabilities/<int:pk>/enrich/",
         views.enrich_single_vulnerability,
         name="enrich_single_vulnerability",

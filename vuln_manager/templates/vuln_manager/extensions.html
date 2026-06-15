@@ -91,6 +91,14 @@
                             <input name="ai_azure_model" type="text" placeholder="Azure Deployment Name (for ChatGPT in Azure OpenAI)" value="{{ mod.ai_azure_model|default:'' }}" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant/20 px-3 py-2 text-[11px] text-on-surface"/>
                             <input name="ai_azure_api_version" type="text" placeholder="Azure OpenAI API Version (e.g. 2025-01-01-preview)" value="{{ mod.ai_azure_api_version|default:'' }}" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant/20 px-3 py-2 text-[11px] text-on-surface"/>
                             <input name="ai_azure_api_key" type="password" placeholder="Azure API Key (optional to update)" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant/20 px-3 py-2 text-[11px] text-on-surface"/>
+                            <div class="space-y-1">
+                                <label class="text-[9px] font-black uppercase tracking-wider text-outline/50 block">CVE / Vulnerability System Prompt</label>
+                                <textarea name="ai_cve_system_prompt" rows="6" placeholder="System prompt for CVE/vulnerability triage..." class="w-full rounded-lg bg-surface-container-highest border border-outline-variant/20 px-3 py-2 text-[11px] text-on-surface font-mono">{{ mod.ai_cve_system_prompt|default:'' }}</textarea>
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-[9px] font-black uppercase tracking-wider text-outline/50 block">Software-Level System Prompt</label>
+                                <textarea name="ai_software_system_prompt" rows="6" placeholder="System prompt for Software-level triage..." class="w-full rounded-lg bg-surface-container-highest border border-outline-variant/20 px-3 py-2 text-[11px] text-on-surface font-mono">{{ mod.ai_software_system_prompt|default:'' }}</textarea>
+                            </div>
                             <button class="w-full rounded-lg px-3 py-2 border border-outline-variant/30 hover:border-primary/40 text-on-surface-variant hover:text-primary transition-all text-[10px] uppercase tracking-wider">Save AI Triage Config</button>
                         </form>
                     {% else %}

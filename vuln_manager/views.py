@@ -421,6 +421,41 @@ def dashboard(request):
         action="reopened", created_at__gte=now() - timedelta(days=30)
     ).count()
 
+    # SLA Countdown Metrics
+    sla_approaching_count = all_open_vulns.filter(
+        Q(severity="critical", first_seen__gte=now() - timedelta(days=sla_critical_days),
+          first_seen__lt=now() - timedelta(days=max(0, sla_critical_days - 3)))
+        | Q(severity="high", first_seen__gte=now() - timedelta(days=sla_high_days),
+            first_seen__lt=now() - timedelta(days=max(0, sla_high_days - 7)))
+    ).count()
+
+    sla_compliant_count = all_open_vulns.exclude(
+        Q(severity="critical", first_seen__lt=now() - timedelta(days=max(0, sla_critical_days - 3)))
+        | Q(severity="high", first_seen__lt=now() - timedelta(days=max(0, sla_high_days - 7)))
+    ).count()
+
+    # Host Cluster Metrics
+    cluster_1_count = Host.objects.filter(criticality__in=["Critical", "High"], is_exposed=True).count()
+    cluster_2_count = Host.objects.filter(criticality__in=["Medium", "Low"], is_exposed=True).count()
+    cluster_3_count = Host.objects.filter(criticality__in=["Critical", "High"], is_exposed=False).count()
+    cluster_4_count = Host.objects.filter(criticality__in=["Medium", "Low"], is_exposed=False).count()
+
+    cluster_1_vuln_count = Vulnerability.objects.filter(
+        host__criticality__in=["Critical", "High"], host__is_exposed=True
+    ).exclude(status__in=["fixed", "false_positive"]).count()
+
+    cluster_2_vuln_count = Vulnerability.objects.filter(
+        host__criticality__in=["Medium", "Low"], host__is_exposed=True
+    ).exclude(status__in=["fixed", "false_positive"]).count()
+
+    cluster_3_vuln_count = Vulnerability.objects.filter(
+        host__criticality__in=["Critical", "High"], host__is_exposed=False
+    ).exclude(status__in=["fixed", "false_positive"]).count()
+
+    cluster_4_vuln_count = Vulnerability.objects.filter(
+        host__criticality__in=["Medium", "Low"], host__is_exposed=False
+    ).exclude(status__in=["fixed", "false_positive"]).count()
+
     # Severity distribution
     vuln_stats = all_open_vulns.values("severity").annotate(count=Count("id"))
     severity_map = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
@@ -559,6 +594,16 @@ def dashboard(request):
         "sla_high_days": sla_high_days,
         "reopened_30d": reopened_30d,
         "status_map": status_map,
+        "sla_approaching_count": sla_approaching_count,
+        "sla_compliant_count": sla_compliant_count,
+        "cluster_1_count": cluster_1_count,
+        "cluster_2_count": cluster_2_count,
+        "cluster_3_count": cluster_3_count,
+        "cluster_4_count": cluster_4_count,
+        "cluster_1_vuln_count": cluster_1_vuln_count,
+        "cluster_2_vuln_count": cluster_2_vuln_count,
+        "cluster_3_vuln_count": cluster_3_vuln_count,
+        "cluster_4_vuln_count": cluster_4_vuln_count,
         "user": User.objects.get(pk=request.user.id),
     }
     return render(request, "vuln_manager/dashboard.html", context)
@@ -745,17 +790,39 @@ def software_detail(request, pk):
     )
     if severity_filter:
         vulns = vulns.filter(severity=severity_filter)
+
+    cluster_1 = []
+    cluster_2 = []
+    cluster_3 = []
+    cluster_4 = []
+    for host in hosts:
+        is_crit = host.criticality in ["Critical", "High"]
+        is_open = host.is_exposed
+        if is_crit and is_open:
+            cluster_1.append(host)
+        elif not is_crit and is_open:
+            cluster_2.append(host)
+        elif is_crit and not is_open:
+            cluster_3.append(host)
+        else:
+            cluster_4.append(host)
+
     return render(
         request,
         "vuln_manager/software_detail.html",
         {
             "software": item,
             "hosts": hosts,
+            "cluster_1": cluster_1,
+            "cluster_2": cluster_2,
+            "cluster_3": cluster_3,
+            "cluster_4": cluster_4,
             "vulns": vulns,
             "severity_filter": severity_filter,
             "severity_choices": Vulnerability.SEVERITY_CHOICES,
             "criticality_choices": Software.CRITICALITY_CHOICES,
             "osv_rescan_possible": bool(item.version),
+            "ai_triage_active": Extension.objects.filter(name_id="ai_triage", is_active=True).exists(),
         },
     )
 
@@ -1460,6 +1527,14 @@ def extensions_view(request):
                 "ai_azure_api_version": (
                     system_settings.ai_azure_api_version if mid == "ai_triage" else None
                 ),
+                "ai_cve_system_prompt": (
+                    system_settings.ai_cve_system_prompt or ai_triage.SYSTEM_PROMPT
+                    if mid == "ai_triage" else None
+                ),
+                "ai_software_system_prompt": (
+                    system_settings.ai_software_system_prompt or ai_triage.SYSTEM_PROMPT_SOFTWARE
+                    if mid == "ai_triage" else None
+                ),
                 "icon": meta["icon"],
                 "color": meta["color"],
             }
@@ -1637,6 +1712,8 @@ def save_ai_triage_config(request):
         "ai_azure_api_version") or "").strip()
     openrouter_key = (request.POST.get("ai_openrouter_api_key") or "").strip()
     azure_key = (request.POST.get("ai_azure_api_key") or "").strip()
+    ai_cve_system_prompt = (request.POST.get("ai_cve_system_prompt") or "").strip() or None
+    ai_software_system_prompt = (request.POST.get("ai_software_system_prompt") or "").strip() or None
 
     settings_obj = get_system_settings()
     settings_obj.ai_triage_provider = provider
@@ -1644,6 +1721,8 @@ def save_ai_triage_config(request):
     settings_obj.ai_azure_endpoint = azure_endpoint
     settings_obj.ai_azure_model = azure_model
     settings_obj.ai_azure_api_version = azure_api_version
+    settings_obj.ai_cve_system_prompt = ai_cve_system_prompt
+    settings_obj.ai_software_system_prompt = ai_software_system_prompt
     if openrouter_key:
         settings_obj.ai_openrouter_api_key = openrouter_key
     if azure_key:
@@ -1655,6 +1734,8 @@ def save_ai_triage_config(request):
             "ai_azure_endpoint",
             "ai_azure_model",
             "ai_azure_api_version",
+            "ai_cve_system_prompt",
+            "ai_software_system_prompt",
             "ai_openrouter_api_key",
             "ai_azure_api_key",
         ]
@@ -1854,6 +1935,30 @@ def triage_single_vulnerability(request, pk):
         details={"source": "manual_retriage"},
     )
     return redirect("vuln_detail", pk=pk)
+
+
+@login_required
+@require_POST
+def triage_single_software(request, pk):
+    ai_extension, _ = get_ai_triage_config()
+    if not ai_extension.is_active:
+        return HttpResponseForbidden("ai_triage_disabled")
+    sw = get_object_or_404(Software, pk=pk)
+
+    def _run_software_triage(sw_id):
+        sw_target = Software.objects.filter(pk=sw_id).first()
+        if not sw_target:
+            return
+        ai_triage.triage_software(sw_target)
+
+    worker = threading.Thread(
+        target=_run_software_triage,
+        args=(sw.id,),
+        daemon=True,
+    )
+    worker.start()
+
+    return redirect("software_detail", pk=pk)
 
 
 @login_required
