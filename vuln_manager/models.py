@@ -4,6 +4,14 @@ from django.utils import timezone
 
 import secrets
 
+CRITICALITY_WEIGHTS = {
+    "Critical": 4,
+    "High": 3,
+    "Medium": 2,
+    "Low": 1,
+}
+
+
 class Extension(models.Model):
     name_id = models.CharField(max_length=50, unique=True)
     is_active = models.BooleanField(default=False)
@@ -239,19 +247,12 @@ class Vulnerability(models.Model):
         Gibt das Host-Objekt mit der höchsten Kritikalität zurück.
         Prüft den direkt verknüpften Host sowie alle Hosts der verknüpften Software.
         """
-        weight_map = {
-            "Critical": 4,
-            "High": 3,
-            "Medium": 2,
-            "Low": 1
-        }
-        
         highest_weight = 0
         top_host = None
 
         # 1. Den direkt verknüpften Host prüfen
         if self.host and self.host.criticality:
-            weight = weight_map.get(self.host.criticality, 0)
+            weight = CRITICALITY_WEIGHTS.get(self.host.criticality, 0)
             if weight > highest_weight:
                 highest_weight = weight
                 top_host = self.host
@@ -260,7 +261,7 @@ class Vulnerability(models.Model):
         if self.software:
             for host in self.software.hosts.all():
                 if host.criticality:
-                    weight = weight_map.get(host.criticality, 0)
+                    weight = CRITICALITY_WEIGHTS.get(host.criticality, 0)
                     if weight > highest_weight:
                         highest_weight = weight
                         top_host = host

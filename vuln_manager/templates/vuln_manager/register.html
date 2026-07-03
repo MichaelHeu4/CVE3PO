@@ -109,12 +109,17 @@
                   <h1 class="font-headline font-extrabold text-4xl text-on-surface mb-2">Start Your Watch</h1>
                   <p class="text-on-surface-variant text-sm">Join CVE3PO now.</p>
                </div>
+               {% if register_error %}
+               <div class="mb-6 rounded-lg border border-error/30 bg-error-container/30 px-4 py-3 text-xs text-on-error-container">
+                  {{ register_error }}
+               </div>
+               {% endif %}
                <form class="space-y-6" method="POST" action="{% url 'register' %}">
                   {% csrf_token %}
                   <div class="space-y-2">
                      <label class="text-xs font-headline font-bold uppercase tracking-widest text-on-surface-variant">Work Email</label>
                      <div class="relative">
-                        <input class="w-full bg-surface-container-lowest border-none focus:ring-2 focus:ring-primary/30 text-on-surface px-4 py-4 rounded-lg placeholder:text-outline transition-all" name="email" placeholder="email@company.com" type="email"/>
+                        <input class="w-full bg-surface-container-lowest border-none focus:ring-2 focus:ring-primary/30 text-on-surface px-4 py-4 rounded-lg placeholder:text-outline transition-all" name="email" placeholder="email@company.com" type="email" value="{{ register_email|default:'' }}"/>
                      </div>
                   </div>
                   <div class="space-y-2">

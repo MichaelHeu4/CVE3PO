@@ -4,6 +4,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.db.models import Count, Q, Max, Case, When, Value, IntegerField, Avg
 from pathlib import Path
 from .models import (
+    CRITICALITY_WEIGHTS,
     Host,
     HostSoftwareRelationship,
     Port,
@@ -30,6 +31,8 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django.core.mail import EmailMessage
 from django.utils.http import url_has_allowed_host_and_scheme
 import io
@@ -41,7 +44,9 @@ from django.http import (
     JsonResponse,
 )
 from django.utils.timezone import now
+import datetime
 from datetime import timedelta
+import logging
 import re
 
 from xhtml2pdf import pisa
@@ -49,14 +54,7 @@ from django.template.loader import render_to_string
 import json
 import threading
 
-CRITICALITY_WEIGHTS = {
-    "Critical": 4,
-    "High": 3,
-    "Medium": 2,
-    "Low": 1,
-    None: 0,
-    "": 0,
-}
+logger = logging.getLogger(__name__)
 
 AGENT_PUBLIC_FILES = {
     "install.sh": "install.sh",
@@ -83,6 +81,24 @@ def get_ai_triage_config():
     settings_obj = get_system_settings()
     ai_extension, _ = Extension.objects.get_or_create(name_id="ai_triage")
     return ai_extension, settings_obj
+
+
+def _severity_order_case():
+    return Case(
+        When(severity__iexact="critical", then=Value(5)),
+        When(severity__iexact="high", then=Value(4)),
+        When(severity__iexact="medium", then=Value(3)),
+        When(severity__iexact="low", then=Value(2)),
+        When(severity__iexact="info", then=Value(1)),
+        default=Value(0),
+        output_field=IntegerField(),
+    )
+
+
+def _normalized_severity(request, param="severity"):
+    severity = (request.GET.get(param) or "").lower()
+    allowed = {choice[0] for choice in Vulnerability.SEVERITY_CHOICES}
+    return severity if severity in allowed else ""
 
 
 def login_view(request):
@@ -140,17 +156,35 @@ def login_view(request):
 def register_view(request):
     system_settings = get_system_settings()
     if system_settings.disable_register:
-        print("[*] Someone tried to register...")
+        logger.warning("Registration attempt while registration is disabled")
         return redirect("login")
     if request.user.is_authenticated:
         return redirect("dashboard")
     if request.method == "POST":
-        username = request.POST.get("email")
-        password = request.POST.get("password")
-        user = User.objects.create_user(username=username, password=password)
-        if user is not None:
-            login(request, user)
-            return redirect("dashboard")
+        email = (request.POST.get("email") or "").strip()
+        password = request.POST.get("password") or ""
+
+        def _fail(message):
+            return render(
+                request,
+                "vuln_manager/register.html",
+                {"register_error": message, "register_email": email},
+            )
+
+        if not email or not password:
+            return _fail("Please provide an email and a password.")
+        if User.objects.filter(username__iexact=email).exists():
+            return _fail("An account with this email already exists.")
+        try:
+            validate_password(password)
+        except ValidationError as exc:
+            return _fail(" ".join(exc.messages))
+
+        user = User.objects.create_user(
+            username=email, email=email, password=password
+        )
+        login(request, user)
+        return redirect("dashboard")
     return render(request, "vuln_manager/register.html")
 
 
@@ -483,8 +517,6 @@ def dashboard(request):
     trend_open = []
     trend_fixed = []
 
-    import datetime
-
     today = datetime.date.today()
     for i in range(13, -1, -1):
         day = today - datetime.timedelta(days=i)
@@ -604,7 +636,7 @@ def dashboard(request):
         "cluster_2_vuln_count": cluster_2_vuln_count,
         "cluster_3_vuln_count": cluster_3_vuln_count,
         "cluster_4_vuln_count": cluster_4_vuln_count,
-        "user": User.objects.get(pk=request.user.id),
+        "user": request.user,
     }
     return render(request, "vuln_manager/dashboard.html", context)
 
@@ -664,11 +696,7 @@ def host_detail(request, pk):
         p for p in historic_ports if p["port_number"] not in active_port_nums
     ]
     show_mode = request.GET.get("mode", "all")
-    severity_filter = (request.GET.get("severity") or "").lower()
-    allowed_severities = {choice[0]
-                          for choice in Vulnerability.SEVERITY_CHOICES}
-    if severity_filter and severity_filter not in allowed_severities:
-        severity_filter = ""
+    severity_filter = _normalized_severity(request)
     if show_mode == "direct":
         vulns_query = host.vulnerabilities.exclude(status="false_positive").order_by(
             "-severity"
@@ -778,11 +806,7 @@ def software_list(request):
 def software_detail(request, pk):
     item = get_object_or_404(Software, pk=pk)
     hosts = item.hosts.all()
-    severity_filter = (request.GET.get("severity") or "").lower()
-    allowed_severities = {choice[0]
-                          for choice in Vulnerability.SEVERITY_CHOICES}
-    if severity_filter and severity_filter not in allowed_severities:
-        severity_filter = ""
+    severity_filter = _normalized_severity(request)
     vulns = (
         Vulnerability.objects.filter(software=item)
         .exclude(status="false_positive")
@@ -1079,15 +1103,7 @@ def scan_list(request):
 
 @login_required
 def scan_diff(request, pk):
-    severity_order = Case(
-        When(severity__iexact="critical", then=Value(5)),
-        When(severity__iexact="high", then=Value(4)),
-        When(severity__iexact="medium", then=Value(3)),
-        When(severity__iexact="low", then=Value(2)),
-        When(severity__iexact="info", then=Value(1)),
-        default=Value(0),
-        output_field=IntegerField(),
-    )
+    severity_order = _severity_order_case()
 
     current_scan = get_object_or_404(Scan, pk=pk)
     previous_scan = (
@@ -1165,23 +1181,10 @@ def scan_diff(request, pk):
 
 @login_required
 def kanban_board(request):
-    severity_order = Case(
-        When(severity__iexact="critical", then=Value(5)),
-        When(severity__iexact="high", then=Value(4)),
-        When(severity__iexact="medium", then=Value(3)),
-        When(severity__iexact="low", then=Value(2)),
-        When(severity__iexact="info", then=Value(1)),
-        default=Value(0),
-        output_field=IntegerField(),
-    )
     vulns = Vulnerability.objects.select_related("host").annotate(
-        sev_score=severity_order
+        sev_score=_severity_order_case()
     )
-    severity_filter = (request.GET.get("severity") or "").lower()
-    allowed_severities = {choice[0]
-                          for choice in Vulnerability.SEVERITY_CHOICES}
-    if severity_filter and severity_filter not in allowed_severities:
-        severity_filter = ""
+    severity_filter = _normalized_severity(request)
     if severity_filter:
         vulns = vulns.filter(severity=severity_filter)
     board_data = {
@@ -1268,11 +1271,7 @@ def update_vuln_status(request, pk):
 @login_required
 def vuln_list(request):
     query = (request.GET.get("q") or "").strip()
-    severity = (request.GET.get("severity") or "").lower()
-    allowed_severities = {choice[0]
-                          for choice in Vulnerability.SEVERITY_CHOICES}
-    if severity and severity not in allowed_severities:
-        severity = ""
+    severity = _normalized_severity(request)
     status_filter = request.GET.get("status", "active")
     active_vulns = Vulnerability.objects.exclude(status="false_positive")
 
@@ -1801,6 +1800,7 @@ def create_wrike_ticket(request, pk):
             details={"wrike_task_id": task_id, "direction": "cve3po_to_wrike"},
         )
     except Exception:
+        logger.exception("Wrike task creation failed for vulnerability %s", pk)
         return HttpResponseForbidden("wrike_create_failed")
     return redirect("vuln_detail", pk=pk)
 
@@ -1853,6 +1853,7 @@ def sync_wrike_ticket(request, pk):
                 },
             )
     except Exception:
+        logger.exception("Wrike sync failed for vulnerability %s", pk)
         return HttpResponseForbidden("wrike_sync_failed")
     return redirect("vuln_detail", pk=pk)
 
@@ -1888,8 +1889,11 @@ def run_triage_background():
             current_crit = vuln.most_critical_host.criticality or "Low"
 
         if vuln.ai_last_criticality != current_crit:
-            print(
-                f"[AI] Re-triaging {vuln.cve_id} due to criticality change: {vuln.ai_last_criticality} -> {current_crit}"
+            logger.info(
+                "Re-triaging %s due to criticality change: %s -> %s",
+                vuln.cve_id,
+                vuln.ai_last_criticality,
+                current_crit,
             )
             ai_triage.triage(vuln)
 
@@ -1902,7 +1906,7 @@ def do_triage(request):
     if request.method == "POST":
         thread = threading.Thread(target=run_triage_background)
         thread.start()
-        print("[AI] Background triage started.")
+        logger.info("Background triage started")
 
     return redirect("ai_dashboard")
 
