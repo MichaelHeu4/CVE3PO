@@ -148,9 +148,7 @@ def parse_osv_json(file_path, scan_obj, software_obj=None):
         description, poc = extract_poc_from_description(description)
 
         cvss_score, severity = extract_severity(vuln)
-        if (cvss_score):
-            print(cve_id + " CVSS: " + cvss_score)
-        
+
         create_or_update_vulnerability(
             scan=scan_obj,
             software=software_obj,

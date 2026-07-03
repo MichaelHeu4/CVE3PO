@@ -2,8 +2,10 @@ from .enrichment import get_epss_score, is_cisa_kev, get_cve_details
 from vuln_manager.models import Extension, SystemSettings, Vulnerability, Software
 import os
 import json
+import time
 import instructor
 from django.conf import settings
+from django.utils import timezone
 from pydantic import BaseModel, Field
 from openai import AzureOpenAI, OpenAI
 
@@ -346,8 +348,6 @@ def triage(vuln: Vulnerability):
     custom_prompt = settings_obj.ai_cve_system_prompt or SYSTEM_PROMPT
     messages = _build_messages(aktueller_fund, system_prompt=custom_prompt)
 
-    import time
-
     start_time = time.time()
     if provider == "azure":
         response = _call_azure_ai(messages, settings_obj)
@@ -367,7 +367,6 @@ def triage(vuln: Vulnerability):
 
 
 def triage_software(software: Software):
-    from django.utils import timezone
     extension, settings_obj, provider = _get_ai_config()
     if not extension.is_active:
         raise RuntimeError("ai_triage_disabled")

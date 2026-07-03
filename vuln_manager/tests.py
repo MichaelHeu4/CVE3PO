@@ -826,9 +826,99 @@ class WazuhWebhookAuthTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json().get("status"), "updated")
-        
+
         vuln.refresh_from_db()
         self.assertEqual(vuln.status, "fixed")
+
+    def test_wazuh_webhook_handles_n8n_array_envelope(self):
+        from vuln_manager.models import Vulnerability, Software
+
+        payload = [
+            {
+                "headers": {"content-type": "application/json"},
+                "params": {},
+                "query": {},
+                "body": {
+                    "rule_id": "23506",
+                    "rule_level": 13,
+                    "description": "CVE-2026-23455 affects linux-image-6.8.0-134-generic",
+                    "agent_name": "wesli2",
+                    "agent_id": "400",
+                    "agent_ip": "193.9.253.166",
+                    "full_alert": {
+                        "rule": {"level": 13, "id": "23506"},
+                        "agent": {"id": "400", "name": "wesli2", "ip": "193.9.253.166"},
+                        "data": {
+                            "vulnerability": {
+                                "cve": "CVE-2026-23455",
+                                "cvss": {"cvss3": {"base_score": "9.100000"}},
+                                "package": {
+                                    "name": "linux-image-6.8.0-134-generic",
+                                    "version": "6.8.0-134.134",
+                                },
+                                "rationale": "Out-of-bounds read in nf_conntrack_h323.",
+                                "severity": "Critical",
+                                "status": "Active",
+                                "title": "CVE-2026-23455 affects linux-image-6.8.0-134-generic",
+                            }
+                        },
+                    },
+                },
+                "webhookUrl": "https://example.com/webhook/abc",
+                "executionMode": "production",
+            }
+        ]
+
+        response = self.client.post(
+            self.url,
+            data=json.dumps(payload),
+            content_type="application/json",
+            HTTP_X_API_KEY="wazuh-token-123",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("status"), "upserted")
+
+        vuln = Vulnerability.objects.get(cve_id="CVE-2026-23455")
+        self.assertEqual(vuln.severity, "critical")
+        self.assertEqual(vuln.cvss, "9.100000")
+        self.assertEqual(vuln.name, "CVE-2026-23455 affects linux-image-6.8.0-134-generic")
+        self.assertEqual(vuln.software.name, "linux-image-6.8.0-134-generic")
+        self.assertEqual(vuln.software.version, "6.8.0-134.134")
+        self.assertEqual(vuln.host.ip_address, "193.9.253.166")
+        self.assertEqual(vuln.host.hostname, "wesli2")
+
+    def test_wazuh_webhook_processes_batch_array(self):
+        from vuln_manager.models import Vulnerability
+
+        payload = [
+            {
+                "body": {
+                    "full_alert": {
+                        "agent": {"name": "h1", "ip": "10.20.0.1"},
+                        "data": {"vulnerability": {"cve": "CVE-2026-0001", "severity": "High", "status": "Active"}},
+                    }
+                }
+            },
+            {
+                "body": {
+                    "full_alert": {
+                        "agent": {"name": "h2", "ip": "10.20.0.2"},
+                        "data": {"vulnerability": {"cve": "CVE-2026-0002", "severity": "Low", "status": "Active"}},
+                    }
+                }
+            },
+        ]
+        response = self.client.post(
+            self.url,
+            data=json.dumps(payload),
+            content_type="application/json",
+            HTTP_X_API_KEY="wazuh-token-123",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("status"), "processed")
+        self.assertEqual(response.json().get("count"), 2)
+        self.assertTrue(Vulnerability.objects.filter(cve_id="CVE-2026-0001").exists())
+        self.assertTrue(Vulnerability.objects.filter(cve_id="CVE-2026-0002").exists())
 
 
 class ManualVulnerabilityEnrichmentTests(TestCase):
@@ -1448,6 +1538,63 @@ class CycloneDxImportTests(TestCase):
         self.assertEqual(vuln.severity, "high")
 
 
+class OpenVasImportTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="openvas-user", email="openvas@example.com", password="pw12345"
+        )
+        self.client.force_login(self.user)
+
+    OPENVAS_XML = """<?xml version="1.0"?>
+<report>
+  <results>
+    <result>
+      <name>OpenSSL Vulnerability</name>
+      <host>10.50.0.10</host>
+      <port>443/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.100001">
+        <name>OpenSSL Vuln</name>
+        <cvss_base>9.8</cvss_base>
+        <refs>
+          <ref type="cve" id="CVE-2024-55555"/>
+          <ref type="url" id="https://example.com"/>
+        </refs>
+      </nvt>
+      <description>Test finding</description>
+    </result>
+    <result>
+      <name>General TCP info without CVSS</name>
+      <host>10.50.0.11</host>
+      <port>general/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.100002">
+        <name>Generic</name>
+      </nvt>
+      <description>No CVSS base, general port</description>
+    </result>
+  </results>
+</report>"""
+
+    def test_openvas_import_extracts_cve_and_survives_general_port(self):
+        upload = SimpleUploadedFile(
+            "report.xml", self.OPENVAS_XML.encode("utf-8"), content_type="text/xml"
+        )
+        response = self.client.post(
+            reverse("scan_import"), {"scan_type": "OPENVAS", "raw_file": upload}
+        )
+        self.assertEqual(response.status_code, 302)
+
+        # Real CVE is taken from <refs>, not the NVT OID.
+        cve_vuln = Vulnerability.objects.get(cve_id="CVE-2024-55555")
+        self.assertEqual(cve_vuln.severity, "critical")
+        self.assertEqual(cve_vuln.host.ip_address, "10.50.0.10")
+
+        # The general/tcp result with no <cvss_base> must not crash the import;
+        # it falls back to the OID and severity 'info'.
+        oid_vuln = Vulnerability.objects.get(cve_id="1.3.6.1.4.1.25623.1.0.100002")
+        self.assertEqual(oid_vuln.severity, "info")
+        self.assertEqual(oid_vuln.host.ip_address, "10.50.0.11")
+
+
 class ThreatIntelCachingTests(TestCase):
     def test_cisa_kev_caching(self):
         from vuln_manager.models import CisaKevEntry
@@ -1481,3 +1628,55 @@ class ThreatIntelCachingTests(TestCase):
         
         entry = EpssEntry.objects.get(cve_id="CVE-2026-22222")
         self.assertEqual(entry.score, 0.45)
+
+
+class RegisterViewSecurityTests(TestCase):
+    def setUp(self):
+        settings_obj, _ = SystemSettings.objects.get_or_create(pk=1)
+        settings_obj.disable_register = False
+        settings_obj.save(update_fields=["disable_register"])
+
+    def test_registration_rejects_weak_password(self):
+        response = self.client.post(
+            reverse("register"),
+            {"email": "weak@example.com", "password": "123"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(username="weak@example.com").exists())
+
+    def test_registration_rejects_missing_password(self):
+        response = self.client.post(reverse("register"), {"email": "nopw@example.com"})
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(username="nopw@example.com").exists())
+
+    def test_registration_rejects_duplicate_email(self):
+        User.objects.create_user(username="dupe@example.com", password="Str0ng-Pass-9182")
+        response = self.client.post(
+            reverse("register"),
+            {"email": "dupe@example.com", "password": "An0ther-Str0ng-42"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(User.objects.filter(username="dupe@example.com").count(), 1)
+
+    def test_registration_creates_user_and_logs_in_with_strong_password(self):
+        response = self.client.post(
+            reverse("register"),
+            {"email": "valid@example.com", "password": "Str0ng-Pass-9182"},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("dashboard"))
+        user = User.objects.get(username="valid@example.com")
+        self.assertEqual(user.email, "valid@example.com")
+        self.assertEqual(int(self.client.session["_auth_user_id"]), user.pk)
+
+    def test_registration_disabled_redirects_to_login(self):
+        settings_obj = SystemSettings.objects.get(pk=1)
+        settings_obj.disable_register = True
+        settings_obj.save(update_fields=["disable_register"])
+        response = self.client.post(
+            reverse("register"),
+            {"email": "blocked@example.com", "password": "Str0ng-Pass-9182"},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("login"))
+        self.assertFalse(User.objects.filter(username="blocked@example.com").exists())

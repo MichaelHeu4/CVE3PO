@@ -1,6 +1,9 @@
+import logging
 import requests
 import re
 from html import unescape
+
+logger = logging.getLogger(__name__)
 
 _kev_cache = None
 
@@ -24,8 +27,8 @@ def sync_cisa_kev_to_db():
             if new_entries:
                 CisaKevEntry.objects.bulk_create(new_entries)
             return len(new_entries)
-    except Exception as e:
-        print(f"Error bulk syncing CISA KEV: {e}")
+    except Exception:
+        logger.exception("Error bulk syncing CISA KEV")
     return 0
 
 
@@ -42,8 +45,8 @@ def get_epss_score(cve_id):
         cached = EpssEntry.objects.filter(cve_id=cve_upper).first()
         if cached:
             return cached.score
-    except Exception as e:
-        print(f"Error reading EPSS cache: {e}")
+    except Exception:
+        logger.exception("Error reading EPSS cache")
 
     try:
         url = f"https://api.first.org/data/v1/epss?cve={cve_id}"
@@ -59,11 +62,11 @@ def get_epss_score(cve_id):
                         cve_id=cve_upper,
                         defaults={"score": score, "percentile": percentile}
                     )
-                except Exception as ex:
-                    print(f"Error saving EPSS to cache: {ex}")
+                except Exception:
+                    logger.exception("Error saving EPSS to cache")
                 return score
-    except Exception as e:
-        print(f"Error fetching EPSS for {cve_id}: {e}")
+    except Exception:
+        logger.exception("Error fetching EPSS for %s", cve_id)
     return 0.0
 
 
@@ -79,12 +82,12 @@ def is_cisa_kev(cve_id):
     try:
         from vuln_manager.models import CisaKevEntry
         if CisaKevEntry.objects.count() == 0:
-            print("CISA KEV Cache ist leer. Starte JIT Sync...")
+            logger.info("CISA KEV cache empty, starting JIT sync")
             sync_cisa_kev_to_db()
         
         return CisaKevEntry.objects.filter(cve_id=cve_upper).exists()
-    except Exception as e:
-        print(f"Error checking CISA KEV cache for {cve_id}: {e}")
+    except Exception:
+        logger.exception("Error checking CISA KEV cache for %s", cve_id)
         
     global _kev_cache
     if _kev_cache is None:
@@ -96,8 +99,8 @@ def is_cisa_kev(cve_id):
                 _kev_cache = [v.get("cveID") for v in data.get("vulnerabilities", [])]
             else:
                 _kev_cache = []
-        except Exception as e:
-            print(f"Error fetching CISA KEV: {e}")
+        except Exception:
+            logger.exception("Error fetching CISA KEV")
             _kev_cache = []
     return cve_upper in {entry.upper() for entry in _kev_cache if entry}
             
@@ -117,8 +120,8 @@ def get_cve_details(cve_id):
                 cvss = _extract_cvss_vector(data)
                 description = _extract_description(data)
                 return cvss, description
-    except Exception as e:
-        print(f"Error fetching CVE details for {cve_id}: {e}")
+    except Exception:
+        logger.exception("Error fetching CVE details for %s", cve_id)
         
     return None, None
 
