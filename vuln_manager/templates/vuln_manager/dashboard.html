@@ -59,7 +59,7 @@
 </div>
 
 <!-- Trend + Risk profile -->
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4 items-start">
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
     <div class="lg:col-span-2 bg-surface-container border border-outline-variant rounded-md">
         <div class="flex items-center justify-between px-4 py-3 border-b border-outline-variant">
             <div>
@@ -76,7 +76,7 @@
 
     <div class="bg-surface-container border border-outline-variant rounded-md flex flex-col">
         <div class="px-4 py-3 border-b border-outline-variant"><h3 class="font-semibold text-[13px] text-on-surface">Risk profile</h3></div>
-        <div class="p-4 space-y-3.5" data-bars>
+        <div class="p-4 flex-1 flex flex-col justify-between gap-4" data-bars>
             <div>
                 <div class="flex justify-between items-center mb-1"><span class="text-[12px] text-on-surface-variant">Critical</span><b class="text-[12px] tabular-nums text-on-surface">{{ severity_map.critical }}</b></div>
                 <div class="h-1.5 rounded-full bg-surface-container-highest overflow-hidden"><div class="h-full rounded-full" data-val="{{ severity_map.critical }}" style="background:#e5484d;width:0"></div></div>
@@ -102,7 +102,7 @@
 </div>
 
 <!-- Host cluster + SLA -->
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4 items-start">
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
     <div class="lg:col-span-2 bg-surface-container border border-outline-variant rounded-md">
         <div class="flex items-center justify-between px-4 py-3 border-b border-outline-variant">
             <h3 class="font-semibold text-[13px] text-on-surface">Host cluster posture</h3>
@@ -130,7 +130,7 @@
 
     <div class="bg-surface-container border border-outline-variant rounded-md flex flex-col">
         <div class="flex items-center justify-between px-4 py-3 border-b border-outline-variant"><h3 class="font-semibold text-[13px] text-on-surface">SLA status</h3><span class="text-[11px] text-outline">Compliance</span></div>
-        <div class="p-4 space-y-3.5" data-bars>
+        <div class="p-4 flex-1 flex flex-col justify-between gap-4" data-bars>
             <div>
                 <div class="flex justify-between items-center mb-1"><span class="text-[12px] text-on-surface-variant">SLA breached</span><b class="text-[12px] tabular-nums text-on-surface">{{ sla_breach_count }}</b></div>
                 <div class="h-1.5 rounded-full bg-surface-container-highest overflow-hidden"><div class="h-full rounded-full" data-val="{{ sla_breach_count }}" style="background:#e5484d;width:0"></div></div>
@@ -148,16 +148,16 @@
 </div>
 
 <!-- Operational KPIs + workflow -->
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4 items-start">
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
     <div class="lg:col-span-2 grid grid-cols-2 bg-surface-container border border-outline-variant rounded-md">
         <div class="p-4 border-r border-b border-outline-variant"><p class="text-[11px] text-outline mb-2">Remediation rate</p><div class="flex items-baseline gap-1.5"><span class="text-2xl font-bold text-primary tabular-nums">{{ remediation_rate }}</span><span class="text-[11px] text-outline">%</span></div><p class="mt-2 text-[11px] text-outline">{{ resolved_count }} fixed · {{ ignored_count }} accepted</p></div>
         <div class="p-4 border-b border-outline-variant"><p class="text-[11px] text-outline mb-2">Open risk age</p><div class="flex items-baseline gap-1.5"><span class="text-2xl font-bold text-on-surface tabular-nums">{{ avg_open_age_days }}</span><span class="text-[11px] text-outline">avg days</span></div><p class="mt-2 text-[11px] text-outline">Oldest open: {{ oldest_open_days }} days</p></div>
         <div class="p-4 border-r border-outline-variant"><p class="text-[11px] text-outline mb-2">SLA breaches</p><div class="flex items-baseline gap-1.5"><span class="text-2xl font-bold {% if sla_breach_count > 0 %}text-error{% else %}text-primary{% endif %} tabular-nums">{{ sla_breach_count }}</span><span class="text-[11px] text-outline">open crit/high</span></div><p class="mt-2 text-[11px] text-outline">Critical &gt;{{ sla_critical_days }}d · High &gt;{{ sla_high_days }}d</p></div>
         <div class="p-4"><p class="text-[11px] text-outline mb-2">Reopened (30d)</p><div class="flex items-baseline gap-1.5"><span class="text-2xl font-bold text-tertiary tabular-nums">{{ reopened_30d }}</span><span class="text-[11px] text-outline">findings</span></div><p class="mt-2 text-[11px] text-outline">Signal for fix quality</p></div>
     </div>
-    <div class="bg-surface-container border border-outline-variant rounded-md">
+    <div class="bg-surface-container border border-outline-variant rounded-md flex flex-col">
         <div class="flex items-center justify-between px-4 py-3 border-b border-outline-variant"><h3 class="font-semibold text-[13px] text-on-surface">Workflow distribution</h3></div>
-        <div class="p-4 space-y-3.5" data-bars>
+        <div class="p-4 flex-1 flex flex-col justify-between gap-4" data-bars>
             <div>
                 <div class="flex justify-between items-center mb-1"><span class="text-[12px] text-on-surface-variant">Open</span><b class="text-[12px] tabular-nums text-on-surface">{{ status_map.open }}</b></div>
                 <div class="h-1.5 rounded-full bg-surface-container-highest overflow-hidden"><div class="h-full rounded-full" data-val="{{ status_map.open }}" style="background:#e5484d;width:0"></div></div>
