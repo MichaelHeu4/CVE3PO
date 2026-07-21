@@ -3,11 +3,11 @@
 {% block title %}AI Dashboard{% endblock %}
 {% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
 {% block content %}
-    <div class="p-8 flex-1 flex flex-col gap-8 max-w-[1600px] w-full mx-auto">
+    <div class="p-5 flex-1 flex flex-col gap-4 max-w-[1600px] w-full mx-auto">
         <!-- AI Efficiency Header (Bento Grid) -->
-        <section class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <!-- Auto-Triaged Card -->
-            <div class="bg-surface-container rounded-lg p-6 relative overflow-hidden group hover:bg-surface-container-high transition-colors ghost-border">
+            <div class="bg-surface-container rounded-lg p-4 relative overflow-hidden group hover:bg-surface-container-high transition-colors ghost-border">
                 <div class="absolute -right-4 -top-4 w-24 h-24 bg-primary/10 rounded-full blur-2xl group-hover:bg-primary/20 transition-all">
                 </div>
                 <div class="flex justify-between items-start mb-4">
@@ -17,12 +17,12 @@
                 </div>
                 <h3 class="font-body text-sm text-on-surface-variant mb-1">Auto-Triaged</h3>
                 <div class="flex items-baseline gap-2">
-                    <span class="font-headline text-4xl font-bold text-on-surface">{{ triaged_vulns }}</span>
+                    <span class="font-headline text-2xl font-bold text-on-surface">{{ triaged_vulns }}</span>
                     <span class="font-body text-sm text-on-surface-variant">/ {{ all_vulns.paginator.count }}</span>
                 </div>
             </div>
             <!-- Manual Review Card -->
-            <div class="bg-surface-container rounded-lg p-6 relative overflow-hidden group hover:bg-surface-container-high transition-colors ghost-border">
+            <div class="bg-surface-container rounded-lg p-4 relative overflow-hidden group hover:bg-surface-container-high transition-colors ghost-border">
                 <div class="flex justify-between items-start mb-4">
                     <div class="p-2 bg-surface-container-low rounded-md">
                         <span class="material-symbols-outlined text-tertiary">engineering</span>
@@ -30,20 +30,20 @@
                 </div>
                 <h3 class="font-body text-sm text-on-surface-variant mb-1">Action Required</h3>
                 <div class="flex items-baseline gap-2">
-                    <span class="font-headline text-4xl font-bold text-on-surface">{{ action_required }}</span>
+                    <span class="font-headline text-2xl font-bold text-on-surface">{{ action_required }}</span>
                     <span class="font-body text-sm text-on-surface-variant">/ {{ all_vulns.paginator.count }}</span>
                 </div>
             </div>
             <!-- Total Processed Card -->
-            <div class="bg-surface-container rounded-lg p-6 relative overflow-hidden group hover:bg-surface-container-high transition-colors ghost-border flex flex-col justify-between">
+            <div class="bg-surface-container rounded-lg p-4 relative overflow-hidden group hover:bg-surface-container-high transition-colors ghost-border flex flex-col justify-between">
                 <div class="absolute right-0 bottom-0 opacity-10 pointer-events-none">
-                    <span class="material-symbols-outlined text-9xl">memory</span>
+                    <span class="material-symbols-outlined text-4xl">memory</span>
                 </div>
                 <div>
                     <h3 class="font-body text-sm text-on-surface-variant mb-1">Using Model</h3>
-                    <span class="font-headline text-4xl font-bold text-on-surface">{{ ai.model }}</span>
+                    <span class="font-headline text-2xl font-bold text-on-surface">{{ ai.model }}</span>
                 </div>
-                <div class="mt-4 pt-4 border-t border-outline-variant/20 flex items-center justify-between">
+                <div class="mt-4 pt-4 border-t border-outline-variant flex items-center justify-between">
                     <span class="text-xs font-body text-on-surface-variant">Avg. processing time: {{ ai.proc_time }}s/alert</span>
                     <div class="flex items-center gap-1 text-xs text-primary">
                         <span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
@@ -53,10 +53,10 @@
             </div>
         </section>
         <!-- Main Split Layout -->
-        <div class="flex flex-col xl:flex-row gap-6 flex-1">
+        <div class="flex flex-col xl:flex-row gap-4 flex-1">
             <!-- Triage Queue Table -->
             <div class="flex-1 bg-surface-container rounded-lg flex flex-col ghost-border overflow-hidden">
-                <div class="p-5 border-b border-outline-variant/10 flex justify-between items-center bg-surface-container-low">
+                <div class="p-5 border-b border-outline-variant flex justify-between items-center bg-surface-container-low">
                     <div>
                         <h3 class="font-headline font-bold text-on-surface text-lg">Triage Queue</h3>
                         <p class="font-body text-xs text-on-surface-variant mt-0.5">Prioritized by AI Confidence &amp; Potential Impact</p>
@@ -70,14 +70,14 @@
                     </form>
                 </div>
                 {% if not ai_module_active %}
-                <div class="px-5 py-2 text-[10px] font-bold tracking-wider text-outline border-b border-outline-variant/10 bg-surface-container-low">
+                <div class="px-5 py-2 text-[10px] font-bold tracking-wider text-outline border-b border-outline-variant bg-surface-container-low">
                     AI Triage module is disabled. Enable and configure it in <a href="{% url 'extensions' %}" class="text-primary hover:underline">Modules</a>.
                 </div>
                 {% endif %}
                 <div class="overflow-x-auto">
                     <table class="w-full text-left border-collapse" id="aiQueueTable">
                         <thead>
-                            <tr class="border-b border-outline-variant/10 bg-surface-container-low/50">
+                            <tr class="border-b border-outline-variant bg-surface-container-low/50">
                                 <th data-sort-type="text" class="sortable-th cursor-pointer select-none py-3 px-5 font-body text-xs font-medium text-on-surface-variant tracking-wider">Severity</th>
                                 <th data-sort-type="text" class="sortable-th cursor-pointer select-none py-3 px-5 font-body text-xs font-medium text-on-surface-variant tracking-wider">CVE ID</th>
                                 <th data-sort-type="text" class="sortable-th cursor-pointer select-none py-3 px-5 font-body text-xs font-medium text-on-surface-variant tracking-wider">
@@ -92,7 +92,7 @@
                         <tbody class="font-body text-sm">
                             <!-- Row 1 - Active --> <!-- bg-surface-container-highest/30 => "active" -->
                             {% for vuln in all_vulns %}
-                            <tr class="border-b border-outline-variant/10 hover:bg-surface-container-high transition-colors">
+                            <tr class="border-b border-outline-variant hover:bg-surface-container-high transition-colors">
                                 <td class="py-4 px-5" data-sort-value="{{ vuln.severity }}">
                                     <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider bg-error-container text-on-error-container">
                                         {{ vuln.severity }}
@@ -128,13 +128,13 @@
                 </div>
                 
                 <!-- Pagination -->
-                <div class="p-5 border-t border-outline-variant/10 flex justify-between items-center bg-surface-container-low/30">
+                <div class="p-5 border-t border-outline-variant flex justify-between items-center bg-surface-container-low/30">
                     <p class="text-[10px] font-bold text-outline">
                         Page {{ all_vulns.number }} of {{ all_vulns.paginator.num_pages }}
                     </p>
                     <div class="flex gap-2">
                         {% if all_vulns.has_previous %}
-                            <a href="?page={{ all_vulns.previous_page_number }}{% if selected_vuln %}&selected_vuln={{ selected_vuln.id }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5">
+                            <a href="?page={{ all_vulns.previous_page_number }}{% if selected_vuln %}&selected_vuln={{ selected_vuln.id }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant">
                                 <span class="material-symbols-outlined text-sm">chevron_left</span>
                             </a>
                         {% endif %}
@@ -144,7 +144,7 @@
                         </button>
                         
                         {% if all_vulns.has_next %}
-                            <a href="?page={{ all_vulns.next_page_number }}{% if selected_vuln %}&selected_vuln={{ selected_vuln.id }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5">
+                            <a href="?page={{ all_vulns.next_page_number }}{% if selected_vuln %}&selected_vuln={{ selected_vuln.id }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant">
                                 <span class="material-symbols-outlined text-sm">chevron_right</span>
                             </a>
                         {% endif %}
@@ -152,11 +152,11 @@
                 </div>
             </div>
             <!-- AI Rationale Pane (Contextual Details) -->
-            <div class="w-full xl:w-96 flex flex-col gap-6">
+            <div class="w-full xl:w-96 flex flex-col gap-4">
                 <!-- Rationale Card -->
-                <div class="bg-surface-container-highest rounded-lg p-6 ghost-border ambient-shadow relative overflow-hidden flex-1">
+                <div class="bg-surface-container-highest rounded-lg p-4 ghost-border ambient-shadow relative overflow-hidden flex-1">
                     <div class="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-bl-full pointer-events-none"></div>
-                    <div class="flex items-center justify-between mb-6 border-b border-outline-variant/20 pb-4">
+                    <div class="flex items-center justify-between mb-6 border-b border-outline-variant pb-4">
                         <div class="flex items-center gap-2">
                             <span class="material-symbols-outlined text-primary text-xl">psychology</span>
                             <h3 class="font-headline font-bold text-on-surface">AI Rationale</h3>
@@ -193,7 +193,7 @@
                         </div>
 
                         <!-- Findings & Indicators -->
-                        <div class="flex flex-col gap-3 pt-4 border-t border-outline-variant/10">
+                        <div class="flex flex-col gap-3 pt-4 border-t border-outline-variant">
                             <span class="text-[10px] font-body font-bold text-on-surface-variant mb-1">Contextual Indicators</span>
                             
                             {% if selected_vuln.nuclei_poc %}
@@ -225,7 +225,7 @@
                     </div>
                     {% else %}
                     <div class="flex flex-col items-center justify-center py-12 text-center">
-                        <span class="material-symbols-outlined text-outline text-5xl mb-4 opacity-20">target</span>
+                        <span class="material-symbols-outlined text-outline text-2xl mb-4 opacity-20">target</span>
                         <p class="font-body text-sm text-on-surface-variant">
                             Select a vulnerability from the queue<br>to view the AI's deep analysis.
                         </p>

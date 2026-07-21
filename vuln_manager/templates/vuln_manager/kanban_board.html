@@ -8,24 +8,24 @@
 {% block content %}
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 
-<section class="mb-12">
+<section class="mb-6">
     <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight">Kanban <span class="text-primary">Board</span></h1>
     <p class="text-on-surface-variant text-sm mt-1">Manage vulnerabilities through its lifecycle phases.</p>
     <div class="mt-5 flex flex-wrap items-center gap-2">
         <span class="text-[11px] text-outline font-bold">Severity</span>
-        <a href="{% url 'kanban_board' %}" class="px-3 py-1 rounded-lg text-[11px] font-bold border transition-all {% if not severity_filter %}bg-surface-variant text-on-surface border-outline-variant/30{% else %}text-outline border-outline-variant/20 hover:text-on-surface{% endif %}">All</a>
+        <a href="{% url 'kanban_board' %}" class="px-3 py-1 rounded-lg text-[11px] font-bold border transition-all {% if not severity_filter %}bg-surface-variant text-on-surface border-outline-variant{% else %}text-outline border-outline-variant hover:text-on-surface{% endif %}">All</a>
         {% for value, label in severity_choices %}
-        <a href="{% url 'kanban_board' %}?severity={{ value }}" class="px-3 py-1 rounded-lg text-[11px] font-bold border transition-all {% if severity_filter == value %}bg-surface-variant text-on-surface border-outline-variant/30{% else %}text-outline border-outline-variant/20 hover:text-on-surface{% endif %}">
+        <a href="{% url 'kanban_board' %}?severity={{ value }}" class="px-3 py-1 rounded-lg text-[11px] font-bold border transition-all {% if severity_filter == value %}bg-surface-variant text-on-surface border-outline-variant{% else %}text-outline border-outline-variant hover:text-on-surface{% endif %}">
             {{ label }}
         </a>
         {% endfor %}
     </div>
 </section>
 
-<div class="flex gap-6 overflow-x-auto pb-8 snap-x">
+<div class="flex gap-4 overflow-x-auto pb-8 snap-x">
     {% for status_key, vulns in board.items %}
     <div class="flex-shrink-0 w-80 snap-start">
-        <div class="bg-surface-container-low rounded-3xl p-4 flex flex-col h-[75vh]">
+        <div class="bg-surface-container-low rounded-md p-4 flex flex-col h-[75vh]">
             <!-- Column Header -->
             <div class="px-4 py-4 mb-4 flex items-center justify-between">
                 <h6 class="font-headline font-bold text-xs text-outline">
@@ -39,7 +39,7 @@
             <!-- Draggable Area -->
             <div class="flex-grow overflow-y-auto space-y-4 kanban-column custom-scrollbar px-1" id="{{ status_key }}" data-status="{{ status_key }}">
                 {% for vuln in vulns %}
-                <div class="vuln-card bg-surface-container rounded-2xl p-5 hover:bg-surface-container-high transition-all cursor-grab active:cursor-grabbing relative group" 
+                <div class="vuln-card bg-surface-container rounded-md p-5 hover:bg-surface-container-high transition-all cursor-grab active:cursor-grabbing relative group" 
                      data-id="{{ vuln.id }}" data-sev-score="{{ vuln.sev_score }}">
                     
                     <!-- Severity Indicator (Vertical bar) -->
@@ -57,7 +57,7 @@
                     </h6>
                     <p class="text-[10px] text-on-surface-variant line-clamp-2 ms-2 mb-4">{{ vuln.name }}</p>
 
-                    <div class="flex items-center gap-2 mt-auto pt-3 border-t border-outline-variant/10 ms-2">
+                    <div class="flex items-center gap-2 mt-auto pt-3 border-t border-outline-variant ms-2">
                         <div class="w-5 h-5 rounded-lg bg-surface-container-highest flex items-center justify-center">
                             <span class="material-symbols-outlined text-[10px] text-outline">dns</span>
                         </div>

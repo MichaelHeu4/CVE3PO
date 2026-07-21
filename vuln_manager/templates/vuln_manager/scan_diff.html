@@ -5,7 +5,7 @@
 {% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
 
 {% block content %}
-<section class="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+<section class="mb-5 flex flex-col md:flex-row md:items-end justify-between gap-4">
     <div>
         <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight">
             Scan <span class="text-primary">Diff</span>
@@ -15,37 +15,37 @@
             {% if previous_scan %}vs {{ previous_scan.uploaded_at|date:"d M Y H:i" }} UTC{% endif %}
         </p>
     </div>
-    <a href="{% url 'scan_list' %}" class="px-5 py-2.5 rounded-xl border border-outline-variant/20 text-outline text-[10px] font-bold hover:text-on-surface transition-all flex items-center gap-2">
+    <a href="{% url 'scan_list' %}" class="px-5 py-2.5 rounded-xl border border-outline-variant text-outline text-[10px] font-bold hover:text-on-surface transition-all flex items-center gap-2">
         <span class="material-symbols-outlined text-sm">arrow_back</span> Back to History
     </a>
 </section>
 
 {% if not previous_scan %}
-<div class="bg-surface-container rounded-3xl p-8 border border-outline-variant/10">
+<div class="bg-surface-container rounded-md p-5 border border-outline-variant">
     <p class="text-on-surface text-sm font-bold">No previous scan of this type found. Diff requires at least two scans of the same source.</p>
 </div>
 {% else %}
-<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-    <div class="bg-surface-container rounded-3xl p-6 border-l-4 border-primary">
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+    <div class="bg-surface-container rounded-md p-4 border-l-4 border-primary">
         <p class="text-[10px] font-bold text-outline">New</p>
         <p class="text-3xl font-headline font-bold text-on-surface mt-2">{{ summary.new_count }}</p>
     </div>
-    <div class="bg-surface-container rounded-3xl p-6 border-l-4 border-tertiary">
+    <div class="bg-surface-container rounded-md p-4 border-l-4 border-tertiary">
         <p class="text-[10px] font-bold text-outline">Reopened</p>
         <p class="text-3xl font-headline font-bold text-on-surface mt-2">{{ summary.reopened_count }}</p>
     </div>
-    <div class="bg-surface-container rounded-3xl p-6 border-l-4 border-error">
+    <div class="bg-surface-container rounded-md p-4 border-l-4 border-error">
         <p class="text-[10px] font-bold text-outline">Fixed</p>
         <p class="text-3xl font-headline font-bold text-on-surface mt-2">{{ summary.fixed_count }}</p>
     </div>
 </div>
 
-<div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
-    <div class="bg-surface-container rounded-3xl p-6">
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+    <div class="bg-surface-container rounded-md p-4">
         <h3 class="font-headline font-bold text-sm text-primary mb-4">New Findings</h3>
         <div class="space-y-3">
             {% for vuln in new_findings %}
-            <a href="{% url 'vuln_detail' vuln.id %}" class="block p-4 rounded-2xl bg-surface-container-low hover:bg-surface-container-high transition-all">
+            <a href="{% url 'vuln_detail' vuln.id %}" class="block p-4 rounded-md bg-surface-container-low hover:bg-surface-container-high transition-all">
                 <p class="text-xs font-bold text-on-surface">{{ vuln.cve_id }}</p>
                 <p class="text-[10px] text-outline mt-1">{{ vuln.severity }} · {{ vuln.name|truncatewords:8 }}</p>
             </a>
@@ -55,11 +55,11 @@
         </div>
     </div>
 
-    <div class="bg-surface-container rounded-3xl p-6">
+    <div class="bg-surface-container rounded-md p-4">
         <h3 class="font-headline font-bold text-sm text-tertiary mb-4">Reopened Findings</h3>
         <div class="space-y-3">
             {% for vuln in reopened_findings %}
-            <a href="{% url 'vuln_detail' vuln.id %}" class="block p-4 rounded-2xl bg-surface-container-low hover:bg-surface-container-high transition-all">
+            <a href="{% url 'vuln_detail' vuln.id %}" class="block p-4 rounded-md bg-surface-container-low hover:bg-surface-container-high transition-all">
                 <p class="text-xs font-bold text-on-surface">{{ vuln.cve_id }}</p>
                 <p class="text-[10px] text-outline mt-1">{{ vuln.severity }} · {{ vuln.name|truncatewords:8 }}</p>
             </a>
@@ -69,11 +69,11 @@
         </div>
     </div>
 
-    <div class="bg-surface-container rounded-3xl p-6">
+    <div class="bg-surface-container rounded-md p-4">
         <h3 class="font-headline font-bold text-sm text-error mb-4">Fixed Findings</h3>
         <div class="space-y-3">
             {% for vuln in fixed_findings %}
-            <a href="{% url 'vuln_detail' vuln.id %}" class="block p-4 rounded-2xl bg-surface-container-low hover:bg-surface-container-high transition-all">
+            <a href="{% url 'vuln_detail' vuln.id %}" class="block p-4 rounded-md bg-surface-container-low hover:bg-surface-container-high transition-all">
                 <p class="text-xs font-bold text-on-surface">{{ vuln.cve_id }}</p>
                 <p class="text-[10px] text-outline mt-1">{{ vuln.severity }} · {{ vuln.name|truncatewords:8 }}</p>
             </a>
