@@ -11,7 +11,7 @@
         <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight">Import <span class="text-primary">History</span></h1>
         <p class="text-on-surface-variant text-sm mt-1">Audit trail of all imported scans on the platform.</p>
     </div>
-    <a href="{% url 'scan_import' %}" class="bg-gradient-to-r from-primary to-primary-container text-surface px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg shadow-primary/20 hover:brightness-110 transition-all flex items-center gap-2">
+    <a href="{% url 'scan_import' %}" class="bg-primary text-surface px-6 py-2.5 rounded-xl font-bold text-xs hover:brightness-110 transition-all flex items-center gap-2">
         <span class="material-symbols-outlined text-sm">upload_file</span> New Import
     </a>
 </section>
@@ -19,7 +19,7 @@
 <div class="bg-surface-container rounded-3xl p-8 overflow-hidden">
     <div class="space-y-4">
         <!-- Header -->
-        <div class="grid grid-cols-12 px-6 py-2 text-[10px] font-bold text-outline uppercase tracking-[0.2em]">
+        <div class="grid grid-cols-12 px-6 py-2 text-[10px] font-bold text-outline">
             <div class="col-span-3">Data Source</div>
             <div class="col-span-4">Scan Name</div>
             <div class="col-span-2 text-center">Timestamp</div>
@@ -34,7 +34,7 @@
                 <div class="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center text-primary">
                     <span class="material-symbols-outlined text-sm">{% if scan.scan_type == 'SEMGREP' %}terminal{% else %}analytics{% endif %}</span>
                 </div>
-                <span class="text-[10px] font-black tracking-widest text-on-surface uppercase">{{ scan.get_scan_type_display }}</span>
+                <span class="text-[10px] font-bold text-on-surface">{{ scan.get_scan_type_display }}</span>
             </div>
 
             <!-- File Name -->
@@ -51,12 +51,12 @@
             <!-- Date -->
             <div class="col-span-2 text-center">
                 <p class="text-on-surface font-bold text-[10px]">{{ scan.uploaded_at|date:"d M Y" }}</p>
-                <p class="text-outline text-[9px] uppercase tracking-tighter">{{ scan.uploaded_at|date:"H:i" }} UTC</p>
+                <p class="text-outline text-[11px] tracking-tight">{{ scan.uploaded_at|date:"H:i" }} UTC</p>
             </div>
 
             <!-- Findings -->
             <div class="col-span-1 text-center">
-                <span class="w-8 h-8 rounded-full bg-surface-container-highest text-primary flex items-center justify-center text-xs font-black mx-auto">
+                <span class="w-8 h-8 rounded-full bg-surface-container-highest text-primary flex items-center justify-center text-xs font-bold mx-auto">
                     {{ scan.num_vulns }}
                 </span>
             </div>
@@ -85,7 +85,7 @@
         <div class="text-center py-20 bg-surface-container-low rounded-3xl">
             <span class="material-symbols-outlined text-outline-variant text-6xl mb-4">history</span>
             <p class="text-on-surface-variant font-headline font-bold">Inventory Empty</p>
-            <p class="text-outline text-xs mt-2 uppercase tracking-widest">System awaiting host import</p>
+            <p class="text-outline text-xs mt-2">System awaiting host import</p>
         </div>
         {% endfor %}
     </div>

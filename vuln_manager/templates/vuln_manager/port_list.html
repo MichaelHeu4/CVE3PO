@@ -18,17 +18,17 @@
         <div class="flex items-center justify-between mb-6">
             <div class="flex items-center gap-4">
                 <div class="w-14 h-14 rounded-2xl bg-primary/5 flex flex-col items-center justify-center text-primary group-hover:scale-110 transition-transform">
-                    <span class="text-lg font-black font-headline leading-none">{{ key.0 }}</span>
-                    <span class="text-[8px] font-black tracking-widest mt-1 opacity-50 uppercase">PORT</span>
+                    <span class="text-lg font-bold font-headline leading-none">{{ key.0 }}</span>
+                    <span class="text-[10px] font-bold mt-1 opacity-50">PORT</span>
                 </div>
                 <div>
-                    <h4 class="font-headline font-black text-on-surface text-lg uppercase tracking-tight">{{ key.1 }}</h4>
-                    <p class="text-[10px] text-outline uppercase tracking-widest">Service</p>
+                    <h4 class="font-headline font-bold text-on-surface text-lg tracking-tight">{{ key.1 }}</h4>
+                    <p class="text-[10px] text-outline">Service</p>
                 </div>
             </div>
             <div class="text-right">
-                <p class="text-xl font-headline font-black text-primary mb-0">{{ hosts|length }}</p>
-                <p class="text-[9px] text-outline uppercase tracking-tighter">Endpoints</p>
+                <p class="text-xl font-headline font-bold text-primary mb-0">{{ hosts|length }}</p>
+                <p class="text-[11px] text-outline tracking-tight">Endpoints</p>
             </div>
         </div>
 
@@ -48,7 +48,7 @@
     <div class="col-span-full text-center py-20 bg-surface-container rounded-3xl">
         <span class="material-symbols-outlined text-outline-variant text-6xl mb-4">settings_input_component</span>
         <p class="text-on-surface-variant font-headline font-bold">No Active Services Mapping</p>
-        <p class="text-outline text-xs mt-2 uppercase tracking-widest">Awaiting system reconnaissance data</p>
+        <p class="text-outline text-xs mt-2">Awaiting system reconnaissance data</p>
     </div>
     {% endfor %}
 </div>

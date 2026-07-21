@@ -12,10 +12,10 @@
     <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight">Kanban <span class="text-primary">Board</span></h1>
     <p class="text-on-surface-variant text-sm mt-1">Manage vulnerabilities through its lifecycle phases.</p>
     <div class="mt-5 flex flex-wrap items-center gap-2">
-        <span class="text-[9px] text-outline uppercase tracking-widest font-black">Severity</span>
-        <a href="{% url 'kanban_board' %}" class="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all {% if not severity_filter %}bg-surface-variant text-on-surface border-outline-variant/30{% else %}text-outline border-outline-variant/20 hover:text-on-surface{% endif %}">All</a>
+        <span class="text-[11px] text-outline font-bold">Severity</span>
+        <a href="{% url 'kanban_board' %}" class="px-3 py-1 rounded-lg text-[11px] font-bold border transition-all {% if not severity_filter %}bg-surface-variant text-on-surface border-outline-variant/30{% else %}text-outline border-outline-variant/20 hover:text-on-surface{% endif %}">All</a>
         {% for value, label in severity_choices %}
-        <a href="{% url 'kanban_board' %}?severity={{ value }}" class="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all {% if severity_filter == value %}bg-surface-variant text-on-surface border-outline-variant/30{% else %}text-outline border-outline-variant/20 hover:text-on-surface{% endif %}">
+        <a href="{% url 'kanban_board' %}?severity={{ value }}" class="px-3 py-1 rounded-lg text-[11px] font-bold border transition-all {% if severity_filter == value %}bg-surface-variant text-on-surface border-outline-variant/30{% else %}text-outline border-outline-variant/20 hover:text-on-surface{% endif %}">
             {{ label }}
         </a>
         {% endfor %}
@@ -28,10 +28,10 @@
         <div class="bg-surface-container-low rounded-3xl p-4 flex flex-col h-[75vh]">
             <!-- Column Header -->
             <div class="px-4 py-4 mb-4 flex items-center justify-between">
-                <h6 class="font-headline font-bold text-xs uppercase tracking-[0.25em] text-outline">
+                <h6 class="font-headline font-bold text-xs text-outline">
                     {{ status_key|replace_underscore|title }}
                 </h6>
-                <span class="w-6 h-6 rounded-full bg-surface-container-highest flex items-center justify-center text-[10px] font-black text-primary vuln-count" id="count-{{ status_key }}">
+                <span class="w-6 h-6 rounded-full bg-surface-container-highest flex items-center justify-center text-[10px] font-bold text-primary vuln-count" id="count-{{ status_key }}">
                     {{ vulns|length }}
                 </span>
             </div>
@@ -39,14 +39,14 @@
             <!-- Draggable Area -->
             <div class="flex-grow overflow-y-auto space-y-4 kanban-column custom-scrollbar px-1" id="{{ status_key }}" data-status="{{ status_key }}">
                 {% for vuln in vulns %}
-                <div class="vuln-card bg-surface-container rounded-2xl p-5 hover:bg-surface-container-high transition-all cursor-grab active:cursor-grabbing relative group shadow-sm" 
+                <div class="vuln-card bg-surface-container rounded-2xl p-5 hover:bg-surface-container-high transition-all cursor-grab active:cursor-grabbing relative group" 
                      data-id="{{ vuln.id }}" data-sev-score="{{ vuln.sev_score }}">
                     
                     <!-- Severity Indicator (Vertical bar) -->
                     <div class="absolute left-0 top-6 bottom-6 w-1 rounded-r-full severity-{{ vuln.severity|lower }}"></div>
 
                     <div class="flex justify-between items-start mb-3 ms-2">
-                        <span class="text-[9px] font-black tracking-widest text-outline uppercase">{{ vuln.severity|upper }}</span>
+                        <span class="text-[11px] font-bold text-outline">{{ vuln.severity|upper }}</span>
                         <a href="{% url 'vuln_detail' vuln.id %}" class="opacity-0 group-hover:opacity-100 text-primary transition-opacity">
                             <span class="material-symbols-outlined text-sm">open_in_new</span>
                         </a>
@@ -61,7 +61,7 @@
                         <div class="w-5 h-5 rounded-lg bg-surface-container-highest flex items-center justify-center">
                             <span class="material-symbols-outlined text-[10px] text-outline">dns</span>
                         </div>
-                        <span class="text-[9px] font-bold text-outline uppercase tracking-wider truncate">
+                        <span class="text-[11px] font-bold text-outline tracking-wider truncate">
                             {% if vuln.host %}{{ vuln.host.ip_address }}{% else %}{{ vuln.software.name }}{% endif %}
                         </span>
                     </div>

@@ -10,14 +10,14 @@
         <p class="text-on-surface-variant text-sm">All vulnerability lifecycle and update events across the platform.</p>
     </section>
 
-    <div class="bg-surface-container rounded-3xl p-6 shadow-xl">
+    <div class="bg-surface-container rounded-3xl p-6">
         <form method="GET" class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
             <div class="md:col-span-7">
-                <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline mb-2">Search</label>
+                <label class="block text-[10px] font-bold text-outline mb-2">Search</label>
                 <input type="text" name="q" value="{{ query }}" placeholder="CVE, finding name, user, actor, or details..." class="w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30">
             </div>
             <div class="md:col-span-3">
-                <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline mb-2">Action</label>
+                <label class="block text-[10px] font-bold text-outline mb-2">Action</label>
                 <select name="action" class="w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30">
                     <option value="">All actions</option>
                     {% for key, label in action_choices %}
@@ -26,17 +26,17 @@
                 </select>
             </div>
             <div class="md:col-span-2">
-                <button type="submit" class="w-full rounded-xl bg-primary text-surface py-3 text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all">
+                <button type="submit" class="w-full rounded-xl bg-primary text-surface py-3 text-[10px] font-bold hover:brightness-110 transition-all">
                     Apply
                 </button>
             </div>
         </form>
     </div>
 
-    <div class="bg-surface-container rounded-3xl p-6 shadow-xl overflow-x-auto">
+    <div class="bg-surface-container rounded-3xl p-6 overflow-x-auto">
         <table class="w-full text-left">
             <thead>
-                <tr class="text-[9px] font-black uppercase tracking-[0.2em] text-outline/70 border-b border-outline-variant/20">
+                <tr class="text-[11px] font-bold text-outline/70 border-b border-outline-variant/20">
                     <th class="px-4 py-3">Time</th>
                     <th class="px-4 py-3">Action</th>
                     <th class="px-4 py-3">CVE</th>
@@ -48,10 +48,10 @@
                 {% for event in events %}
                 <tr class="border-b border-outline-variant/10 hover:bg-surface-container-high/40">
                     <td class="px-4 py-3 text-[10px] text-on-surface-variant whitespace-nowrap">{{ event.created_at|date:"d M Y H:i:s" }}</td>
-                    <td class="px-4 py-3 text-[10px] font-black text-on-surface uppercase">{{ event.get_action_display }}</td>
+                    <td class="px-4 py-3 text-[10px] font-bold text-on-surface">{{ event.get_action_display }}</td>
                     <td class="px-4 py-3 text-[10px]">
                         {% if event.vulnerability %}
-                        <a href="{% url 'vuln_detail' event.vulnerability.id %}" class="text-primary font-black hover:underline">{{ event.vulnerability.cve_id }}</a>
+                        <a href="{% url 'vuln_detail' event.vulnerability.id %}" class="text-primary font-bold hover:underline">{{ event.vulnerability.cve_id }}</a>
                         {% else %}
                         <span class="text-outline">deleted_vulnerability</span>
                         {% endif %}
@@ -69,7 +69,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="5" class="px-4 py-12 text-center text-[10px] font-black uppercase tracking-widest text-outline">No audit events found.</td>
+                    <td colspan="5" class="px-4 py-12 text-center text-[10px] font-bold text-outline">No audit events found.</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -78,7 +78,7 @@
 
     {% if events.paginator.num_pages > 1 %}
     <div class="flex items-center justify-between">
-        <p class="text-[9px] font-black text-outline uppercase tracking-widest">Page {{ events.number }} of {{ events.paginator.num_pages }}</p>
+        <p class="text-[11px] font-bold text-outline">Page {{ events.number }} of {{ events.paginator.num_pages }}</p>
         <div class="flex gap-2">
             {% if events.has_previous %}
             <a href="?page={{ events.previous_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if action_filter %}&action={{ action_filter }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5"><span class="material-symbols-outlined text-sm">chevron_left</span></a>
