@@ -59,7 +59,7 @@
 </div>
 
 <!-- Trend + Risk profile -->
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4 items-start">
     <div class="lg:col-span-2 bg-surface-container border border-outline-variant rounded-md">
         <div class="flex items-center justify-between px-4 py-3 border-b border-outline-variant">
             <div>
@@ -76,27 +76,33 @@
 
     <div class="bg-surface-container border border-outline-variant rounded-md flex flex-col">
         <div class="px-4 py-3 border-b border-outline-variant"><h3 class="font-semibold text-[13px] text-on-surface">Risk profile</h3></div>
-        <div class="p-4">
-            <div class="relative flex items-center justify-center mb-4">
-                <div style="height: 150px; width: 150px;"><canvas id="severityDoughnut"></canvas></div>
-                <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <p class="text-2xl font-bold font-headline text-on-surface leading-none tabular-nums">{{ vuln_count }}</p>
-                    <p class="text-[10px] text-outline mt-1">total</p>
-                </div>
+        <div class="p-4 space-y-3.5" data-bars>
+            <div>
+                <div class="flex justify-between items-center mb-1"><span class="text-[12px] text-on-surface-variant">Critical</span><b class="text-[12px] tabular-nums text-on-surface">{{ severity_map.critical }}</b></div>
+                <div class="h-1.5 rounded-full bg-surface-container-highest overflow-hidden"><div class="h-full rounded-full" data-val="{{ severity_map.critical }}" style="background:#e5484d;width:0"></div></div>
             </div>
-            <div class="space-y-2">
-                <div class="flex justify-between items-center text-[12px]"><span class="flex items-center gap-2 text-on-surface-variant"><span class="w-2 h-2 rounded-sm bg-error"></span>Critical</span><b class="tabular-nums text-on-surface">{{ severity_map.critical }}</b></div>
-                <div class="flex justify-between items-center text-[12px]"><span class="flex items-center gap-2 text-on-surface-variant"><span class="w-2 h-2 rounded-sm bg-tertiary"></span>High</span><b class="tabular-nums text-on-surface">{{ severity_map.high }}</b></div>
-                <div class="flex justify-between items-center text-[12px]"><span class="flex items-center gap-2 text-on-surface-variant"><span class="w-2 h-2 rounded-sm" style="background:#d99e12"></span>Medium</span><b class="tabular-nums text-on-surface">{{ severity_map.medium }}</b></div>
-                <div class="flex justify-between items-center text-[12px]"><span class="flex items-center gap-2 text-on-surface-variant"><span class="w-2 h-2 rounded-sm" style="background:#30a46c"></span>Low</span><b class="tabular-nums text-on-surface">{{ severity_map.low }}</b></div>
-                <div class="flex justify-between items-center text-[12px]"><span class="flex items-center gap-2 text-on-surface-variant"><span class="w-2 h-2 rounded-sm" style="background:#4b8bf5"></span>Info</span><b class="tabular-nums text-on-surface">{{ severity_map.info }}</b></div>
+            <div>
+                <div class="flex justify-between items-center mb-1"><span class="text-[12px] text-on-surface-variant">High</span><b class="text-[12px] tabular-nums text-on-surface">{{ severity_map.high }}</b></div>
+                <div class="h-1.5 rounded-full bg-surface-container-highest overflow-hidden"><div class="h-full rounded-full" data-val="{{ severity_map.high }}" style="background:#ef6c1a;width:0"></div></div>
+            </div>
+            <div>
+                <div class="flex justify-between items-center mb-1"><span class="text-[12px] text-on-surface-variant">Medium</span><b class="text-[12px] tabular-nums text-on-surface">{{ severity_map.medium }}</b></div>
+                <div class="h-1.5 rounded-full bg-surface-container-highest overflow-hidden"><div class="h-full rounded-full" data-val="{{ severity_map.medium }}" style="background:#d99e12;width:0"></div></div>
+            </div>
+            <div>
+                <div class="flex justify-between items-center mb-1"><span class="text-[12px] text-on-surface-variant">Low</span><b class="text-[12px] tabular-nums text-on-surface">{{ severity_map.low }}</b></div>
+                <div class="h-1.5 rounded-full bg-surface-container-highest overflow-hidden"><div class="h-full rounded-full" data-val="{{ severity_map.low }}" style="background:#30a46c;width:0"></div></div>
+            </div>
+            <div>
+                <div class="flex justify-between items-center mb-1"><span class="text-[12px] text-on-surface-variant">Info</span><b class="text-[12px] tabular-nums text-on-surface">{{ severity_map.info }}</b></div>
+                <div class="h-1.5 rounded-full bg-surface-container-highest overflow-hidden"><div class="h-full rounded-full" data-val="{{ severity_map.info }}" style="background:#4b8bf5;width:0"></div></div>
             </div>
         </div>
     </div>
 </div>
 
 <!-- Host cluster + SLA -->
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4 items-start">
     <div class="lg:col-span-2 bg-surface-container border border-outline-variant rounded-md">
         <div class="flex items-center justify-between px-4 py-3 border-b border-outline-variant">
             <h3 class="font-semibold text-[13px] text-on-surface">Host cluster posture</h3>
@@ -124,25 +130,25 @@
 
     <div class="bg-surface-container border border-outline-variant rounded-md flex flex-col">
         <div class="flex items-center justify-between px-4 py-3 border-b border-outline-variant"><h3 class="font-semibold text-[13px] text-on-surface">SLA status</h3><span class="text-[11px] text-outline">Compliance</span></div>
-        <div class="p-4">
-            <div class="relative flex items-center justify-center mb-4">
-                <div style="height: 150px; width: 150px;"><canvas id="slaDoughnut"></canvas></div>
-                <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <p class="text-2xl font-bold font-headline text-on-surface leading-none tabular-nums">{{ vuln_count }}</p>
-                    <p class="text-[10px] text-outline mt-1">open vulns</p>
-                </div>
+        <div class="p-4 space-y-3.5" data-bars>
+            <div>
+                <div class="flex justify-between items-center mb-1"><span class="text-[12px] text-on-surface-variant">SLA breached</span><b class="text-[12px] tabular-nums text-on-surface">{{ sla_breach_count }}</b></div>
+                <div class="h-1.5 rounded-full bg-surface-container-highest overflow-hidden"><div class="h-full rounded-full" data-val="{{ sla_breach_count }}" style="background:#e5484d;width:0"></div></div>
             </div>
-            <div class="space-y-2">
-                <div class="flex justify-between items-center px-3 py-2 border border-outline-variant rounded-md text-[12px]"><span class="flex items-center gap-2 text-on-surface-variant"><span class="w-2 h-2 rounded-sm bg-error"></span>SLA breached</span><b class="tabular-nums">{{ sla_breach_count }}</b></div>
-                <div class="flex justify-between items-center px-3 py-2 border border-outline-variant rounded-md text-[12px]"><span class="flex items-center gap-2 text-on-surface-variant"><span class="w-2 h-2 rounded-sm bg-tertiary"></span>Approaching breach</span><b class="tabular-nums">{{ sla_approaching_count }}</b></div>
-                <div class="flex justify-between items-center px-3 py-2 border border-outline-variant rounded-md text-[12px]"><span class="flex items-center gap-2 text-on-surface-variant"><span class="w-2 h-2 rounded-sm" style="background:#30a46c"></span>In SLA compliance</span><b class="tabular-nums">{{ sla_compliant_count }}</b></div>
+            <div>
+                <div class="flex justify-between items-center mb-1"><span class="text-[12px] text-on-surface-variant">Approaching breach</span><b class="text-[12px] tabular-nums text-on-surface">{{ sla_approaching_count }}</b></div>
+                <div class="h-1.5 rounded-full bg-surface-container-highest overflow-hidden"><div class="h-full rounded-full" data-val="{{ sla_approaching_count }}" style="background:#ef6c1a;width:0"></div></div>
+            </div>
+            <div>
+                <div class="flex justify-between items-center mb-1"><span class="text-[12px] text-on-surface-variant">In SLA compliance</span><b class="text-[12px] tabular-nums text-on-surface">{{ sla_compliant_count }}</b></div>
+                <div class="h-1.5 rounded-full bg-surface-container-highest overflow-hidden"><div class="h-full rounded-full" data-val="{{ sla_compliant_count }}" style="background:#30a46c;width:0"></div></div>
             </div>
         </div>
     </div>
 </div>
 
 <!-- Operational KPIs + workflow -->
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4 items-start">
     <div class="lg:col-span-2 grid grid-cols-2 bg-surface-container border border-outline-variant rounded-md">
         <div class="p-4 border-r border-b border-outline-variant"><p class="text-[11px] text-outline mb-2">Remediation rate</p><div class="flex items-baseline gap-1.5"><span class="text-2xl font-bold text-primary tabular-nums">{{ remediation_rate }}</span><span class="text-[11px] text-outline">%</span></div><p class="mt-2 text-[11px] text-outline">{{ resolved_count }} fixed · {{ ignored_count }} accepted</p></div>
         <div class="p-4 border-b border-outline-variant"><p class="text-[11px] text-outline mb-2">Open risk age</p><div class="flex items-baseline gap-1.5"><span class="text-2xl font-bold text-on-surface tabular-nums">{{ avg_open_age_days }}</span><span class="text-[11px] text-outline">avg days</span></div><p class="mt-2 text-[11px] text-outline">Oldest open: {{ oldest_open_days }} days</p></div>
@@ -151,11 +157,26 @@
     </div>
     <div class="bg-surface-container border border-outline-variant rounded-md">
         <div class="flex items-center justify-between px-4 py-3 border-b border-outline-variant"><h3 class="font-semibold text-[13px] text-on-surface">Workflow distribution</h3></div>
-        <div class="p-4">
-            <div class="relative" style="height: 180px;"><canvas id="statusDoughnut"></canvas></div>
-            <div class="mt-4 grid grid-cols-2 gap-2 text-[11px] text-outline">
-                <span>Open: {{ status_map.open }}</span><span>In progress: {{ status_map.in_progress }}</span>
-                <span>Fixed: {{ status_map.fixed }}</span><span>Risk accepted: {{ status_map.risk_accepted }}</span>
+        <div class="p-4 space-y-3.5" data-bars>
+            <div>
+                <div class="flex justify-between items-center mb-1"><span class="text-[12px] text-on-surface-variant">Open</span><b class="text-[12px] tabular-nums text-on-surface">{{ status_map.open }}</b></div>
+                <div class="h-1.5 rounded-full bg-surface-container-highest overflow-hidden"><div class="h-full rounded-full" data-val="{{ status_map.open }}" style="background:#e5484d;width:0"></div></div>
+            </div>
+            <div>
+                <div class="flex justify-between items-center mb-1"><span class="text-[12px] text-on-surface-variant">In progress</span><b class="text-[12px] tabular-nums text-on-surface">{{ status_map.in_progress }}</b></div>
+                <div class="h-1.5 rounded-full bg-surface-container-highest overflow-hidden"><div class="h-full rounded-full" data-val="{{ status_map.in_progress }}" style="background:#ef6c1a;width:0"></div></div>
+            </div>
+            <div>
+                <div class="flex justify-between items-center mb-1"><span class="text-[12px] text-on-surface-variant">Fixed</span><b class="text-[12px] tabular-nums text-on-surface">{{ status_map.fixed }}</b></div>
+                <div class="h-1.5 rounded-full bg-surface-container-highest overflow-hidden"><div class="h-full rounded-full" data-val="{{ status_map.fixed }}" style="background:#30a46c;width:0"></div></div>
+            </div>
+            <div>
+                <div class="flex justify-between items-center mb-1"><span class="text-[12px] text-on-surface-variant">Risk accepted</span><b class="text-[12px] tabular-nums text-on-surface">{{ status_map.risk_accepted }}</b></div>
+                <div class="h-1.5 rounded-full bg-surface-container-highest overflow-hidden"><div class="h-full rounded-full" data-val="{{ status_map.risk_accepted }}" style="background:#4b8bf5;width:0"></div></div>
+            </div>
+            <div>
+                <div class="flex justify-between items-center mb-1"><span class="text-[12px] text-on-surface-variant">False positive</span><b class="text-[12px] tabular-nums text-on-surface">{{ status_map.false_positive }}</b></div>
+                <div class="h-1.5 rounded-full bg-surface-container-highest overflow-hidden"><div class="h-full rounded-full" data-val="{{ status_map.false_positive }}" style="background:#9aa1a9;width:0"></div></div>
             </div>
         </div>
     </div>
@@ -246,22 +267,14 @@
             }
         });
 
-        new Chart(document.getElementById('severityDoughnut').getContext('2d'), {
-            type: 'doughnut',
-            data: { labels: ['Critical', 'High', 'Medium', 'Low', 'Info'], datasets: [{ data: [{{ severity_map.critical }}, {{ severity_map.high }}, {{ severity_map.medium }}, {{ severity_map.low }}, {{ severity_map.info }}], backgroundColor: SEV, borderWidth: 2, borderColor: panel, hoverOffset: 6 }] },
-            options: { responsive: true, maintainAspectRatio: false, cutout: '76%', plugins: { legend: { display: false } } }
-        });
-
-        new Chart(document.getElementById('statusDoughnut').getContext('2d'), {
-            type: 'doughnut',
-            data: { labels: ['Open', 'In Progress', 'Fixed', 'Risk Accepted', 'False Positive'], datasets: [{ data: [{{ status_map.open }}, {{ status_map.in_progress }}, {{ status_map.fixed }}, {{ status_map.risk_accepted }}, {{ status_map.false_positive }}], backgroundColor: ['#e5484d', '#ef6c1a', '#30a46c', '#4b8bf5', muted], borderWidth: 2, borderColor: panel, hoverOffset: 6 }] },
-            options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { display: false } } }
-        });
-
-        new Chart(document.getElementById('slaDoughnut').getContext('2d'), {
-            type: 'doughnut',
-            data: { labels: ['SLA Breached', 'Approaching Breach', 'In SLA Compliance'], datasets: [{ data: [{{ sla_breach_count }}, {{ sla_approaching_count }}, {{ sla_compliant_count }}], backgroundColor: ['#e5484d', '#ef6c1a', '#30a46c'], borderWidth: 2, borderColor: panel, hoverOffset: 6 }] },
-            options: { responsive: true, maintainAspectRatio: false, cutout: '76%', plugins: { legend: { display: false } } }
+        // Horizontal bar charts (severity / SLA / workflow) — scaled to each group's max
+        document.querySelectorAll('[data-bars]').forEach(function (g) {
+            var bars = Array.prototype.slice.call(g.querySelectorAll('[data-val]'));
+            var max = Math.max.apply(null, [1].concat(bars.map(function (b) { return parseFloat(b.dataset.val) || 0; })));
+            bars.forEach(function (b) {
+                var v = parseFloat(b.dataset.val) || 0;
+                b.style.width = v > 0 ? Math.max(4, v / max * 100) + '%' : '0%';
+            });
         });
     });
 </script>
