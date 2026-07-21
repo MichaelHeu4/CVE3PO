@@ -39,7 +39,7 @@
             <!-- Draggable Area -->
             <div class="flex-grow overflow-y-auto space-y-4 kanban-column custom-scrollbar px-1" id="{{ status_key }}" data-status="{{ status_key }}">
                 {% for vuln in vulns %}
-                <div class="vuln-card bg-surface-container rounded-md p-5 hover:bg-surface-container-high transition-all cursor-grab active:cursor-grabbing relative group" 
+                <div class="vuln-card bg-surface-container rounded-md p-5 hover:bg-surface-container-high transition-colors cursor-grab active:cursor-grabbing relative group" 
                      data-id="{{ vuln.id }}" data-sev-score="{{ vuln.sev_score }}">
                     
                     <!-- Severity Indicator (Vertical bar) -->
@@ -79,10 +79,10 @@
     .kanban-column::-webkit-scrollbar-thumb { background: rgba(163, 170, 196, 0.1); border-radius: 10px; }
     
     .bg-light-primary { 
-        background-color: rgba(59, 191, 250, 0.05) !important;
-        outline: 2px dashed #3bbffa;
+        background-color: rgb(var(--md-accent) / .06) !important;
+        outline: 2px dashed rgb(var(--md-accent));
         outline-offset: -4px;
-        border-radius: 1.5rem;
+        border-radius: 6px;
     }
 </style>
 
