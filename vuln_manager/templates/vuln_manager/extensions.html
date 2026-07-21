@@ -6,10 +6,10 @@
 
 {% block content %}
 <!-- Simple Hero Section -->
-<section class="mb-12 relative overflow-hidden rounded-2xl p-10 bg-surface-container-low border border-outline-variant/5">
+<section class="mb-6 relative overflow-hidden rounded-md p-5 bg-surface-container-low border border-outline-variant">
     <div class="absolute -right-20 -top-20 w-80 h-80 bg-primary/5 rounded-full blur-[100px]"></div>
     <div class="relative z-10 max-w-2xl">
-        <h1 class="text-4xl lg:text-5xl font-bold font-headline text-on-surface mb-4 leading-tight tracking-tight">
+        <h1 class="text-2xl lg:text-3xl font-bold font-headline text-on-surface mb-4 leading-tight tracking-tight">
             Manage your<br/>
             <span class="text-primary">Capabilities.</span>
         </h1>
@@ -20,17 +20,17 @@
 </section>
 
 <!-- Module Grid (Clean & Functional) -->
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
     {% for mod in modules %}
-    <div class="group bg-surface-container hover:bg-surface-container-high transition-all duration-300 p-8 rounded-2xl flex flex-col justify-between relative overflow-hidden border border-outline-variant/5">
+    <div class="group bg-surface-container hover:bg-surface-container-high transition-all duration-300 p-5 rounded-md flex flex-col justify-between relative overflow-hidden border border-outline-variant">
         <!-- Status Glow -->
         {% if mod.is_active %}
         <div class="absolute -right-8 -top-8 w-32 h-32 bg-primary/10 rounded-full blur-3xl group-hover:bg-primary/20 transition-all duration-500"></div>
         {% endif %}
         
         <div>
-            <div class="flex justify-between items-start mb-8">
-                <div class="w-14 h-14 bg-{{ mod.color|default:'primary' }}/10 rounded-2xl flex items-center justify-center text-{{ mod.color|default:'primary' }}">
+            <div class="flex justify-between items-start mb-5">
+                <div class="w-14 h-14 bg-{{ mod.color|default:'primary' }}/10 rounded-md flex items-center justify-center text-{{ mod.color|default:'primary' }}">
                     <span class="material-symbols-outlined text-3xl" style="font-variation-settings: 'FILL' 1;">{{ mod.icon }}</span>
                 </div>
                 
@@ -52,7 +52,7 @@
             </p>
 
             {% if request.user.is_staff %}
-                <div id="config-{{ mod.id }}" class="hidden mb-8 p-3 rounded-xl bg-surface-container-lowest border border-outline-variant/10">
+                <div id="config-{{ mod.id }}" class="hidden mb-5 p-3 rounded-xl bg-surface-container-lowest border border-outline-variant">
                     <div class="flex items-center justify-between mb-2">
                         <p class="text-[10px] font-bold text-outline/50">
                             {% if mod.id == "wrike" %}Wrike Configuration{% elif mod.id == "email_reporting" %}Email Reporting Configuration{% elif mod.id == "ai_triage" %}AI Triage Configuration{% else %}Access Token (X-API-Key){% endif %}
@@ -62,15 +62,15 @@
                     {% if mod.id == "wrike" %}
                         <form action="{% url 'save_wrike_config' %}" method="POST" class="space-y-3">
                             {% csrf_token %}
-                            <input name="wrike_api_token" type="password" placeholder="Wrike API Token (optional to update)" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant/20 px-3 py-2 text-[11px] text-on-surface"/>
-                            <input name="wrike_folder_id" type="text" placeholder="Wrike Folder/Project ID" value="{{ mod.wrike_folder_id|default:'' }}" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant/20 px-3 py-2 text-[11px] text-on-surface"/>
-                            <button class="w-full rounded-lg px-3 py-2 border border-outline-variant/30 hover:border-primary/40 text-on-surface-variant hover:text-primary transition-all text-[10px] tracking-wider">Save Wrike Config</button>
+                            <input name="wrike_api_token" type="password" placeholder="Wrike API Token (optional to update)" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px] text-on-surface"/>
+                            <input name="wrike_folder_id" type="text" placeholder="Wrike Folder/Project ID" value="{{ mod.wrike_folder_id|default:'' }}" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px] text-on-surface"/>
+                            <button class="w-full rounded-lg px-3 py-2 border border-outline-variant hover:border-primary/40 text-on-surface-variant hover:text-primary transition-all text-[10px] tracking-wider">Save Wrike Config</button>
                         </form>
                     {% elif mod.id == "email_reporting" %}
                         <form action="{% url 'save_email_reporting_config' %}" method="POST" class="space-y-3">
                             {% csrf_token %}
-                            <textarea name="email_report_recipients" rows="3" placeholder="security@example.com, soc@example.com" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant/20 px-3 py-2 text-[11px] text-on-surface">{{ mod.email_report_recipients|default:'' }}</textarea>
-                            <button class="w-full rounded-lg px-3 py-2 border border-outline-variant/30 hover:border-primary/40 text-on-surface-variant hover:text-primary transition-all text-[10px] tracking-wider">Save Email Recipients</button>
+                            <textarea name="email_report_recipients" rows="3" placeholder="security@example.com, soc@example.com" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px] text-on-surface">{{ mod.email_report_recipients|default:'' }}</textarea>
+                            <button class="w-full rounded-lg px-3 py-2 border border-outline-variant hover:border-primary/40 text-on-surface-variant hover:text-primary transition-all text-[10px] tracking-wider">Save Email Recipients</button>
                         </form>
                         {% if mod.is_active %}
                         <form action="{% url 'send_email_report_now' %}" method="POST">
@@ -81,25 +81,25 @@
                     {% elif mod.id == "ai_triage" %}
                         <form action="{% url 'save_ai_triage_config' %}" method="POST" class="space-y-3">
                             {% csrf_token %}
-                            <select name="ai_triage_provider" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant/20 px-3 py-2 text-[11px] text-on-surface">
+                            <select name="ai_triage_provider" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px] text-on-surface">
                                 <option value="openrouter" {% if mod.ai_triage_provider == "openrouter" %}selected{% endif %}>OpenRouter (OpenAI Client)</option>
                                 <option value="azure" {% if mod.ai_triage_provider == "azure" %}selected{% endif %}>Azure (OpenAI/Azure AI)</option>
                             </select>
-                            <input name="ai_openrouter_model" type="text" placeholder="OpenRouter Model (e.g. deepseek/deepseek-v4-flash)" value="{{ mod.ai_openrouter_model|default:'' }}" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant/20 px-3 py-2 text-[11px] text-on-surface"/>
-                            <input name="ai_openrouter_api_key" type="password" placeholder="OpenRouter API Key (optional to update)" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant/20 px-3 py-2 text-[11px] text-on-surface"/>
-                            <input name="ai_azure_endpoint" type="url" placeholder="Azure Endpoint (e.g. https://<resource>.openai.azure.com)" value="{{ mod.ai_azure_endpoint|default:'' }}" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant/20 px-3 py-2 text-[11px] text-on-surface"/>
-                            <input name="ai_azure_model" type="text" placeholder="Azure Deployment Name (for ChatGPT in Azure OpenAI)" value="{{ mod.ai_azure_model|default:'' }}" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant/20 px-3 py-2 text-[11px] text-on-surface"/>
-                            <input name="ai_azure_api_version" type="text" placeholder="Azure OpenAI API Version (e.g. 2025-01-01-preview)" value="{{ mod.ai_azure_api_version|default:'' }}" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant/20 px-3 py-2 text-[11px] text-on-surface"/>
-                            <input name="ai_azure_api_key" type="password" placeholder="Azure API Key (optional to update)" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant/20 px-3 py-2 text-[11px] text-on-surface"/>
+                            <input name="ai_openrouter_model" type="text" placeholder="OpenRouter Model (e.g. deepseek/deepseek-v4-flash)" value="{{ mod.ai_openrouter_model|default:'' }}" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px] text-on-surface"/>
+                            <input name="ai_openrouter_api_key" type="password" placeholder="OpenRouter API Key (optional to update)" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px] text-on-surface"/>
+                            <input name="ai_azure_endpoint" type="url" placeholder="Azure Endpoint (e.g. https://<resource>.openai.azure.com)" value="{{ mod.ai_azure_endpoint|default:'' }}" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px] text-on-surface"/>
+                            <input name="ai_azure_model" type="text" placeholder="Azure Deployment Name (for ChatGPT in Azure OpenAI)" value="{{ mod.ai_azure_model|default:'' }}" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px] text-on-surface"/>
+                            <input name="ai_azure_api_version" type="text" placeholder="Azure OpenAI API Version (e.g. 2025-01-01-preview)" value="{{ mod.ai_azure_api_version|default:'' }}" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px] text-on-surface"/>
+                            <input name="ai_azure_api_key" type="password" placeholder="Azure API Key (optional to update)" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px] text-on-surface"/>
                             <div class="space-y-1">
                                 <label class="text-[11px] font-bold tracking-wider text-outline/50 block">CVE / Vulnerability System Prompt</label>
-                                <textarea name="ai_cve_system_prompt" rows="6" placeholder="System prompt for CVE/vulnerability triage..." class="w-full rounded-lg bg-surface-container-highest border border-outline-variant/20 px-3 py-2 text-[11px] text-on-surface font-mono">{{ mod.ai_cve_system_prompt|default:'' }}</textarea>
+                                <textarea name="ai_cve_system_prompt" rows="6" placeholder="System prompt for CVE/vulnerability triage..." class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px] text-on-surface font-mono">{{ mod.ai_cve_system_prompt|default:'' }}</textarea>
                             </div>
                             <div class="space-y-1">
                                 <label class="text-[11px] font-bold tracking-wider text-outline/50 block">Software-Level System Prompt</label>
-                                <textarea name="ai_software_system_prompt" rows="6" placeholder="System prompt for Software-level triage..." class="w-full rounded-lg bg-surface-container-highest border border-outline-variant/20 px-3 py-2 text-[11px] text-on-surface font-mono">{{ mod.ai_software_system_prompt|default:'' }}</textarea>
+                                <textarea name="ai_software_system_prompt" rows="6" placeholder="System prompt for Software-level triage..." class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px] text-on-surface font-mono">{{ mod.ai_software_system_prompt|default:'' }}</textarea>
                             </div>
-                            <button class="w-full rounded-lg px-3 py-2 border border-outline-variant/30 hover:border-primary/40 text-on-surface-variant hover:text-primary transition-all text-[10px] tracking-wider">Save AI Triage Config</button>
+                            <button class="w-full rounded-lg px-3 py-2 border border-outline-variant hover:border-primary/40 text-on-surface-variant hover:text-primary transition-all text-[10px] tracking-wider">Save AI Triage Config</button>
                         </form>
                     {% else %}
                         <div class="flex items-center justify-between gap-2 overflow-hidden">
@@ -111,7 +111,7 @@
             {% endif %}
         </div>
         
-        <div class="flex items-center justify-between pt-6 border-t border-outline-variant/10">
+        <div class="flex items-center justify-between pt-6 border-t border-outline-variant">
             <div class="flex flex-col">
                 <span class="text-[11px] font-bold text-outline/50">Status</span>
                 <span class="text-[10px] font-bold {% if mod.is_active %}text-primary{% else %}text-outline{% endif %}">
@@ -134,12 +134,12 @@
 </div>
 
 <!-- Simplified Developer Note -->
-<section class="mt-16 bg-surface-container rounded-2xl p-10 flex flex-col md:flex-row items-center gap-10 border border-outline-variant/10 opacity-60">
+<section class="mt-8 bg-surface-container rounded-md p-5 flex flex-col md:flex-row items-center gap-10 border border-outline-variant opacity-60">
     <div class="flex-grow">
         <h4 class="text-on-surface font-headline font-bold text-lg mb-2">Custom Modules</h4>
         <p class="text-xs text-on-surface-variant max-w-lg">New integrations can be added by placing specialized logic in the <code class="bg-surface-container-lowest px-2 py-0.5 rounded text-primary">vuln_manager/extensions/</code> directory.</p>
     </div>
-    <div class="w-16 h-16 bg-surface-container-highest rounded-2xl flex items-center justify-center text-outline/30">
+    <div class="w-16 h-16 bg-surface-container-highest rounded-md flex items-center justify-center text-outline/30">
         <span class="material-symbols-outlined text-3xl">developer_board</span>
     </div>
 </section>

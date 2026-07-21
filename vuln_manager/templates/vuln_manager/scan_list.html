@@ -6,7 +6,7 @@
 {% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
 
 {% block content %}
-<section class="mb-8 flex justify-between items-end">
+<section class="mb-5 flex justify-between items-end">
     <div>
         <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight">Import <span class="text-primary">History</span></h1>
         <p class="text-on-surface-variant text-sm mt-1">Audit trail of all imported scans on the platform.</p>
@@ -16,7 +16,7 @@
     </a>
 </section>
 
-<div class="bg-surface-container rounded-3xl p-8 overflow-hidden">
+<div class="bg-surface-container rounded-md p-5 overflow-hidden">
     <div class="space-y-4">
         <!-- Header -->
         <div class="grid grid-cols-12 px-6 py-2 text-[10px] font-bold text-outline">
@@ -28,7 +28,7 @@
         </div>
 
         {% for scan in scans %}
-        <div class="grid grid-cols-12 items-center p-6 bg-surface-container-low rounded-2xl hover:bg-surface-container-high transition-all group">
+        <div class="grid grid-cols-12 items-center p-4 bg-surface-container-low rounded-md hover:bg-surface-container-high transition-all group">
             <!-- Scan Type -->
             <div class="col-span-3 flex items-center gap-4">
                 <div class="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center text-primary">
@@ -82,8 +82,8 @@
             </div>
         </div>
         {% empty %}
-        <div class="text-center py-20 bg-surface-container-low rounded-3xl">
-            <span class="material-symbols-outlined text-outline-variant text-6xl mb-4">history</span>
+        <div class="text-center py-20 bg-surface-container-low rounded-md">
+            <span class="material-symbols-outlined text-outline-variant text-4xl mb-4">history</span>
             <p class="text-on-surface-variant font-headline font-bold">Inventory Empty</p>
             <p class="text-outline text-xs mt-2">System awaiting host import</p>
         </div>

@@ -6,12 +6,12 @@
 
 {% block content %}
 <div class="max-w-3xl mx-auto">
-    <section class="mb-12">
+    <section class="mb-6">
         <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight mb-2">Import <span class="text-primary">Scan</span></h1>
         <p class="text-on-surface-variant text-sm">Import a new scan to CVE3PO</p>
     </section>
 
-    <div class="bg-surface-container rounded-3xl p-10">
+    <div class="bg-surface-container rounded-md p-5">
         <form action="{% url 'scan_import' %}" method="POST" enctype="multipart/form-data">
             {% csrf_token %}
             
@@ -38,7 +38,7 @@
                 </div>
 
                 <!-- Scan Type -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-[10px] font-bold text-outline mb-3">Scan Type</label>
                         <div class="relative group">
@@ -63,7 +63,7 @@
                 </div>
 
                 <div class="pt-8 flex flex-col gap-4">
-                    <button type="submit" class="w-full bg-primary text-surface py-4 rounded-2xl font-headline font-bold text-xs hover:brightness-110 active:scale-[0.98] transition-all">
+                    <button type="submit" class="w-full bg-primary text-surface py-4 rounded-md font-headline font-bold text-xs hover:brightness-110 active:scale-[0.98] transition-all">
                         Import
                     </button>
                     <a href="{% url 'dashboard' %}" class="text-center text-[10px] font-bold text-outline hover:text-on-surface transition-colors py-2">Abort Operation</a>
@@ -73,28 +73,28 @@
     </div>
 
     <!-- Supported Scanners -->
-    <div class="mt-12 grid grid-cols-2 md:grid-cols-4 gap-4 opacity-60 hover:opacity-100 transition-opacity">
-        <div class="p-4 bg-surface-container-low rounded-2xl text-center">
+    <div class="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4 opacity-60 hover:opacity-100 transition-opacity">
+        <div class="p-4 bg-surface-container-low rounded-md text-center">
             <p class="text-[11px] font-bold text-primary">Nmap</p>
             <p class="text-[10px] text-outline mt-1">Network XML</p>
         </div>
-        <div class="p-4 bg-surface-container-low rounded-2xl text-center">
+        <div class="p-4 bg-surface-container-low rounded-md text-center">
             <p class="text-[11px] font-bold text-primary">Nuclei</p>
             <p class="text-[10px] text-outline mt-1">JSONL Stream</p>
         </div>
-        <div class="p-4 bg-surface-container-low rounded-2xl text-center">
+        <div class="p-4 bg-surface-container-low rounded-md text-center">
             <p class="text-[11px] font-bold text-primary">OpenVAS</p>
             <p class="text-[10px] text-outline mt-1">Report XML</p>
         </div>
-        <div class="p-4 bg-surface-container-low rounded-2xl text-center">
+        <div class="p-4 bg-surface-container-low rounded-md text-center">
             <p class="text-[11px] font-bold text-primary">Semgrep</p>
             <p class="text-[10px] text-outline mt-1">SAST JSON</p>
         </div>
-        <div class="p-4 bg-surface-container-low rounded-2xl text-center">
+        <div class="p-4 bg-surface-container-low rounded-md text-center">
             <p class="text-[11px] font-bold text-primary">OSV Scanner</p>
             <p class="text-[10px] text-outline mt-1">Report JSON</p>
         </div>
-        <div class="p-4 bg-surface-container-low rounded-2xl text-center">
+        <div class="p-4 bg-surface-container-low rounded-md text-center">
             <p class="text-[11px] font-bold text-primary">CycloneDX</p>
             <p class="text-[10px] text-outline mt-1">SBOM JSON (Syft)</p>
         </div>

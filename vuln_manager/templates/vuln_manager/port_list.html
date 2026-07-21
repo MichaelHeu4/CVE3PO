@@ -5,19 +5,19 @@
 {% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
 
 {% block content %}
-<section class="mb-12 flex justify-between items-end">
+<section class="mb-6 flex justify-between items-end">
     <div>
         <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight">Active <span class="text-primary">Services</span></h1>
         <p class="text-on-surface-variant text-sm mt-1">Open ports and listening services.</p>
     </div>
 </section>
 
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
     {% for key, hosts in port_groups %}
-    <div class="bg-surface-container rounded-3xl p-6 hover:bg-surface-container-high transition-all group">
+    <div class="bg-surface-container rounded-md p-4 hover:bg-surface-container-high transition-all group">
         <div class="flex items-center justify-between mb-6">
             <div class="flex items-center gap-4">
-                <div class="w-14 h-14 rounded-2xl bg-primary/5 flex flex-col items-center justify-center text-primary group-hover:scale-110 transition-transform">
+                <div class="w-14 h-14 rounded-md bg-primary/5 flex flex-col items-center justify-center text-primary group-hover:scale-110 transition-transform">
                     <span class="text-lg font-bold font-headline leading-none">{{ key.0 }}</span>
                     <span class="text-[10px] font-bold mt-1 opacity-50">PORT</span>
                 </div>
@@ -45,8 +45,8 @@
         </div>
     </div>
     {% empty %}
-    <div class="col-span-full text-center py-20 bg-surface-container rounded-3xl">
-        <span class="material-symbols-outlined text-outline-variant text-6xl mb-4">settings_input_component</span>
+    <div class="col-span-full text-center py-20 bg-surface-container rounded-md">
+        <span class="material-symbols-outlined text-outline-variant text-4xl mb-4">settings_input_component</span>
         <p class="text-on-surface-variant font-headline font-bold">No Active Services Mapping</p>
         <p class="text-outline text-xs mt-2">Awaiting system reconnaissance data</p>
     </div>
