@@ -1,154 +1,117 @@
 <!DOCTYPE html>
 <html class="dark" lang="en">
-   <head>
-      <meta charset="utf-8"/>
-      <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-      <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet"/>
-      <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
-      <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
-      <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-      <script id="tailwind-config">
-         tailwind.config = {
-             darkMode: "class",
-             theme: {
-                 extend: {
-                     colors: {
-                         "surface-dim": "#060e20",
-                         "outline": "#6d758c",
-                         "on-tertiary-fixed": "#39000b",
-                         "secondary-fixed-dim": "#bacae4",
-                         "secondary-fixed": "#c8d8f3",
-                         "primary-container": "#22b1ec",
-                         "on-surface": "#dee5ff",
-                         "on-tertiary-container": "#100001",
-                         "on-background": "#dee5ff",
-                         "tertiary-fixed": "#ff9099",
-                         "surface-bright": "#1f2b49",
-                         "on-error": "#490006",
-                         "primary-fixed-dim": "#05a9e3",
-                         "surface-container": "#0f1930",
-                         "on-secondary-fixed-variant": "#46556b",
-                         "on-primary": "#00374d",
-                         "inverse-primary": "#00668b",
-                         "secondary-dim": "#bacae4",
-                         "primary-fixed": "#2db7f2",
-                         "primary": "#3bbffa",
-                         "surface-container-lowest": "#000000",
-                         "on-secondary": "#3c4c61",
-                         "primary-dim": "#05a9e3",
-                         "tertiary-container": "#fc4563",
-                         "secondary-container": "#38485d",
-                         "error-container": "#9f0519",
-                         "tertiary": "#ff6f7e",
-                         "on-secondary-fixed": "#29394e",
-                         "on-primary-fixed-variant": "#003a50",
-                         "inverse-surface": "#faf8ff",
-                         "tertiary-fixed-dim": "#ff7986",
-                         "on-tertiary": "#490010",
-                         "on-secondary-container": "#c1d1eb",
-                         "outline-variant": "#40485d",
-                         "on-primary-container": "#002b3d",
-                         "on-error-container": "#ffa8a3",
-                         "surface-variant": "#192540",
-                         "inverse-on-surface": "#4d556b",
-                         "surface-tint": "#3bbffa",
-                         "secondary": "#c8d8f3",
-                         "surface": "#060e20",
-                         "surface-container-low": "#091328",
-                         "on-surface-variant": "#a3aac4",
-                         "on-primary-fixed": "#00121d",
-                         "error-dim": "#d7383b",
-                         "background": "#060e20",
-                         "error": "#ff716c",
-                         "tertiary-dim": "#ff6f7e",
-                         "surface-container-high": "#141f38",
-                         "surface-container-highest": "#192540",
-                         "on-tertiary-fixed-variant": "#780021"
-                     },
-                     fontFamily: {
-                         "headline": ["Manrope"],
-                         "body": ["Inter"],
-                         "label": ["Inter"]
-                     },
-                     borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "9999px"},
-                 },
-             },
-         }
-      </script>
-      <style>
-         .material-symbols-outlined {
-         font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-         }
-         .glass-panel {
-         background: rgba(25, 37, 64, 0.6);
-         backdrop-filter: blur(20px);
-         }
-      </style>
-   </head>
-   <body class="bg-surface font-body text-on-surface min-h-screen flex flex-col">
-      <main class="flex-grow flex items-center justify-center relative overflow-hidden py-12 px-6">
-         <div class="absolute top-0 left-0 w-full h-full pointer-events-none opacity-20">
-            <div class="absolute top-[-10%] right-[-5%] w-[600px] h-[600px] bg-primary blur-[120px] rounded-full"></div>
-            <div class="absolute bottom-[-10%] left-[-5%] w-[400px] h-[400px] bg-tertiary blur-[100px] rounded-full"></div>
-         </div>
-         <div class="max-w-6xl w-full grid grid-cols-1 md:grid-cols-2 gap-0 relative z-10">
-            <div class="hidden md:flex flex-col justify-center p-12 bg-surface-container-low rounded-l-xl">
-               <div class="mb-8">
-                  <span class="text-primary font-headline font-bold tracking-tighter text-3xl">CVE3PO</span>
-               </div>
-               <h1 class="font-headline font-extrabold text-5xl lg:text-7xl text-on-surface leading-tight mb-6">
-                  Start Your <span class="text-primary">Watch</span>.
-               </h1>
-               <p class="text-on-surface-variant text-lg max-w-md font-light leading-relaxed mb-12">
-                  Join now and start managing your vulnerabilities with CVE3PO. Get insights, track the status of vulnerabilities, and get an comprehensive overview to stay ahead of threats.
-               </p>
-            </div>
-            <!-- Form Side: Focused Transactional -->
-            <div class="glass-panel p-8 md:p-16 flex flex-col justify-center rounded-xl md:rounded-l-none">
-               <div class="md:hidden mb-8 text-center">
-                  <h1 class="font-headline font-extrabold text-4xl text-on-surface mb-2">Start Your Watch</h1>
-                  <p class="text-on-surface-variant text-sm">Join CVE3PO now.</p>
-               </div>
-               {% if register_error %}
-               <div class="mb-6 rounded-lg border border-error/30 bg-error-container/30 px-4 py-3 text-xs text-on-error-container">
-                  {{ register_error }}
-               </div>
-               {% endif %}
-               <form class="space-y-6" method="POST" action="{% url 'register' %}">
-                  {% csrf_token %}
-                  <div class="space-y-2">
-                     <label class="text-xs font-headline font-bold uppercase tracking-widest text-on-surface-variant">Work Email</label>
-                     <div class="relative">
-                        <input class="w-full bg-surface-container-lowest border-none focus:ring-2 focus:ring-primary/30 text-on-surface px-4 py-4 rounded-lg placeholder:text-outline transition-all" name="email" placeholder="email@company.com" type="email" value="{{ register_email|default:'' }}"/>
-                     </div>
-                  </div>
-                  <div class="space-y-2">
-                     <label class="text-xs font-headline font-bold uppercase tracking-widest text-on-surface-variant">Create Password</label>
-                     <div class="relative">
-                        <input class="w-full bg-surface-container-lowest border-none focus:ring-2 focus:ring-primary/30 text-on-surface px-4 py-4 rounded-lg placeholder:text-outline transition-all" name="password" placeholder="••••••••" type="password"/>
-                     </div>
-                  </div>
-                  <div class="pt-4">
-                     <button class="w-full bg-gradient-to-br from-primary to-primary-container text-on-primary-container font-headline font-bold py-4 rounded-lg uppercase tracking-widest hover:brightness-110 active:scale-[0.98] transition-all shadow-lg shadow-primary/20" type="submit">
-                     Create Account
-                     </button>
-                  </div>
-               </form>
-               <div class="mt-8 flex items-center justify-between">
-                  <p class="text-sm text-on-surface-variant">Already have an account?</p>
-                  <a class="text-sm font-bold text-primary hover:text-primary-container transition-colors" href="{% url 'login' %}">Sign In</a>
-               </div>
-            </div>
-         </div>
-      </main>
-      <!-- Footer from Shared Components JSON -->
-      <footer class="w-full py-8 mt-auto bg-[#060e20]">
-         <div class="flex flex-col md:flex-row justify-between items-center px-12 max-w-7xl mx-auto">
-            <div class="font-inter text-xs text-[#a3aac4] mb-4 md:mb-0">
-               CVE3PO Vulnerability Management. GNU General Public License v3.0
-            </div>
-         </div>
-      </footer>
-   </body>
-</html>
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>CVE3PO — Create account</title>
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem('cve3po-theme');
+                if (t === 'light') document.documentElement.classList.remove('dark');
+                else document.documentElement.classList.add('dark');
+            } catch (e) { document.documentElement.classList.add('dark'); }
+        })();
+    </script>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: { extend: {
+                colors: {
+                    "background": "rgb(var(--md-bg) / <alpha-value>)",
+                    "surface": "rgb(var(--md-bg) / <alpha-value>)",
+                    "surface-container-lowest": "rgb(var(--md-lowest) / <alpha-value>)",
+                    "surface-container-low": "rgb(var(--md-panel-2) / <alpha-value>)",
+                    "surface-container": "rgb(var(--md-panel) / <alpha-value>)",
+                    "on-surface": "rgb(var(--md-text) / <alpha-value>)",
+                    "on-surface-variant": "rgb(var(--md-muted) / <alpha-value>)",
+                    "outline": "rgb(var(--md-faint) / <alpha-value>)",
+                    "outline-variant": "rgb(var(--md-line) / <alpha-value>)",
+                    "primary": "rgb(var(--md-accent) / <alpha-value>)",
+                    "primary-container": "rgb(var(--md-accent-container) / <alpha-value>)",
+                    "on-primary": "rgb(var(--md-on-accent) / <alpha-value>)",
+                    "error": "rgb(var(--md-crit) / <alpha-value>)",
+                    "error-container": "rgb(var(--md-crit) / <alpha-value>)",
+                    "on-error-container": "rgb(255 255 255 / <alpha-value>)"
+                },
+                fontFamily: { "headline": ["Manrope"], "body": ["Inter"], "label": ["Inter"] },
+                borderRadius: { "DEFAULT": "0.25rem", "lg": "0.3125rem", "xl": "0.375rem", "2xl": "0.5rem", "3xl": "0.625rem", "full": "9999px" }
+            } }
+        }
+    </script>
+    <style>
+        :root { --md-bg:236 238 240; --md-panel:255 255 255; --md-panel-2:246 247 248; --md-lowest:255 255 255; --md-text:20 24 28; --md-muted:91 99 107; --md-faint:139 146 154; --md-line:223 226 229; --md-accent:37 99 235; --md-accent-container:37 99 235; --md-on-accent:255 255 255; --md-crit:229 72 77; }
+        html.dark { --md-bg:13 15 18; --md-panel:22 25 29; --md-panel-2:16 19 22; --md-lowest:10 11 13; --md-text:230 232 235; --md-muted:154 161 169; --md-faint:107 113 120; --md-line:42 47 54; --md-accent:91 141 255; --md-accent-container:79 140 255; --md-on-accent:255 255 255; --md-crit:229 72 77; }
+        body { background: rgb(var(--md-bg)); color: rgb(var(--md-text)); font-family:'Inter',sans-serif; }
+        .material-symbols-outlined { font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; }
+        .dotgrid { background-image: radial-gradient(rgb(var(--md-line)) 1px, transparent 1px); background-size: 26px 26px; }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-6 dotgrid">
+    <button id="themeToggle" type="button" aria-label="Toggle theme"
+            class="fixed top-5 right-5 flex items-center justify-center w-9 h-9 rounded-md text-on-surface-variant hover:text-primary transition-colors"
+            style="border:1px solid rgb(var(--md-line)); background: rgb(var(--md-panel));">
+        <span class="material-symbols-outlined text-lg" id="themeIconDark">dark_mode</span>
+        <span class="material-symbols-outlined text-lg hidden" id="themeIconLight">light_mode</span>
+    </button>
 
+    <main class="w-full max-w-[400px]">
+        <div class="text-center mb-7">
+            <div class="inline-flex items-center justify-center rounded-xl mb-3.5" style="width:52px;height:52px;background:rgb(var(--md-accent) / .14);">
+                <span class="material-symbols-outlined text-primary" style="font-size:26px;">shield</span>
+            </div>
+            <h1 class="font-headline text-2xl font-extrabold tracking-tight text-on-surface mb-1">CVE3PO</h1>
+            <p class="text-outline text-[11px] font-semibold tracking-wide">CREATE ACCOUNT</p>
+        </div>
+
+        <div class="rounded-2xl p-7" style="background:rgb(var(--md-panel)); border:1px solid rgb(var(--md-line));">
+            <h2 class="font-headline text-lg font-bold text-on-surface mb-1.5">Start your watch</h2>
+            <p class="text-on-surface-variant text-xs mb-5">Join CVE3PO and stay ahead of threats.</p>
+
+            {% if register_error %}
+            <div class="mb-5 rounded-lg border border-error/40 bg-error/10 px-4 py-3 text-xs text-error">
+                {{ register_error }}
+            </div>
+            {% endif %}
+
+            <form class="space-y-4" method="POST" action="{% url 'register' %}">
+                {% csrf_token %}
+                <div class="space-y-1.5">
+                    <label class="block text-[11px] font-semibold text-on-surface-variant" for="email">Work email</label>
+                    <input class="block w-full text-sm text-on-surface rounded-lg px-3.5 py-2.5 transition-all" style="background:rgb(var(--md-panel-2)); border:1px solid rgb(var(--md-line));" id="email" name="email" placeholder="email@company.com" value="{{ register_email|default:'' }}" required type="email"/>
+                </div>
+                <div class="space-y-1.5">
+                    <label class="block text-[11px] font-semibold text-on-surface-variant" for="password">Create password</label>
+                    <input class="block w-full text-sm text-on-surface rounded-lg px-3.5 py-2.5 transition-all" style="background:rgb(var(--md-panel-2)); border:1px solid rgb(var(--md-line));" id="password" name="password" placeholder="••••••••••" required type="password"/>
+                </div>
+                <button class="w-full flex justify-center items-center gap-2 py-3 px-6 rounded-lg bg-primary text-on-primary text-sm font-semibold hover:opacity-90 active:scale-[0.99] transition-all mt-2" type="submit">
+                    Create account
+                </button>
+            </form>
+
+            <div class="mt-6 flex items-center justify-between">
+                <p class="text-xs text-on-surface-variant">Already have an account?</p>
+                <a class="text-xs font-semibold text-primary hover:opacity-80 transition-opacity" href="{% url 'login' %}">Sign in</a>
+            </div>
+        </div>
+
+        <p class="text-center mt-5 text-xs text-on-surface-variant">
+            CVE3PO Vulnerability Management · GNU GPL v3.0
+        </p>
+    </main>
+
+    <script>
+        (function () {
+            var btn = document.getElementById('themeToggle'),
+                iD = document.getElementById('themeIconDark'),
+                iL = document.getElementById('themeIconLight');
+            function sync(){ var d=document.documentElement.classList.contains('dark'); iD.classList.toggle('hidden',!d); iL.classList.toggle('hidden',d); }
+            sync();
+            btn.addEventListener('click', function(){ var d=document.documentElement.classList.toggle('dark'); try{localStorage.setItem('cve3po-theme',d?'dark':'light');}catch(e){} sync(); });
+        })();
+    </script>
+</body>
+</html>

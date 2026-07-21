@@ -4,15 +4,15 @@
 {% block header_title %}User <span class="text-primary">Management</span>{% endblock %}
 
 {% block content %}
-<section class="mb-10 rounded-[2rem] p-8 bg-surface-container-low border border-outline-variant/10 shadow-xl">
-    <h1 class="text-3xl font-black font-headline text-on-surface mb-3 tracking-tight">Manage Staff Permissions</h1>
+<section class="mb-10 rounded-2xl p-8 bg-surface-container-low border border-outline-variant/10">
+    <h1 class="text-3xl font-bold font-headline text-on-surface mb-3 tracking-tight">Manage Staff Permissions</h1>
     <p class="text-xs text-on-surface-variant">Only superusers can manage users and registration behavior.</p>
 </section>
 
-<section class="mb-10 rounded-[2rem] p-6 bg-surface-container border border-outline-variant/10 shadow-xl">
+<section class="mb-10 rounded-2xl p-6 bg-surface-container border border-outline-variant/10">
     <div class="flex items-center justify-between gap-4">
         <div>
-            <h2 class="text-sm font-bold text-on-surface uppercase tracking-[0.2em]">Public Registration</h2>
+            <h2 class="text-sm font-bold text-on-surface">Public Registration</h2>
             <p class="text-xs text-on-surface-variant mt-1">
                 {% if registration_disabled %}
                     Disabled: new users cannot self-register.
@@ -30,10 +30,10 @@
     </div>
 </section>
 
-<section class="mb-10 rounded-[2rem] p-6 bg-surface-container border border-outline-variant/10 shadow-xl">
+<section class="mb-10 rounded-2xl p-6 bg-surface-container border border-outline-variant/10">
     <div class="flex flex-col gap-4">
         <div>
-            <h2 class="text-sm font-bold text-on-surface uppercase tracking-[0.2em]">SLA Thresholds</h2>
+            <h2 class="text-sm font-bold text-on-surface">SLA Thresholds</h2>
             <p class="text-xs text-on-surface-variant mt-1">
                 Configure when open critical/high vulnerabilities count as SLA breaches.
             </p>
@@ -55,10 +55,10 @@
     </div>
 </section>
 
-<section class="rounded-[2rem] bg-surface-container border border-outline-variant/10 shadow-xl overflow-hidden">
+<section class="rounded-2xl bg-surface-container border border-outline-variant/10 overflow-hidden">
     <div class="overflow-x-auto">
         <table class="w-full text-xs">
-            <thead class="bg-surface-container-high text-outline uppercase tracking-[0.2em]">
+            <thead class="bg-surface-container-high text-outline">
                 <tr>
                     <th class="text-left px-6 py-4">Username</th>
                     <th class="text-left px-6 py-4">Superuser</th>
@@ -73,9 +73,9 @@
                     <td class="px-6 py-4 text-on-surface-variant">{{ item.is_superuser|yesno:"Yes,No" }}</td>
                     <td class="px-6 py-4">
                         {% if item.is_staff %}
-                            <span class="inline-flex items-center px-2 py-1 rounded-lg bg-primary/15 text-primary font-bold uppercase tracking-wider">Staff</span>
+                            <span class="inline-flex items-center px-2 py-1 rounded-lg bg-primary/15 text-primary font-bold tracking-wider">Staff</span>
                         {% else %}
-                            <span class="inline-flex items-center px-2 py-1 rounded-lg bg-surface-container-highest text-outline font-bold uppercase tracking-wider">User</span>
+                            <span class="inline-flex items-center px-2 py-1 rounded-lg bg-surface-container-highest text-outline font-bold tracking-wider">User</span>
                         {% endif %}
                     </td>
                     <td class="px-6 py-4">
@@ -95,7 +95,7 @@
                             </button>
                         </form>
                         {% else %}
-                            <span class="text-outline text-[10px] uppercase tracking-wider">Current User</span>
+                            <span class="text-outline text-[10px] tracking-wider">Current User</span>
                         {% endif %}
                         </div>
                     </td>

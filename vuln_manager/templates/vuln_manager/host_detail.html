@@ -6,7 +6,7 @@
 
 {% block content %}
 <nav class="mb-8">
-    <ol class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-outline/50">
+    <ol class="flex items-center gap-2 text-[10px] font-bold text-outline/50">
         <li><a href="{% url 'dashboard' %}" class="hover:text-primary transition-colors">Dashboard</a></li>
         <li class="material-symbols-outlined text-xs">chevron_right</li>
         <li><a href="{% url 'host_list' %}" class="hover:text-primary transition-colors">Assets</a></li>
@@ -18,44 +18,44 @@
 <!-- Asset Header -->
 <section class="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
     <div class="flex items-center gap-6">
-        <div class="w-20 h-20 rounded-2xl bg-surface-container-highest border border-outline-variant/10 flex items-center justify-center text-primary shadow-2xl">
+        <div class="w-20 h-20 rounded-2xl bg-surface-container-highest border border-outline-variant/10 flex items-center justify-center text-primary">
             <span class="material-symbols-outlined text-4xl">dns</span>
         </div>
         <div>
             <div class="flex items-center gap-2 mb-2">
-                <span class="px-2 py-0.5 rounded bg-primary/10 text-primary text-[9px] font-black uppercase tracking-widest border border-primary/20">Managed Asset</span>
+                <span class="px-2 py-0.5 rounded bg-primary/10 text-primary text-[11px] font-bold border border-primary/20">Managed Asset</span>
                 <span class="w-1.5 h-1.5 rounded-full bg-outline-variant/30"></span>
-                <span class="text-[10px] text-outline font-black uppercase tracking-[0.1em]">{{ host.hostname|default:"Unidentified Host" }}</span>
+                <span class="text-[10px] text-outline font-bold">{{ host.hostname|default:"Unidentified Host" }}</span>
                 {% if host.operating_system %}
                 <span class="w-1.5 h-1.5 rounded-full bg-outline-variant/30"></span>
-                <span class="text-[10px] text-primary font-black uppercase tracking-[0.1em]">{{ host.operating_system }}</span>
+                <span class="text-[10px] text-primary font-bold">{{ host.operating_system }}</span>
                 {% endif %}
                 <span class="w-1.5 h-1.5 rounded-full bg-outline-variant/30"></span>
-                <span class="text-[10px] {% if host.is_exposed %}text-error{% else %}text-outline{% endif %} font-black uppercase tracking-[0.1em]">
+                <span class="text-[10px] {% if host.is_exposed %}text-error{% else %}text-outline{% endif %} font-bold">
                     {% if host.is_exposed %}Internet Facing{% else %}Internal{% endif %}
                 </span>
             </div>
-            <h1 class="font-headline font-black text-4xl md:text-5xl text-on-surface tracking-tighter">{{ host.ip_address }}</h1>
+            <h1 class="font-headline font-bold text-4xl md:text-5xl text-on-surface tracking-tight">{{ host.ip_address }}</h1>
         </div>
     </div>
     
     <div class="flex items-center gap-4">
-        <div class="bg-surface-container-high px-6 py-4 rounded-2xl border border-outline-variant/10 flex items-center gap-4 shadow-xl">
+        <div class="bg-surface-container-high px-6 py-4 rounded-2xl border border-outline-variant/10 flex items-center gap-4">
             <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
                 {% if has_agent_data %}
                 <span class="material-symbols-outlined text-primary text-xl" style="font-variation-settings: 'FILL' 1;">sensors</span>
                 {% endif %}
             </div>
             <div>
-                <p class="text-[9px] uppercase tracking-[0.2em] text-outline font-black mb-0.5">Global Priority</p>
-                <p class="font-black {%if host.criticality == 'Critical' %}text-error{%elif host.criticality == 'High' %}text-error{% elif host.criticality == 'Medium' %}text-tertiary{% else %}text-primary{% endif %} text-sm uppercase tracking-widest">
+                <p class="text-[11px] text-outline font-bold mb-0.5">Global Priority</p>
+                <p class="font-bold {%if host.criticality == 'Critical' %}text-error{%elif host.criticality == 'High' %}text-error{% elif host.criticality == 'Medium' %}text-tertiary{% else %}text-primary{% endif %} text-sm">
                     {{ host.criticality|default:"NOT DEFINED" }}
                 </p>
             </div>
         </div>
         <form action="{% url 'delete_host' host.id %}" method="POST" onsubmit="return confirm('Delete host and its data?')">
             {% csrf_token %}
-            <button type="submit" class="w-14 h-14 rounded-2xl bg-surface-container-highest border border-error/20 text-error hover:bg-error hover:text-surface hover:border-error transition-all flex items-center justify-center shadow-xl group">
+            <button type="submit" class="w-14 h-14 rounded-2xl bg-surface-container-highest border border-error/20 text-error hover:bg-error hover:text-surface hover:border-error transition-all flex items-center justify-center group">
                 <span class="material-symbols-outlined text-2xl transition-transform group-hover:scale-110">delete</span>
             </button>
         </form>
@@ -64,13 +64,13 @@
 
 <!-- Tab Navigation -->
 <div class="flex items-center gap-1 mb-8 bg-surface-container-low p-1.5 rounded-2xl border border-outline-variant/5 w-fit">
-    <a href="?tab=threats{% if show_mode %}&mode={{ show_mode }}{% endif %}{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all {% if active_tab == 'threats' %}bg-surface-variant text-on-surface shadow-md{% else %}text-outline hover:text-on-surface{% endif %} flex items-center gap-2">
+    <a href="?tab=threats{% if show_mode %}&mode={{ show_mode }}{% endif %}{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="px-6 py-2.5 rounded-xl text-[10px] font-bold transition-all {% if active_tab == 'threats' %}bg-surface-variant text-on-surface {% else %}text-outline hover:text-on-surface{% endif %} flex items-center gap-2">
         <span class="material-symbols-outlined text-sm">gpp_maybe</span> Threats
     </a>
-    <a href="?tab=inventory{% if inventory_query %}&inv_q={{ inventory_query|urlencode }}{% endif %}" class="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all {% if active_tab == 'inventory' %}bg-surface-variant text-on-surface shadow-md{% else %}text-outline hover:text-on-surface{% endif %} flex items-center gap-2">
+    <a href="?tab=inventory{% if inventory_query %}&inv_q={{ inventory_query|urlencode }}{% endif %}" class="px-6 py-2.5 rounded-xl text-[10px] font-bold transition-all {% if active_tab == 'inventory' %}bg-surface-variant text-on-surface {% else %}text-outline hover:text-on-surface{% endif %} flex items-center gap-2">
         <span class="material-symbols-outlined text-sm">inventory_2</span> Inventory
     </a>
-    <a href="?tab=infrastructure" class="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all {% if active_tab == 'infrastructure' %}bg-surface-variant text-on-surface shadow-md{% else %}text-outline hover:text-on-surface{% endif %} flex items-center gap-2">
+    <a href="?tab=infrastructure" class="px-6 py-2.5 rounded-xl text-[10px] font-bold transition-all {% if active_tab == 'infrastructure' %}bg-surface-variant text-on-surface {% else %}text-outline hover:text-on-surface{% endif %} flex items-center gap-2">
         <span class="material-symbols-outlined text-sm">router</span> Infrastructure
     </a>
 </div>
@@ -81,26 +81,26 @@
         
         {% if active_tab == 'threats' %}
         <!-- THREATS TAB -->
-        <div class="bg-surface-container rounded-3xl p-8 mb-8 shadow-xl">
-            <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-8">Attack Surface Trend</h5>
+        <div class="bg-surface-container rounded-3xl p-8 mb-8">
+            <h5 class="font-headline font-bold text-xs text-outline mb-8">Attack Surface Trend</h5>
             <div style="height: 250px;">
                 <canvas id="hostTimeline"></canvas>
             </div>
         </div>
 
-        <div class="bg-surface-container rounded-3xl p-8 shadow-xl">
+        <div class="bg-surface-container rounded-3xl p-8">
             <div class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-                <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline">Detected Threats</h5>
+                <h5 class="font-headline font-bold text-xs text-outline">Detected Threats</h5>
                 <div class="flex items-center gap-2 bg-surface-container-low p-1 rounded-xl">
-                    <a href="?tab=threats&mode=all{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all {% if show_mode == 'all' %}bg-surface-variant text-on-surface shadow-sm{% else %}text-outline hover:text-on-surface{% endif %}">All</a>
-                    <a href="?tab=threats&mode=direct{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all {% if show_mode == 'direct' %}bg-surface-variant text-on-surface shadow-sm{% else %}text-outline hover:text-on-surface{% endif %}">Direct</a>
+                    <a href="?tab=threats&mode=all{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="px-4 py-1.5 rounded-lg text-[11px] font-bold transition-all {% if show_mode == 'all' %}bg-surface-variant text-on-surface {% else %}text-outline hover:text-on-surface{% endif %}">All</a>
+                    <a href="?tab=threats&mode=direct{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="px-4 py-1.5 rounded-lg text-[11px] font-bold transition-all {% if show_mode == 'direct' %}bg-surface-variant text-on-surface {% else %}text-outline hover:text-on-surface{% endif %}">Direct</a>
                 </div>
             </div>
             <div class="mb-6 flex flex-wrap items-center gap-2">
-                <span class="text-[9px] text-outline uppercase tracking-widest font-black">Severity</span>
-                <a href="?tab=threats{% if show_mode %}&mode={{ show_mode }}{% endif %}" class="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all {% if not severity_filter %}bg-surface-variant text-on-surface border-outline-variant/30{% else %}text-outline border-outline-variant/20 hover:text-on-surface{% endif %}">All</a>
+                <span class="text-[11px] text-outline font-bold">Severity</span>
+                <a href="?tab=threats{% if show_mode %}&mode={{ show_mode }}{% endif %}" class="px-3 py-1 rounded-lg text-[11px] font-bold border transition-all {% if not severity_filter %}bg-surface-variant text-on-surface border-outline-variant/30{% else %}text-outline border-outline-variant/20 hover:text-on-surface{% endif %}">All</a>
                 {% for value, label in severity_choices %}
-                <a href="?tab=threats{% if show_mode %}&mode={{ show_mode }}{% endif %}&severity={{ value }}" class="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all {% if severity_filter == value %}bg-surface-variant text-on-surface border-outline-variant/30{% else %}text-outline border-outline-variant/20 hover:text-on-surface{% endif %}">
+                <a href="?tab=threats{% if show_mode %}&mode={{ show_mode }}{% endif %}&severity={{ value }}" class="px-3 py-1 rounded-lg text-[11px] font-bold border transition-all {% if severity_filter == value %}bg-surface-variant text-on-surface border-outline-variant/30{% else %}text-outline border-outline-variant/20 hover:text-on-surface{% endif %}">
                     {{ label }}
                 </a>
                 {% endfor %}
@@ -109,7 +109,7 @@
             <div class="overflow-x-auto">
                 <table class="w-full text-left">
                     <thead>
-                        <tr class="text-[9px] font-black uppercase tracking-[0.2em] text-outline/50 border-b border-outline-variant/20">
+                        <tr class="text-[11px] font-bold text-outline/50 border-b border-outline-variant/20">
                             <th class="px-4 py-3">Severity</th>
                             <th class="px-4 py-3">CVE</th>
                             <th class="px-4 py-3">Threat</th>
@@ -121,9 +121,9 @@
                         {% for vuln in vulns %}
                         <tr class="border-b border-outline-variant/10 hover:bg-surface-container-high/40 transition-colors">
                             <td class="px-4 py-3">
-                                <span class="badge severity-{{ vuln.severity|lower }} rounded-full px-3 py-1 text-[9px] font-black min-w-[70px] inline-block text-center">{{ vuln.severity|upper }}</span>
+                                <span class="badge severity-{{ vuln.severity|lower }} rounded-full px-3 py-1 text-[11px] font-bold min-w-[70px] inline-block text-center">{{ vuln.severity|upper }}</span>
                             </td>
-                            <td class="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-on-surface">{{ vuln.cve_id }}</td>
+                            <td class="px-4 py-3 text-[10px] font-bold tracking-wider text-on-surface">{{ vuln.cve_id }}</td>
                             <td class="px-4 py-3">
                                 <p class="text-[10px] text-on-surface line-clamp-1">
                                     {% if vuln.software %}<span class="text-primary font-bold">[{{ vuln.software.name }}]</span> {% endif %}
@@ -131,14 +131,14 @@
                                 </p>
                                 <p class="text-[10px] text-on-surface-variant line-clamp-1 mt-1">{{ vuln.description|default:"No technical details provided." }}</p>
                             </td>
-                            <td class="px-4 py-3 text-[10px] font-black text-outline uppercase">#{{ vuln.scan.id }}</td>
+                            <td class="px-4 py-3 text-[10px] font-bold text-outline">#{{ vuln.scan.id }}</td>
                             <td class="px-4 py-3 text-right">
-                                <a href="{% url 'vuln_detail' vuln.id %}" class="text-[10px] font-black tracking-widest text-primary uppercase hover:underline">Details</a>
+                                <a href="{% url 'vuln_detail' vuln.id %}" class="text-[10px] font-bold text-primary hover:underline">Details</a>
                             </td>
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="5" class="text-center py-12 text-outline text-[10px] font-black uppercase tracking-widest">No Active Threats Detected</td>
+                            <td colspan="5" class="text-center py-12 text-outline text-[10px] font-bold">No Active Threats Detected</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -148,7 +148,7 @@
             <!-- Threats Pagination -->
             {% if vulns.paginator.num_pages > 1 %}
             <div class="mt-8 flex items-center justify-between pt-6 border-t border-outline-variant/5">
-                <p class="text-[9px] font-black text-outline uppercase tracking-widest">Page {{ vulns.number }} of {{ vulns.paginator.num_pages }}</p>
+                <p class="text-[11px] font-bold text-outline">Page {{ vulns.number }} of {{ vulns.paginator.num_pages }}</p>
                 <div class="flex gap-2">
                     {% if vulns.has_previous %}
                     <a href="?tab=threats&vuln_page={{ vulns.previous_page_number }}{% if show_mode %}&mode={{ show_mode }}{% endif %}{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5"><span class="material-symbols-outlined text-sm">chevron_left</span></a>
@@ -163,21 +163,21 @@
 
         {% elif active_tab == 'inventory' %}
         <!-- INVENTORY TAB -->
-        <div class="bg-surface-container rounded-3xl p-8 shadow-xl">
+        <div class="bg-surface-container rounded-3xl p-8">
             <div class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-                <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline">Software Inventory</h5>
+                <h5 class="font-headline font-bold text-xs text-outline">Software Inventory</h5>
                 <form method="GET" class="relative w-full md:w-96">
                     <input type="hidden" name="tab" value="inventory">
                     <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm">search</span>
                     <input type="text" name="inv_q" placeholder="Search components across all inventory..." value="{{ inventory_query|default:'' }}" class="w-full bg-surface-container-low border-none rounded-xl pl-10 pr-24 py-2 text-[10px] text-on-surface focus:ring-1 focus:ring-primary/30">
-                    <button type="submit" class="absolute right-1 top-1/2 -translate-y-1/2 px-3 py-1 rounded-lg bg-primary text-surface text-[9px] font-black uppercase tracking-widest">Search</button>
+                    <button type="submit" class="absolute right-1 top-1/2 -translate-y-1/2 px-3 py-1 rounded-lg bg-primary text-surface text-[11px] font-bold">Search</button>
                 </form>
             </div>
             
             <div class="overflow-x-auto">
                 <table class="w-full text-left" id="swTable">
                     <thead>
-                        <tr class="text-[9px] font-black uppercase tracking-[0.2em] text-outline/50 border-b border-outline-variant/20">
+                        <tr class="text-[11px] font-bold text-outline/50 border-b border-outline-variant/20">
                             <th class="px-4 py-3">Component</th>
                             <th class="px-4 py-3">Version</th>
                             <th class="px-4 py-3 text-right">Security</th>
@@ -192,18 +192,18 @@
                                     <span class="text-xs font-bold text-on-surface">{{ sw.name }}</span>
                                 </div>
                             </td>
-                            <td class="px-4 py-3 text-[10px] font-black text-on-surface-variant uppercase tracking-widest">{{ sw.version|default:"-" }}</td>
+                            <td class="px-4 py-3 text-[10px] font-bold text-on-surface-variant">{{ sw.version|default:"-" }}</td>
                             <td class="px-4 py-3 text-right">
                                 {% if sw.active_vulns > 0 %}
-                                <span class="bg-error/10 text-error px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">{{ sw.active_vulns }} Vulns</span>
+                                <span class="bg-error/10 text-error px-3 py-1 rounded-full text-[11px] font-bold">{{ sw.active_vulns }} Vulns</span>
                                 {% else %}
-                                <span class="text-[9px] font-black text-primary uppercase tracking-widest opacity-50">Secure</span>
+                                <span class="text-[11px] font-bold text-primary opacity-50">Secure</span>
                                 {% endif %}
                             </td>
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="3" class="text-center py-12 text-outline text-[10px] font-black uppercase tracking-widest">No data collected</td>
+                            <td colspan="3" class="text-center py-12 text-outline text-[10px] font-bold">No data collected</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -213,7 +213,7 @@
             <!-- Software Pagination -->
             {% if installed_software.paginator.num_pages > 1 %}
             <div class="mt-8 flex items-center justify-between pt-6 border-t border-outline-variant/5">
-                <p class="text-[9px] font-black text-outline uppercase tracking-widest">Page {{ installed_software.number }} of {{ installed_software.paginator.num_pages }}</p>
+                <p class="text-[11px] font-bold text-outline">Page {{ installed_software.number }} of {{ installed_software.paginator.num_pages }}</p>
                 <div class="flex gap-2">
                     {% if installed_software.has_previous %}
                     <a href="?tab=inventory&sw_page={{ installed_software.previous_page_number }}{% if inventory_query %}&inv_q={{ inventory_query|urlencode }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant/5"><span class="material-symbols-outlined text-sm">chevron_left</span></a>
@@ -228,22 +228,22 @@
 
         {% elif active_tab == 'infrastructure' %}
         <!-- INFRASTRUCTURE TAB -->
-        <div class="bg-surface-container rounded-3xl p-8 shadow-xl">
-            <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-8">Network & Services</h5>
+        <div class="bg-surface-container rounded-3xl p-8">
+            <h5 class="font-headline font-bold text-xs text-outline mb-8">Network & Services</h5>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {% for port in active_ports %}
                 <div class="flex items-center justify-between p-5 bg-surface-container-low rounded-2xl border border-outline-variant/5">
                     <div class="flex items-center gap-4">
-                        <div class="w-10 h-10 rounded-xl bg-primary/5 flex items-center justify-center text-primary font-black text-sm">{{ port.port_number }}</div>
+                        <div class="w-10 h-10 rounded-xl bg-primary/5 flex items-center justify-center text-primary font-bold text-sm">{{ port.port_number }}</div>
                         <div>
                             <p class="text-xs font-bold text-on-surface">{{ port.service_name|upper }}</p>
-                            <p class="text-[9px] text-outline uppercase tracking-widest">Active Service</p>
+                            <p class="text-[11px] text-outline">Active Service</p>
                         </div>
                     </div>
-                    <span class="w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_#3bbffa]"></span>
+                    <span class="w-2 h-2 rounded-full bg-primary"></span>
                 </div>
                 {% empty %}
-                <p class="text-outline text-[10px] font-black uppercase tracking-widest py-8 text-center col-span-2">No active ports identified</p>
+                <p class="text-outline text-[10px] font-bold py-8 text-center col-span-2">No active ports identified</p>
                 {% endfor %}
             </div>
         </div>
@@ -253,51 +253,51 @@
     <!-- Sidebar (Shared Context) -->
     <div class="lg:col-span-4 space-y-8">
         <!-- Business Impact -->
-        <div class="bg-surface-container-high rounded-3xl p-8 shadow-2xl border-l-4 {% if host.criticality == 'Critical' %}border-error{% elif host.criticality == 'High' %}border-tertiary{% elif host.criticality == 'Medium' %}border-primary{% else %}border-outline-variant{% endif %}">
-            <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-6">Asset Value</h5>
+        <div class="bg-surface-container-high rounded-3xl p-8 border-l-4 {% if host.criticality == 'Critical' %}border-error{% elif host.criticality == 'High' %}border-tertiary{% elif host.criticality == 'Medium' %}border-primary{% else %}border-outline-variant{% endif %}">
+            <h5 class="font-headline font-bold text-xs text-outline mb-6">Asset Value</h5>
             <form action="{% url 'update_host_criticality' host.id %}" method="POST">
                 {% csrf_token %}
-                <select name="criticality" onchange="this.form.submit()" class="w-full bg-surface-container-highest border-none rounded-xl px-5 py-4 text-on-surface text-[11px] font-black uppercase tracking-widest appearance-none cursor-pointer">
+                <select name="criticality" onchange="this.form.submit()" class="w-full bg-surface-container-highest border-none rounded-xl px-5 py-4 text-on-surface text-[11px] font-bold appearance-none cursor-pointer">
                     <option value="">NOT DEFINED</option>
                     {% for val, label in criticality_choices %}
                     <option value="{{ val }}" {% if host.criticality == val %}selected{% endif %}>{{ label|upper }}</option>
                     {% endfor %}
                 </select>
             </form>
-            <p class="text-[9px] text-outline-variant mt-4 leading-relaxed italic">Affects remediation prioritization and SLA tracking.</p>
+            <p class="text-[11px] text-outline-variant mt-4 leading-relaxed italic">Affects remediation prioritization and SLA tracking.</p>
         </div>
 
-        <div class="bg-surface-container-high rounded-3xl p-8 shadow-2xl border-l-4 {% if host.is_exposed %}border-error{% else %}border-outline-variant{% endif %}">
-            <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-6">Network Exposure</h5>
+        <div class="bg-surface-container-high rounded-3xl p-8 border-l-4 {% if host.is_exposed %}border-error{% else %}border-outline-variant{% endif %}">
+            <h5 class="font-headline font-bold text-xs text-outline mb-6">Network Exposure</h5>
             <form action="{% url 'update_host_exposure' host.id %}" method="POST">
                 {% csrf_token %}
-                <select name="is_exposed" onchange="this.form.submit()" class="w-full bg-surface-container-highest border-none rounded-xl px-5 py-4 text-on-surface text-[11px] font-black uppercase tracking-widest appearance-none cursor-pointer">
+                <select name="is_exposed" onchange="this.form.submit()" class="w-full bg-surface-container-highest border-none rounded-xl px-5 py-4 text-on-surface text-[11px] font-bold appearance-none cursor-pointer">
                     <option value="0" {% if not host.is_exposed %}selected{% endif %}>Internal</option>
                     <option value="1" {% if host.is_exposed %}selected{% endif %}>Internet Facing (Exposed)</option>
                 </select>
             </form>
-            <p class="text-[9px] text-outline-variant mt-4 leading-relaxed italic">Manual flag to indicate externally reachable assets.</p>
+            <p class="text-[11px] text-outline-variant mt-4 leading-relaxed italic">Manual flag to indicate externally reachable assets.</p>
         </div>
 
         <!-- Quick Stats -->
         <div class="bg-surface-container rounded-3xl p-8 border border-outline-variant/5">
-            <h5 class="font-headline font-bold text-xs uppercase tracking-[0.2em] text-outline mb-6">Quick Metadata</h5>
+            <h5 class="font-headline font-bold text-xs text-outline mb-6">Quick Metadata</h5>
             <div class="space-y-4">
                 <div class="flex justify-between items-center">
-                    <span class="text-[10px] text-outline uppercase font-bold">First Seen</span>
-                    <span class="text-[10px] text-on-surface font-black">{{ host.last_scanned|date:"d M Y" }}</span>
+                    <span class="text-[10px] text-outline font-bold">First Seen</span>
+                    <span class="text-[10px] text-on-surface font-bold">{{ host.last_scanned|date:"d M Y" }}</span>
                 </div>
                 <div class="flex justify-between items-center">
-                    <span class="text-[10px] text-outline uppercase font-bold">Inventory Items</span>
-                    <span class="text-[10px] text-on-surface font-black">{{ installed_software.paginator.count }}</span>
+                    <span class="text-[10px] text-outline font-bold">Inventory Items</span>
+                    <span class="text-[10px] text-on-surface font-bold">{{ installed_software.paginator.count }}</span>
                 </div>
                 <div class="flex justify-between items-center">
-                    <span class="text-[10px] text-outline uppercase font-bold">Operating System</span>
-                    <span class="text-[10px] text-on-surface font-black">{{ host.operating_system|default:"N/A" }}</span>
+                    <span class="text-[10px] text-outline font-bold">Operating System</span>
+                    <span class="text-[10px] text-on-surface font-bold">{{ host.operating_system|default:"N/A" }}</span>
                 </div>
                 <div class="flex justify-between items-center">
-                    <span class="text-[10px] text-outline uppercase font-bold">Exposure</span>
-                    <span class="text-[10px] font-black {% if host.is_exposed %}text-error{% else %}text-on-surface{% endif %}">
+                    <span class="text-[10px] text-outline font-bold">Exposure</span>
+                    <span class="text-[10px] font-bold {% if host.is_exposed %}text-error{% else %}text-on-surface{% endif %}">
                         {% if host.is_exposed %}Internet Facing{% else %}Internal{% endif %}
                     </span>
                 </div>

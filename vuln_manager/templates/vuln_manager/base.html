@@ -4,240 +4,316 @@
     <meta charset="utf-8"/>
     <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
     <title>CVE3PO | {% block title %}Dashboard{% endblock %}</title>
-    
-    <!-- Favicon (Inline SVG Robot) -->
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🤖</text></svg>">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%235b8dff%22 stroke-width=%222.2%22><path d=%22M12 3l7 3v5c0 4.4-2.9 8.3-7 9.6C7.9 19.3 5 15.4 5 11V6l7-3z%22/></svg>">
+
+    <!-- Set theme before paint to avoid flash -->
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem('cve3po-theme');
+                if (t === 'light') document.documentElement.classList.remove('dark');
+                else document.documentElement.classList.add('dark');
+            } catch (e) { document.documentElement.classList.add('dark'); }
+        })();
+    </script>
 
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
-    
+
+    <!--
+      CARBON THEME
+      Every Material color role maps to a CSS variable holding "R G B" channels,
+      referenced through Tailwind's <alpha-value> placeholder. This keeps opacity
+      modifiers (bg-primary/10, border-error/20, ...) working AND lets the whole
+      app switch light/dark just by toggling the `dark` class on <html>.
+      Existing page templates need NO changes — they already use these token names.
+    -->
     <script id="tailwind-config">
         tailwind.config = {
             darkMode: "class",
             theme: {
                 extend: {
                     colors: {
-                        "error-container": "#9f0519",
-                        "on-secondary-fixed-variant": "#46556b",
-                        "outline": "#6d758c",
-                        "surface-container": "#0f1930",
-                        "on-tertiary-fixed-variant": "#780021",
-                        "on-tertiary-container": "#100001",
-                        "on-surface-variant": "#a3aac4",
-                        "secondary": "#c8d8f3",
-                        "error": "#ff716c",
-                        "secondary-fixed": "#c8d8f3",
-                        "secondary-fixed-dim": "#bacae4",
-                        "on-secondary-fixed": "#29394e",
-                        "primary-container": "#22b1ec",
-                        "on-background": "#dee5ff",
-                        "error-dim": "#d7383b",
-                        "tertiary-fixed": "#ff9099",
-                        "tertiary": "#ff6f7e",
-                        "secondary-dim": "#bacae4",
-                        "surface-container-lowest": "#000000",
-                        "on-error-container": "#ffa8a3",
-                        "surface-bright": "#1f2b49",
-                        "surface-dim": "#060e20",
-                        "inverse-primary": "#00668b",
-                        "on-secondary-container": "#c1d1eb",
-                        "primary": "#3bbffa",
-                        "inverse-on-surface": "#4d556b",
-                        "on-primary-fixed-variant": "#003a50",
-                        "surface-container-highest": "#192540",
-                        "tertiary-dim": "#ff6f7e",
-                        "primary-dim": "#05a9e3",
-                        "primary-fixed": "#2db7f2",
-                        "on-primary-fixed": "#00121d",
-                        "on-secondary": "#3c4c61",
-                        "tertiary-container": "#fc4563",
-                        "outline-variant": "#40485d",
-                        "background": "#060e20",
-                        "tertiary-fixed-dim": "#ff7986",
-                        "on-primary-container": "#002b3d",
-                        "surface-tint": "#3bbffa",
-                        "on-primary": "#00374d",
-                        "on-tertiary": "#490010",
-                        "surface-variant": "#192540",
-                        "on-error": "#490006",
-                        "surface": "#060e20",
-                        "on-surface": "#dee5ff",
-                        "surface-container-high": "#141f38",
-                        "secondary-container": "#38485d",
-                        "on-tertiary-fixed": "#39000b",
-                        "inverse-surface": "#faf8ff",
-                        "primary-fixed-dim": "#05a9e3",
-                        "surface-container-low": "#091328"
+                        "background": "rgb(var(--md-bg) / <alpha-value>)",
+                        "surface": "rgb(var(--md-bg) / <alpha-value>)",
+                        "surface-dim": "rgb(var(--md-bg) / <alpha-value>)",
+                        "surface-bright": "rgb(var(--md-variant) / <alpha-value>)",
+                        "surface-variant": "rgb(var(--md-variant) / <alpha-value>)",
+                        "surface-container-lowest": "rgb(var(--md-lowest) / <alpha-value>)",
+                        "surface-container-low": "rgb(var(--md-panel-2) / <alpha-value>)",
+                        "surface-container": "rgb(var(--md-panel) / <alpha-value>)",
+                        "surface-container-high": "rgb(var(--md-high) / <alpha-value>)",
+                        "surface-container-highest": "rgb(var(--md-highest) / <alpha-value>)",
+                        "on-background": "rgb(var(--md-text) / <alpha-value>)",
+                        "on-surface": "rgb(var(--md-text) / <alpha-value>)",
+                        "on-surface-variant": "rgb(var(--md-muted) / <alpha-value>)",
+                        "inverse-surface": "rgb(var(--md-text) / <alpha-value>)",
+                        "inverse-on-surface": "rgb(var(--md-bg) / <alpha-value>)",
+                        "outline": "rgb(var(--md-faint) / <alpha-value>)",
+                        "outline-variant": "rgb(var(--md-line) / <alpha-value>)",
+                        "primary": "rgb(var(--md-accent) / <alpha-value>)",
+                        "primary-dim": "rgb(var(--md-accent) / <alpha-value>)",
+                        "primary-fixed": "rgb(var(--md-accent) / <alpha-value>)",
+                        "primary-fixed-dim": "rgb(var(--md-accent) / <alpha-value>)",
+                        "primary-container": "rgb(var(--md-accent-container) / <alpha-value>)",
+                        "surface-tint": "rgb(var(--md-accent) / <alpha-value>)",
+                        "inverse-primary": "rgb(var(--md-accent) / <alpha-value>)",
+                        "on-primary": "rgb(var(--md-on-accent) / <alpha-value>)",
+                        "on-primary-container": "rgb(var(--md-on-accent) / <alpha-value>)",
+                        "on-primary-fixed": "rgb(var(--md-on-accent) / <alpha-value>)",
+                        "on-primary-fixed-variant": "rgb(var(--md-on-accent) / <alpha-value>)",
+                        "secondary": "rgb(var(--md-muted) / <alpha-value>)",
+                        "secondary-dim": "rgb(var(--md-muted) / <alpha-value>)",
+                        "secondary-fixed": "rgb(var(--md-high) / <alpha-value>)",
+                        "secondary-fixed-dim": "rgb(var(--md-high) / <alpha-value>)",
+                        "secondary-container": "rgb(var(--md-high) / <alpha-value>)",
+                        "on-secondary": "rgb(var(--md-text) / <alpha-value>)",
+                        "on-secondary-container": "rgb(var(--md-text) / <alpha-value>)",
+                        "on-secondary-fixed": "rgb(var(--md-text) / <alpha-value>)",
+                        "on-secondary-fixed-variant": "rgb(var(--md-muted) / <alpha-value>)",
+                        "error": "rgb(var(--md-crit) / <alpha-value>)",
+                        "error-dim": "rgb(var(--md-crit) / <alpha-value>)",
+                        "error-container": "rgb(var(--md-crit) / <alpha-value>)",
+                        "on-error": "rgb(255 255 255 / <alpha-value>)",
+                        "on-error-container": "rgb(255 255 255 / <alpha-value>)",
+                        "tertiary": "rgb(var(--md-high-sev) / <alpha-value>)",
+                        "tertiary-dim": "rgb(var(--md-high-sev) / <alpha-value>)",
+                        "tertiary-fixed": "rgb(var(--md-high-sev) / <alpha-value>)",
+                        "tertiary-fixed-dim": "rgb(var(--md-high-sev) / <alpha-value>)",
+                        "tertiary-container": "rgb(var(--md-high-sev) / <alpha-value>)",
+                        "on-tertiary": "rgb(255 255 255 / <alpha-value>)",
+                        "on-tertiary-container": "rgb(255 255 255 / <alpha-value>)",
+                        "on-tertiary-fixed": "rgb(255 255 255 / <alpha-value>)",
+                        "on-tertiary-fixed-variant": "rgb(255 255 255 / <alpha-value>)"
                     },
                     fontFamily: {
                         "headline": ["Manrope"],
                         "body": ["Inter"],
                         "label": ["Inter"]
                     },
-                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "9999px"},
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.3125rem",
+                        "xl": "0.375rem",
+                        "2xl": "0.5rem",
+                        "3xl": "0.625rem",
+                        "full": "9999px"
+                    },
                 },
             },
         }
     </script>
     <style>
+        /* ---- Carbon palette: light (default). Values are "R G B" channels. ---- */
+        :root {
+            --md-bg: 236 238 240;
+            --md-panel: 255 255 255;
+            --md-panel-2: 246 247 248;
+            --md-high: 240 241 243;
+            --md-highest: 232 234 236;
+            --md-lowest: 255 255 255;
+            --md-variant: 238 240 242;
+            --md-text: 20 24 28;
+            --md-muted: 91 99 107;
+            --md-faint: 139 146 154;
+            --md-line: 223 226 229;
+            --md-accent: 37 99 235;
+            --md-accent-container: 37 99 235;
+            --md-on-accent: 255 255 255;
+            --md-crit: 229 72 77;
+            --md-high-sev: 239 108 26;
+        }
+        /* ---- Carbon palette: dark ---- */
+        html.dark {
+            --md-bg: 13 15 18;
+            --md-panel: 22 25 29;
+            --md-panel-2: 16 19 22;
+            --md-high: 27 31 36;
+            --md-highest: 33 38 45;
+            --md-lowest: 10 11 13;
+            --md-variant: 35 40 48;
+            --md-text: 230 232 235;
+            --md-muted: 154 161 169;
+            --md-faint: 107 113 120;
+            --md-line: 42 47 54;
+            --md-accent: 91 141 255;
+            --md-accent-container: 79 140 255;
+            --md-on-accent: 255 255 255;
+            --md-crit: 229 72 77;
+            --md-high-sev: 239 108 26;
+        }
+
         .material-symbols-outlined {
             font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
         }
         body {
-            background-color: #060e20;
-            color: #dee5ff;
+            background-color: rgb(var(--md-bg));
+            color: rgb(var(--md-text));
             font-family: 'Inter', sans-serif;
         }
-        /* Custom scrollbar for deep tonal aesthetic */
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: #060e20; }
-        ::-webkit-scrollbar-thumb { background: #192540; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: #3bbffa; }
 
-        .severity-critical { background-color: #9f0519 !important; color: #ffa8a3 !important; }
-        .severity-high { background-color: #fc4563 !important; color: #490010 !important; }
-        .severity-medium { background-color: #8950fc !important; color: white !important; }
-        .severity-low { background-color: #1bc5bd !important; color: white !important; }
-        .severity-info { background-color: #3699ff !important; color: white !important; }
-        
-        .glass-panel {
-            background: rgba(25, 37, 64, 0.6);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-        }
+        ::-webkit-scrollbar { width: 9px; height: 9px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgb(var(--md-line)); border-radius: 6px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgb(var(--md-faint)); }
 
-        /* Slightly denser table rows across list views */
-        table th,
-        table td {
-            padding-top: 0.5rem !important;
-            padding-bottom: 0.5rem !important;
+        /* Severity chips — Carbon severity ramp, readable in both themes */
+        .severity-critical { background-color: #e5484d !important; color: #ffffff !important; }
+        .severity-high     { background-color: #ef6c1a !important; color: #ffffff !important; }
+        .severity-medium   { background-color: #d99e12 !important; color: #ffffff !important; }
+        .severity-low      { background-color: #30a46c !important; color: #ffffff !important; }
+        .severity-info     { background-color: #4b8bf5 !important; color: #ffffff !important; }
+
+        .glass-panel { background: rgb(var(--md-panel)); border: 1px solid rgb(var(--md-line)); }
+
+        /* Calmer, denser table rows */
+        table th, table td { padding-top: 0.55rem !important; padding-bottom: 0.55rem !important; }
+
+        /* Sidebar nav */
+        .nav-item {
+            display: flex; align-items: center; gap: 0.75rem;
+            padding: 0.5rem 0.75rem; border-radius: 5px;
+            border-left: 2px solid transparent;
+            color: rgb(var(--md-muted)); font-weight: 500;
+            transition: background-color .15s, color .15s;
         }
+        .nav-item:hover { background: rgb(var(--md-panel-2)); color: rgb(var(--md-text)); }
+        .nav-item.active {
+            background: rgb(var(--md-accent) / .13);
+            color: rgb(var(--md-accent)); border-left-color: rgb(var(--md-accent)); font-weight: 600;
+        }
+        .nav-item .material-symbols-outlined { font-size: 20px; }
+        .nav-label { font-size: 12.5px; letter-spacing: normal; text-transform: none; }
+        .nav-section { margin: 0.75rem 0.75rem 0.25rem; font-size: 9px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: rgb(var(--md-faint)); }
     </style>
 </head>
 <body class="antialiased overflow-x-hidden">
     <!-- SideNavBar -->
-    <aside class="fixed left-0 top-0 h-full w-72 bg-surface-container-low flex flex-col py-6 gap-2 z-40 hidden md:flex">
-        <div class="text-primary font-black text-2xl px-6 py-8 font-headline tracking-tighter flex items-center gap-2">
-            <span class="material-symbols-outlined text-3xl">robot_2</span> CVE3PO
+    <aside class="fixed left-0 top-0 h-full w-64 flex flex-col py-4 gap-1 z-40 hidden md:flex" style="background: rgb(var(--md-panel)); border-right: 1px solid rgb(var(--md-line));">
+        <div class="flex items-center gap-2.5 px-5 py-4 mb-1">
+            <span class="material-symbols-outlined text-primary text-2xl">shield</span>
+            <span class="font-bold text-lg tracking-tight text-on-surface">CVE3PO</span>
         </div>
-        
-        <nav class="flex-grow flex flex-col gap-1.5 px-4 overflow-y-auto custom-scrollbar">
-            <a href="{% url 'dashboard' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.resolver_match.url_name == 'dashboard' %}bg-primary/10 text-primary shadow-[0_0_20px_rgba(59,191,250,0.1)] border border-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface{% endif %}">
-                <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'dashboard' %}font-variation-settings: 'FILL' 1;{% endif %}">dashboard</span>
-                <span class="font-bold text-xs uppercase tracking-[0.2em]">Dashboard</span>
+
+        <nav class="flex-grow flex flex-col gap-0.5 px-3 overflow-y-auto">
+            <a href="{% url 'dashboard' %}" class="nav-item {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+                <span class="material-symbols-outlined">dashboard</span><span class="nav-label">Dashboard</span>
             </a>
-            
-            <a href="{% url 'host_list' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.resolver_match.url_name == 'host_list' %}bg-primary/10 text-primary shadow-[0_0_20px_rgba(59,191,250,0.1)] border border-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface{% endif %}">
-                <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'host_list' %}font-variation-settings: 'FILL' 1;{% endif %}">inventory_2</span>
-                <span class="font-bold text-xs uppercase tracking-[0.2em]">Assets</span>
+            <a href="{% url 'host_list' %}" class="nav-item {% if request.resolver_match.url_name == 'host_list' %}active{% endif %}">
+                <span class="material-symbols-outlined">inventory_2</span><span class="nav-label">Assets</span>
+            </a>
+            <a href="{% url 'software_list' %}" class="nav-item {% if request.resolver_match.url_name == 'software_list' %}active{% endif %}">
+                <span class="material-symbols-outlined">package_2</span><span class="nav-label">Software</span>
+            </a>
+            <a href="{% url 'port_list' %}" class="nav-item {% if request.resolver_match.url_name == 'port_list' %}active{% endif %}">
+                <span class="material-symbols-outlined">settings_input_component</span><span class="nav-label">Ports</span>
+            </a>
+            <a href="{% url 'vuln_list' %}" class="nav-item {% if request.resolver_match.url_name == 'vuln_list' %}active{% endif %}">
+                <span class="material-symbols-outlined">security</span><span class="nav-label">Vulnerabilities</span>
+            </a>
+            <a href="{% url 'ai_dashboard' %}" class="nav-item {% if request.resolver_match.url_name == 'ai_dashboard' %}active{% endif %}">
+                <span class="material-symbols-outlined">automation</span><span class="nav-label">AI Dashboard</span>
+            </a>
+            <a href="{% url 'extensions' %}" class="nav-item {% if request.resolver_match.url_name == 'extensions' %}active{% endif %}">
+                <span class="material-symbols-outlined">extension</span><span class="nav-label">Modules</span>
+            </a>
+            <a href="{% url 'kanban_board' %}" class="nav-item {% if request.resolver_match.url_name == 'kanban_board' %}active{% endif %}">
+                <span class="material-symbols-outlined">view_kanban</span><span class="nav-label">Board</span>
+            </a>
+            <a href="{% url 'scan_list' %}" class="nav-item {% if request.resolver_match.url_name == 'scan_list' %}active{% endif %}">
+                <span class="material-symbols-outlined">history</span><span class="nav-label">History</span>
             </a>
 
-            <a href="{% url 'software_list' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.resolver_match.url_name == 'software_list' %}bg-primary/10 text-primary shadow-[0_0_20px_rgba(59,191,250,0.1)] border border-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface{% endif %}">
-                <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'software_list' %}font-variation-settings: 'FILL' 1;{% endif %}">package_2</span>
-                <span class="font-bold text-xs uppercase tracking-[0.2em]">Software</span>
-            </a>
-
-            <a href="{% url 'port_list' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.resolver_match.url_name == 'port_list' %}bg-primary/10 text-primary shadow-[0_0_20px_rgba(59,191,250,0.1)] border border-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface{% endif %}">
-                <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'port_list' %}font-variation-settings: 'FILL' 1;{% endif %}">settings_input_component</span>
-                <span class="font-bold text-xs uppercase tracking-[0.2em]">Ports</span>
-            </a>
-
-            <a href="{% url 'vuln_list' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.resolver_match.url_name == 'vuln_list' %}bg-primary/10 text-primary shadow-[0_0_20px_rgba(59,191,250,0.1)] border border-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface{% endif %}">
-                <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'vuln_list' %}font-variation-settings: 'FILL' 1;{% endif %}">security</span>
-                <span class="font-bold text-xs uppercase tracking-[0.2em]">Vulnerabilities</span>
-            </a>
-
-            <a href="{% url 'ai_dashboard' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.resolver_match.url_name == 'ai_dashboard' %}bg-primary/10 text-primary shadow-[0_0_20px_rgba(59,191,250,0.1)] border border-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface{% endif %}">
-                <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'ai_dashboard' %}font-variation-settings: 'FILL' 1;{% endif %}">automation</span>
-                <span class="font-bold text-xs uppercase tracking-[0.2em]">AI Dashboard</span>
-            </a>
-
-            <a href="{% url 'extensions' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.resolver_match.url_name == 'extensions' %}bg-primary/10 text-primary shadow-[0_0_20px_rgba(59,191,250,0.1)] border border-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface{% endif %}">
-                <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'extensions' %}font-variation-settings: 'FILL' 1;{% endif %}">extension</span>
-                <span class="font-bold text-xs uppercase tracking-[0.2em]">Modules</span>
-            </a>
             {% if request.user.is_staff %}
-            <a href="{% url 'user_admin' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.resolver_match.url_name == 'user_admin' %}bg-primary/10 text-primary shadow-[0_0_20px_rgba(59,191,250,0.1)] border border-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface{% endif %}">
-                <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'user_admin' %}font-variation-settings: 'FILL' 1;{% endif %}">admin_panel_settings</span>
-                <span class="font-bold text-xs uppercase tracking-[0.2em]">Users</span>
+            <div class="nav-section">Admin</div>
+            <a href="{% url 'user_admin' %}" class="nav-item {% if request.resolver_match.url_name == 'user_admin' %}active{% endif %}">
+                <span class="material-symbols-outlined">admin_panel_settings</span><span class="nav-label">Users</span>
             </a>
-            <a href="{% url 'audit_trail' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.resolver_match.url_name == 'audit_trail' %}bg-primary/10 text-primary shadow-[0_0_20px_rgba(59,191,250,0.1)] border border-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface{% endif %}">
-                <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'audit_trail' %}font-variation-settings: 'FILL' 1;{% endif %}">history_toggle_off</span>
-                <span class="font-bold text-xs uppercase tracking-[0.2em]">Audit Trail</span>
+            <a href="{% url 'audit_trail' %}" class="nav-item {% if request.resolver_match.url_name == 'audit_trail' %}active{% endif %}">
+                <span class="material-symbols-outlined">history_toggle_off</span><span class="nav-label">Audit Trail</span>
             </a>
             {% if agent_module_active %}
-            <a href="{% url 'agent_install_guide' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.resolver_match.url_name == 'agent_install_guide' %}bg-primary/10 text-primary shadow-[0_0_20px_rgba(59,191,250,0.1)] border border-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface{% endif %}">
-                <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'agent_install_guide' %}font-variation-settings: 'FILL' 1;{% endif %}">terminal</span>
-                <span class="font-bold text-xs uppercase tracking-[0.2em]">Agent Install</span>
+            <a href="{% url 'agent_install_guide' %}" class="nav-item {% if request.resolver_match.url_name == 'agent_install_guide' %}active{% endif %}">
+                <span class="material-symbols-outlined">terminal</span><span class="nav-label">Agent Install</span>
             </a>
             {% endif %}
             {% endif %}
 
-            <a href="{% url 'kanban_board' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.resolver_match.url_name == 'kanban_board' %}bg-primary/10 text-primary shadow-[0_0_20px_rgba(59,191,250,0.1)] border border-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface{% endif %}">
-                <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'kanban_board' %}font-variation-settings: 'FILL' 1;{% endif %}">view_kanban</span>
-                <span class="font-bold text-xs uppercase tracking-[0.2em]">Board</span>
+            <div class="nav-section">Actions</div>
+            <a href="{% url 'scan_import' %}" class="nav-item">
+                <span class="material-symbols-outlined">upload_file</span><span class="nav-label">Import Scan</span>
             </a>
-
-            <a href="{% url 'scan_list' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.resolver_match.url_name == 'scan_list' %}bg-primary/10 text-primary shadow-[0_0_20px_rgba(59,191,250,0.1)] border border-primary/20{% else %}text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface{% endif %}">
-                <span class="material-symbols-outlined transition-transform group-hover:scale-110" style="{% if request.resolver_match.url_name == 'scan_list' %}font-variation-settings: 'FILL' 1;{% endif %}">history</span>
-                <span class="font-bold text-xs uppercase tracking-[0.2em]">History</span>
-            </a>
-
-            <div class="mt-8 mb-2 px-4 text-outline/50 font-black text-[9px] uppercase tracking-[0.3em]">Actions</div>
-            
-            <a href="{% url 'scan_import' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface border border-transparent hover:border-outline-variant/20">
-                <span class="material-symbols-outlined transition-transform group-hover:scale-110">upload_file</span>
-                <span class="font-bold text-xs uppercase tracking-[0.2em]">Import Scan</span>
-            </a>
-
-            <a href="{% url 'vuln_add' %}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 text-on-surface-variant hover:bg-surface-variant/50 hover:text-on-surface border border-transparent hover:border-outline-variant/20">
-                <span class="material-symbols-outlined transition-transform group-hover:scale-110">add_circle</span>
-                <span class="font-bold text-xs uppercase tracking-[0.2em]">Manual Entry</span>
+            <a href="{% url 'vuln_add' %}" class="nav-item">
+                <span class="material-symbols-outlined">add_circle</span><span class="nav-label">Manual Entry</span>
             </a>
         </nav>
 
-        <div class="px-6 mt-auto">
-            <div class="p-4 bg-surface-container rounded-2xl flex items-center justify-between shadow-xl">
-                <div class="flex items-center gap-3">
-                    <div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                        <span class="material-symbols-outlined text-primary text-sm">person</span>
-                    </div>
-                    <div class="overflow-hidden">
-                      <p class="text-xs font-bold text-on-surface truncate">{{user.username}}</p>
-                        <p class="text-[9px] text-outline uppercase tracking-tighter">User</p>
-                    </div>
+        <div class="px-3 mt-auto">
+            <div class="p-2.5 flex items-center gap-2.5" style="border: 1px solid rgb(var(--md-line)); border-radius: 6px;">
+                <div class="w-8 h-8 rounded-md flex items-center justify-center" style="background: rgb(var(--md-accent) / .14);">
+                    <span class="material-symbols-outlined text-primary text-base">person</span>
+                </div>
+                <div class="overflow-hidden flex-1">
+                    <p class="text-xs font-semibold text-on-surface truncate">{{ user.username }}</p>
+                    <p class="text-[10px] text-outline">Analyst</p>
                 </div>
                 <form method="post" action="{% url 'logout' %}">
-                {% csrf_token %}
-                <button class="text-outline hover:text-error transition-colors">
-                    <span class="material-symbols-outlined text-lg">logout</span>
-                </button>
+                    {% csrf_token %}
+                    <button class="text-outline hover:text-error transition-colors">
+                        <span class="material-symbols-outlined text-lg">logout</span>
+                    </button>
                 </form>
             </div>
         </div>
     </aside>
 
     <!-- TopHeader -->
-    <header class="fixed top-0 w-full z-30 bg-background/80 backdrop-blur-xl flex justify-between items-center px-8 h-20 md:pl-80">
-        <div class="font-headline font-extrabold text-xl tracking-tight text-on-surface">
-            {% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
+    <header class="fixed top-0 w-full z-30 flex justify-between items-center px-6 h-14 md:pl-72" style="background: rgb(var(--md-panel)); border-bottom: 1px solid rgb(var(--md-line));">
+        <div class="font-semibold text-sm tracking-tight text-on-surface">
+            {% block header_title %}CVE3PO{% endblock %}
         </div>
-        
-        <div class="flex items-center gap-6">
+
+        <div class="flex items-center gap-4">
             <div class="text-right hidden sm:block">
-                <p class="text-on-surface-variant text-[10px] uppercase tracking-widest">System Time</p>
-                <p class="text-on-surface font-bold text-xs">{% now "D, d. M Y | H:i" %}</p>
+                <p class="text-outline text-[11px] tabular-nums">{% now "D, d M Y · H:i" %}</p>
             </div>
+            <!-- Theme toggle -->
+            <button id="themeToggle" type="button" aria-label="Toggle theme"
+                    class="flex items-center justify-center w-9 h-9 rounded-md text-on-surface-variant hover:text-primary transition-colors"
+                    style="border: 1px solid rgb(var(--md-line));">
+                <span class="material-symbols-outlined text-lg" id="themeIconDark">dark_mode</span>
+                <span class="material-symbols-outlined text-lg hidden" id="themeIconLight">light_mode</span>
+            </button>
         </div>
     </header>
 
     <!-- Main Content -->
-    <main class="pt-28 pb-12 md:pl-80 px-8 min-h-screen">
+    <main class="pt-20 pb-12 md:pl-72 px-6 min-h-screen">
         {% block content %}{% endblock %}
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        (function () {
+            var btn = document.getElementById('themeToggle');
+            var iconDark = document.getElementById('themeIconDark');
+            var iconLight = document.getElementById('themeIconLight');
+            function sync() {
+                var dark = document.documentElement.classList.contains('dark');
+                iconDark.classList.toggle('hidden', !dark);
+                iconLight.classList.toggle('hidden', dark);
+            }
+            sync();
+            btn.addEventListener('click', function () {
+                var dark = document.documentElement.classList.toggle('dark');
+                try { localStorage.setItem('cve3po-theme', dark ? 'dark' : 'light'); } catch (e) {}
+                sync();
+            });
+        })();
+    </script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

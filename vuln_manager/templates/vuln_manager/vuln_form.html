@@ -11,7 +11,7 @@
         <p class="text-on-surface-variant text-sm">Add a new manual finding to your inventory for tracking and triage.</p>
     </section>
 
-    <div class="bg-surface-container rounded-3xl p-10 shadow-2xl shadow-black/40 border border-outline-variant/5">
+    <div class="bg-surface-container rounded-3xl p-10 border border-outline-variant/5">
         <form action="{% url 'vuln_add' %}" method="POST">
             {% csrf_token %}
             
@@ -19,12 +19,12 @@
                 <!-- Target Mapping -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div>
-                        <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline/50 mb-3">IP Address / Hostname</label>
+                        <label class="block text-[10px] font-bold text-outline/50 mb-3">IP Address / Hostname</label>
                         <input type="text" name="ip_address" class="w-full bg-surface-container-lowest border-none rounded-xl px-5 py-4 text-on-surface text-sm font-bold focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-outline/20" placeholder="e.g. 10.0.4.12">
-                        <p class="text-[9px] text-outline-variant mt-2 uppercase tracking-tighter italic">Leave blank for general software vulnerabilities</p>
+                        <p class="text-[11px] text-outline-variant mt-2 tracking-tight italic">Leave blank for general software vulnerabilities</p>
                     </div>
                     <div>
-                        <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline/50 mb-3">CVE ID (Identifier)</label>
+                        <label class="block text-[10px] font-bold text-outline/50 mb-3">CVE ID (Identifier)</label>
                         <input type="text" name="cve_id" class="w-full bg-surface-container-lowest border-none rounded-xl px-5 py-4 text-on-surface text-sm font-bold focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-outline/20" placeholder="e.g. CVE-2024-5678" required>
                     </div>
                 </div>
@@ -32,14 +32,14 @@
                 <!-- Basic Specs -->
                 <div class="grid grid-cols-1 md:grid-cols-12 gap-8">
                     <div class="md:col-span-6">
-                        <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline/50 mb-3">Vulnerability Title</label>
+                        <label class="block text-[10px] font-bold text-outline/50 mb-3">Vulnerability Title</label>
                         <input type="text" name="name" class="w-full bg-surface-container-lowest border-none rounded-xl px-5 py-4 text-on-surface text-sm font-bold focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-outline/20" placeholder="e.g. Remote Code Execution in API" required>
                     </div>
                     
                     <div class="md:col-span-3">
-                        <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline/50 mb-3">Severity Level</label>
+                        <label class="block text-[10px] font-bold text-outline/50 mb-3">Severity Level</label>
                         <div class="relative group">
-                            <select name="severity" class="w-full bg-surface-container-lowest border-none rounded-xl px-5 py-4 text-on-surface text-sm font-black uppercase tracking-widest focus:ring-2 focus:ring-primary/30 transition-all appearance-none cursor-pointer" required>
+                            <select name="severity" class="w-full bg-surface-container-lowest border-none rounded-xl px-5 py-4 text-on-surface text-sm font-bold focus:ring-2 focus:ring-primary/30 transition-all appearance-none cursor-pointer" required>
                                 {% for val, label in severity_choices %}
                                 <option value="{{ val }}">{{ label|upper }}</option>
                                 {% endfor %}
@@ -51,9 +51,9 @@
                     </div>
 
                     <div class="md:col-span-3">
-                        <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline/50 mb-3">Linked Software</label>
+                        <label class="block text-[10px] font-bold text-outline/50 mb-3">Linked Software</label>
                         <div class="relative group">
-                            <select name="software" class="w-full bg-surface-container-lowest border-none rounded-xl px-5 py-4 text-on-surface text-sm font-black uppercase tracking-widest focus:ring-2 focus:ring-primary/30 transition-all appearance-none cursor-pointer">
+                            <select name="software" class="w-full bg-surface-container-lowest border-none rounded-xl px-5 py-4 text-on-surface text-sm font-bold focus:ring-2 focus:ring-primary/30 transition-all appearance-none cursor-pointer">
                                 <option value="">None / General</option>
                                 {% for sw in software_list %}
                                 <option value="{{ sw.id }}">{{ sw.name }}</option>
@@ -68,19 +68,19 @@
 
                 <!-- Description -->
                 <div>
-                    <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline/50 mb-3">Technical Description</label>
+                    <label class="block text-[10px] font-bold text-outline/50 mb-3">Technical Description</label>
                     <textarea name="description" rows="4" class="w-full bg-surface-container-lowest border-none rounded-2xl px-5 py-4 text-on-surface text-sm font-medium focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-outline/20" placeholder="Provide technical details about the flaw..."></textarea>
                 </div>
 
                 <!-- POC -->
                 <div>
-                    <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-outline/50 mb-3 text-tertiary">Proof of Concept / Notes</label>
+                    <label class="block text-[10px] font-bold text-outline/50 mb-3 text-tertiary">Proof of Concept / Notes</label>
                     <textarea name="poc" rows="3" class="w-full bg-surface-container-lowest border-none rounded-2xl px-5 py-4 text-primary-container font-mono text-xs focus:ring-2 focus:ring-primary/30 transition-all placeholder:text-outline/10" placeholder="e.g. curl -X POST https://target/api..."></textarea>
                 </div>
 
                 <div class="pt-6 flex items-center justify-end gap-8 border-t border-outline-variant/5">
-                    <a href="{% url 'vuln_list' %}" class="text-[10px] font-black text-outline uppercase tracking-[0.2em] hover:text-on-surface transition-colors">Cancel Entry</a>
-                    <button type="submit" class="bg-gradient-to-r from-primary to-primary-container text-surface px-10 py-4 rounded-2xl font-headline font-black uppercase tracking-[0.2em] text-xs shadow-lg shadow-primary/20 hover:brightness-110 active:scale-95 transition-all flex items-center gap-3">
+                    <a href="{% url 'vuln_list' %}" class="text-[10px] font-bold text-outline hover:text-on-surface transition-colors">Cancel Entry</a>
+                    <button type="submit" class="bg-primary text-surface px-10 py-4 rounded-2xl font-headline font-bold text-xs hover:brightness-110 active:scale-95 transition-all flex items-center gap-3">
                         <span class="material-symbols-outlined text-sm">save</span>
                         Save Vulnerability
                     </button>
