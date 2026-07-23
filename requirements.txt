@@ -16,6 +16,7 @@ cvss==3.6
 defusedxml==0.7.1
 Django==5.2.14
 gunicorn==23.0.0
+whitenoise==6.8.2
 exceptiongroup==1.2.2
 face==26.0.0
 glom==25.12.0

@@ -51,6 +51,9 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # WhiteNoise serves static files (incl. Django admin CSS/JS) under gunicorn,
+    # where Django itself does not serve them. Must sit directly after Security.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -134,6 +137,20 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = "static/"
+STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
+
+# WhiteNoise: compress and cache-bust collected static files.
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    # Non-manifest: compresses but does not content-hash filenames. Avoids the
+    # "Missing staticfiles manifest entry" error that the manifest variant raises
+    # for {% static %} in local dev (DEBUG=True, runserver, no collectstatic).
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
+    },
+}
 
 
 MEDIA_URL = "/media/"

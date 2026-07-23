@@ -30,6 +30,16 @@ RUN pip install --upgrade pip
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Compile Tailwind ahead of time (replaces the runtime Play CDN).
+FROM node:20-slim AS css-builder
+WORKDIR /build
+COPY tailwind/package.json tailwind/package-lock.json ./tailwind/
+RUN cd tailwind && npm ci
+COPY tailwind/ ./tailwind/
+COPY vuln_manager/templates/ ./vuln_manager/templates/
+RUN cd tailwind && npm run build
+# -> /build/vuln_manager/static/vuln_manager/css/app.css
+
 FROM python:3.13-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libcairo2 \
@@ -45,6 +55,8 @@ RUN mkdir -p /app/data && chown -R appuser:appuser /app/data
 COPY --chown=appuser:appuser . .
 COPY --from=agent-builder /out/cve3po-agent-linux-amd64 /app/software-agent/cve3po-agent-linux-amd64
 COPY --from=agent-builder /out/cve3po-agent-linux-amd64.sha256 /app/software-agent/cve3po-agent-linux-amd64.sha256
+# Freshly compiled stylesheet overwrites any stale committed copy.
+COPY --from=css-builder --chown=appuser:appuser /build/vuln_manager/static/vuln_manager/css/app.css /app/vuln_manager/static/vuln_manager/css/app.css
 
 RUN chmod +x /app/entrypoint.sh
 
