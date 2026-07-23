@@ -159,5 +159,10 @@ urlpatterns = [
         name="sync_wrike_ticket",
     ),
     path("api/webhooks/wazuh/", wazuh.webhook, name="wazuh_webhook"),
+    path(
+        "modules/wazuh/scripts/<str:filename>/",
+        views.wazuh_script_download,
+        name="wazuh_script_download",
+    ),
     path("dashboard/export/", views.export_dashboard_pdf, name="export_dashboard_pdf"),
 ]
