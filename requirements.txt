@@ -14,7 +14,7 @@ colorama==0.4.6
 cryptography==48.0.1
 cvss==3.6
 defusedxml==0.7.1
-Django==5.2.14
+Django==5.2.15
 gunicorn==23.0.0
 exceptiongroup==1.2.2
 face==26.0.0
