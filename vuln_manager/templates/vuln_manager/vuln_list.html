@@ -20,6 +20,19 @@
         </div>
     </div>
 
+    {% if status_filter == 'resolved' and request.user.is_staff %}
+    <div class="flex justify-end mb-6">
+        <form action="{% url 'delete_fixed_vulnerabilities' %}" method="POST"
+              onsubmit="return confirm('Delete ALL fixed vulnerabilities permanently? This cannot be undone.');">
+            {% csrf_token %}
+            <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-error/40 bg-error/10 hover:bg-error/20 text-error transition-all text-[10px] font-bold tracking-wider">
+                <span class="material-symbols-outlined text-sm">delete_sweep</span>
+                Delete all fixed
+            </button>
+        </form>
+    </div>
+    {% endif %}
+
     <div class="mt-2 mb-6 flex flex-wrap items-center gap-2">
         <span class="text-[11px] text-outline font-bold">Severity</span>
         <a href="{% url 'vuln_list' %}?status={{ status_filter }}{% if query %}&q={{ query|urlencode }}{% endif %}" class="px-3 py-1 rounded-lg text-[11px] font-bold border transition-all {% if not severity %}bg-surface-variant text-on-surface border-outline-variant{% else %}text-outline border-outline-variant hover:text-on-surface{% endif %}">All</a>

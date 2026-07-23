@@ -88,8 +88,13 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        if (typeof Sortable === 'undefined') {
+            console.error('Kanban: SortableJS failed to load (CDN blocked?). Drag & drop disabled.');
+            return;
+        }
+
         const columns = document.querySelectorAll('.kanban-column');
-        
+
         columns.forEach(column => {
             new Sortable(column, {
                 group: 'vulnerabilities',
@@ -101,26 +106,34 @@
                     const oldStatus = evt.from.getAttribute('data-status');
                     const oldIndex = evt.oldIndex;
                     const newIndex = evt.newIndex;
-                    updateStatus(vulnId, newStatus)
-                        .then(() => {
-                            updateCounts();
-                            sortColumn(evt.to);
-                        })
-                        .catch(() => {
-                            const fromEl = evt.from;
-                            const toEl = evt.to;
-                            const card = evt.item;
-                            const restoreIndex = Math.min(oldIndex, fromEl.children.length);
-                            const referenceNode = fromEl.children[restoreIndex] || null;
-                            fromEl.insertBefore(card, referenceNode);
-                            updateCounts();
-                            if (toEl !== fromEl && newIndex >= 0) {
+                    const fromEl = evt.from;
+                    const toEl = evt.to;
+                    const card = evt.item;
+
+                    // IMPORTANT: never call prompt()/alert() or start the fetch
+                    // synchronously here. SortableJS is still holding the drag
+                    // pointer-capture when onEnd runs; a blocking dialog on this
+                    // stack wedges that state and freezes the whole tab. Defer to
+                    // the next tick so Sortable can release the drag first.
+                    setTimeout(function() {
+                        updateStatus(vulnId, newStatus)
+                            .then(() => {
+                                updateCounts();
                                 sortColumn(toEl);
-                            }
-                            if (oldStatus !== newStatus) {
-                                alert('Status update rejected. Reason is required for Risk Accepted and False Positive.');
-                            }
-                        });
+                            })
+                            .catch(() => {
+                                const restoreIndex = Math.min(oldIndex, fromEl.children.length);
+                                const referenceNode = fromEl.children[restoreIndex] || null;
+                                fromEl.insertBefore(card, referenceNode);
+                                updateCounts();
+                                if (toEl !== fromEl && newIndex >= 0) {
+                                    sortColumn(toEl);
+                                }
+                                if (oldStatus !== newStatus) {
+                                    alert('Status update rejected. Reason is required for Risk Accepted and False Positive.');
+                                }
+                            });
+                    }, 0);
                 }
             });
         });

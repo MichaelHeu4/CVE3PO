@@ -1068,6 +1068,25 @@ def delete_vulnerability(request, pk):
 
 
 @login_required
+@require_POST
+def delete_fixed_vulnerabilities(request):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+
+    fixed_vulns = list(Vulnerability.objects.filter(status="fixed"))
+    for vuln in fixed_vulns:
+        log_vulnerability_event(
+            vuln,
+            "deleted",
+            user=request.user,
+            details={"cve_id": vuln.cve_id, "name": vuln.name, "bulk": "fixed"},
+        )
+
+    Vulnerability.objects.filter(status="fixed").delete()
+    return redirect("/vulnerabilities/?status=resolved")
+
+
+@login_required
 def host_form(request, pk=None):
     host_obj = None
     if pk:
