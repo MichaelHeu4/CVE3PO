@@ -3,7 +3,14 @@ from django.views.decorators.http import require_POST
 from django.http import JsonResponse, HttpResponseNotFound
 import json
 import logging
-from vuln_manager.models import Host, Scan, Software, Vulnerability, Extension
+from vuln_manager.models import (
+    Host,
+    Scan,
+    Software,
+    Vulnerability,
+    Extension,
+    HostSoftwareRelationship,
+)
 from vuln_manager.utils.audit import log_vulnerability_event
 from vuln_manager.utils.vuln_dedup import create_or_update_vulnerability
 
@@ -63,8 +70,14 @@ def _handle_alert(data):
     elif agent_name:
         host = Host.objects.filter(hostname=agent_name).first()
 
-    if host and software and not software.hosts.filter(pk=host.pk).exists():
-        software.hosts.add(host)
+    if host and software:
+        if not software.hosts.filter(pk=host.pk).exists():
+            software.hosts.add(host)
+        # Also record the explicit, source-tracked relationship (like the agent
+        # and scanner flows do) so the host inventory shows where it came from.
+        HostSoftwareRelationship.objects.get_or_create(
+            host=host, software=software, defaults={"source": "scanner"}
+        )
 
     cve_id = vuln_data.get("cve") or data.get("cve")
     if not cve_id:
