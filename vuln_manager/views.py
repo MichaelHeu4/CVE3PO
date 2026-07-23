@@ -63,6 +63,12 @@ AGENT_PUBLIC_FILES = {
     "cve3po-agent-linux-amd64.sha256": "cve3po-agent-linux-amd64.sha256",
 }
 
+# Wazuh integration scripts that can be downloaded from the module config.
+WAZUH_SCRIPT_FILES = {
+    "custom-vuln": "custom-vuln",
+    "custom-vuln.py": "custom-vuln.py",
+}
+
 
 def get_system_settings():
     settings_obj, _ = SystemSettings.objects.get_or_create(
@@ -385,6 +391,33 @@ def agent_latest_file(request, filename):
 
     return FileResponse(
         open(file_path, "rb"), as_attachment=True, filename=file_path.name
+    )
+
+
+@login_required
+def wazuh_script_download(request, filename):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+
+    relative_name = WAZUH_SCRIPT_FILES.get(filename)
+    if not relative_name:
+        return HttpResponseNotFound()
+
+    base_dir = Path(settings.BASE_DIR) / "vuln_manager" / "extensions" / "scripts"
+    file_path = (base_dir / relative_name).resolve()
+    try:
+        file_path.relative_to(base_dir.resolve())
+    except ValueError:
+        return HttpResponseNotFound()
+
+    if not file_path.exists() or not file_path.is_file():
+        return HttpResponseNotFound()
+
+    return FileResponse(
+        open(file_path, "rb"),
+        as_attachment=True,
+        filename=file_path.name,
+        content_type="application/octet-stream",
     )
 
 
