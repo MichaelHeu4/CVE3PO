@@ -1,0 +1,5 @@
+.git
+**/__pycache__
+**/*.pyc
+tailwind/node_modules
+staticfiles

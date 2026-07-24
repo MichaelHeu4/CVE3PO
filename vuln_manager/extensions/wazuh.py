@@ -3,7 +3,14 @@ from django.views.decorators.http import require_POST
 from django.http import JsonResponse, HttpResponseNotFound
 import json
 import logging
-from vuln_manager.models import Host, Scan, Software, Vulnerability, Extension
+from vuln_manager.models import (
+    Host,
+    Scan,
+    Software,
+    Vulnerability,
+    Extension,
+    HostSoftwareRelationship,
+)
 from vuln_manager.utils.audit import log_vulnerability_event
 from vuln_manager.utils.vuln_dedup import create_or_update_vulnerability
 
@@ -24,6 +31,70 @@ def _unwrap_alert(item):
         full_alert = body.get("full_alert")
         return full_alert if isinstance(full_alert, dict) else body
     return item
+
+
+# Order + value maps to assemble a CVSS v3 vector from Wazuh's component dict
+# (data.vulnerability.cvss.cvss3.vector), which Wazuh sends instead of a string.
+_CVSS3_METRICS = [
+    ("attack_vector", "AV", {"network": "N", "adjacent": "A", "adjacent_network": "A", "local": "L", "physical": "P"}),
+    ("attack_complexity", "AC", {"low": "L", "high": "H"}),
+    ("privileges_required", "PR", {"none": "N", "low": "L", "high": "H"}),
+    ("user_interaction", "UI", {"none": "N", "required": "R"}),
+    ("scope", "S", {"unchanged": "U", "changed": "C"}),
+    ("confidentiality_impact", "C", {"none": "N", "low": "L", "high": "H"}),
+    ("integrity_impact", "I", {"none": "N", "low": "L", "high": "H"}),
+    ("availability_impact", "A", {"none": "N", "low": "L", "high": "H"}),
+]
+
+
+def _cvss3_vector_from_components(vector):
+    """Assemble a 'CVSS:3.1/AV:N/...' string from Wazuh's component dict."""
+    if not isinstance(vector, dict):
+        return None
+    parts = []
+    for key, abbr, mapping in _CVSS3_METRICS:
+        raw = vector.get(key)
+        if raw is None:
+            return None  # incomplete — cannot build a valid vector
+        code = mapping.get(str(raw).strip().lower())
+        if code is None:
+            return None
+        parts.append(f"{abbr}:{code}")
+    return "CVSS:3.1/" + "/".join(parts)
+
+
+def _extract_cvss(vuln_data):
+    """
+    Best available CVSS representation as a string.
+
+    Prefers a full vector (a ready-made 'CVSS:.../AV:.../...' string if present,
+    otherwise assembled from the cvss3 component dict). Falls back to the numeric
+    base score only when no vector is available.
+    """
+    cvss_data = vuln_data.get("cvss") or {}
+    cvss3 = cvss_data.get("cvss3") or {}
+    cvss2 = cvss_data.get("cvss2") or {}
+
+    # 1) A ready-made vector string, wherever it may sit.
+    for candidate in (
+        cvss3.get("vector"),
+        cvss2.get("vector"),
+        vuln_data.get("cvss_vector"),
+        vuln_data.get("vector"),
+    ):
+        if isinstance(candidate, str) and ("AV:" in candidate or candidate.startswith("CVSS:")):
+            return candidate
+
+    # 2) Assemble a v3 vector from Wazuh's component dict.
+    assembled = _cvss3_vector_from_components(cvss3.get("vector"))
+    if assembled:
+        return assembled
+
+    # 3) Fall back to the numeric base score.
+    score = cvss3.get("base_score") or cvss2.get("base_score")
+    if not score and isinstance(vuln_data.get("score"), dict):
+        score = vuln_data["score"].get("base")
+    return str(score) if score else None
 
 
 def _handle_alert(data):
@@ -63,8 +134,14 @@ def _handle_alert(data):
     elif agent_name:
         host = Host.objects.filter(hostname=agent_name).first()
 
-    if host and software and not software.hosts.filter(pk=host.pk).exists():
-        software.hosts.add(host)
+    if host and software:
+        if not software.hosts.filter(pk=host.pk).exists():
+            software.hosts.add(host)
+        # Also record the explicit, source-tracked relationship (like the agent
+        # and scanner flows do) so the host inventory shows where it came from.
+        HostSoftwareRelationship.objects.get_or_create(
+            host=host, software=software, defaults={"source": "scanner"}
+        )
 
     cve_id = vuln_data.get("cve") or data.get("cve")
     if not cve_id:
@@ -127,14 +204,7 @@ def _handle_alert(data):
     elif "low" in severity_raw:
         sev = "low"
 
-    cvss_score = None
-    cvss_data = vuln_data.get("cvss", {})
-    if cvss_data:
-        cvss3 = cvss_data.get("cvss3", {})
-        cvss2 = cvss_data.get("cvss2", {})
-        cvss_score = cvss3.get("base_score") or cvss2.get("base_score")
-    if not cvss_score and "score" in vuln_data:
-        cvss_score = vuln_data.get("score", {}).get("base")
+    cvss_value = _extract_cvss(vuln_data)
 
     create_or_update_vulnerability(
         host=host,
@@ -143,7 +213,7 @@ def _handle_alert(data):
         severity=sev,
         name=title,
         description=description,
-        cvss=str(cvss_score) if cvss_score else None,
+        cvss=cvss_value,
         software=software,
         actor="wazuh_webhook",
     )

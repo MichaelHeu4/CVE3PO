@@ -80,6 +80,11 @@ urlpatterns = [
         name="api_update_vuln_status",
     ),
     path("board/", views.kanban_board, name="kanban_board"),
+    path(
+        "vulnerabilities/delete-fixed/",
+        views.delete_fixed_vulnerabilities,
+        name="delete_fixed_vulnerabilities",
+    ),
     path("vulnerabilities/add/", views.vuln_add, name="vuln_add"),
     path("import/", views.scan_import, name="scan_import"),
     path("scans/", views.scan_list, name="scan_list"),

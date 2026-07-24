@@ -13,5 +13,9 @@ python manage.py migrate
 
 echo "--- Database is up to date ---"
 
+# Collect static files so WhiteNoise can serve the Django admin CSS/JS
+echo "--- Collecting static files ---"
+python manage.py collectstatic --noinput
+
 # Start the application
 exec "$@"
