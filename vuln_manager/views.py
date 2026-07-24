@@ -571,21 +571,39 @@ def dashboard(request):
         trend_open.append(open_count)
         trend_fixed.append(fixed_count)
 
-    # Top Risky Assets (Weighted)
-    top_hosts = (
-        Host.objects.annotate(
-            risk_score=Count(
-                "vulnerabilities", filter=Q(vulnerabilities__severity="critical")
-            )
-            * 10
-            + Count("vulnerabilities",
-                    filter=Q(vulnerabilities__severity="high")) * 5
-            + Count("vulnerabilities",
-                    filter=Q(vulnerabilities__severity="medium")) * 2
+    # Top Risky Assets (weighted). Count active (non-fixed / non-FP) vulns linked
+    # to a host either directly (host FK) OR via installed software, deduped per
+    # (host, vuln) so a vuln attached both ways is not counted twice.
+    risk_weights = {"critical": 10, "high": 5, "medium": 2}
+    active_sev_vulns = Vulnerability.objects.exclude(
+        status__in=["fixed", "false_positive"]
+    ).filter(severity__in=risk_weights.keys())
+
+    severity_by_vuln = {}
+    host_vuln_pairs = set()
+    for row in active_sev_vulns.values("id", "severity", "host_id"):
+        severity_by_vuln[row["id"]] = row["severity"]
+        if row["host_id"]:
+            host_vuln_pairs.add((row["host_id"], row["id"]))
+    for row in active_sev_vulns.filter(software__hosts__isnull=False).values(
+        "id", "software__hosts"
+    ):
+        host_vuln_pairs.add((row["software__hosts"], row["id"]))
+
+    host_risk = {}
+    for host_id, vuln_id in host_vuln_pairs:
+        host_risk[host_id] = (
+            host_risk.get(host_id, 0) + risk_weights[severity_by_vuln[vuln_id]]
         )
-        .filter(risk_score__gt=0)
-        .order_by("-risk_score")[:5]
-    )
+
+    top_host_ids = sorted(host_risk, key=host_risk.get, reverse=True)[:5]
+    hosts_by_id = {h.id: h for h in Host.objects.filter(id__in=top_host_ids)}
+    top_hosts = []
+    for host_id in top_host_ids:
+        host = hosts_by_id.get(host_id)
+        if host:
+            host.risk_score = host_risk[host_id]
+            top_hosts.append(host)
 
     recent_vulns = all_open_vulns.select_related("host").order_by("-id")[:5]
     top_software = (
@@ -731,14 +749,14 @@ def host_detail(request, pk):
     show_mode = request.GET.get("mode", "all")
     severity_filter = _normalized_severity(request)
     if show_mode == "direct":
-        vulns_query = host.vulnerabilities.exclude(status="false_positive").order_by(
-            "-severity"
-        )
+        vulns_query = host.vulnerabilities.exclude(
+            status__in=["fixed", "false_positive"]
+        ).order_by("-severity")
     else:
         vulns_query = (
             Vulnerability.objects.filter(
                 Q(host=host) | Q(software__hosts=host))
-            .exclude(status="false_positive")
+            .exclude(status__in=["fixed", "false_positive"])
             .distinct()
             .order_by("-severity")
         )
