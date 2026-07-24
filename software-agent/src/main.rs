@@ -18,6 +18,8 @@ struct SoftwareEntry {
 #[derive(Debug, Serialize)]
 struct AgentPayload {
     host_ip: String,
+    hostname: String,
+    operating_system: String,
     software: Vec<SoftwareEntry>,
 }
 
@@ -29,6 +31,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let api_url = get_required_setting("SOFTWARE_API_URL", &file_config)?;
     let host_ip = get_setting("HOST_IP", &file_config)
         .unwrap_or_else(|| detect_host_ip().unwrap_or_else(|_| "127.0.0.1".to_string()));
+    let hostname = get_setting("HOSTNAME", &file_config)
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or_else(detect_hostname);
+    let operating_system = get_setting("OPERATING_SYSTEM", &file_config)
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or_else(detect_operating_system);
     let token = get_setting("SOFTWARE_API_BEARER_TOKEN", &file_config)
         .or_else(|| get_setting("SOFTWARE_API_KEY", &file_config));
     let auth_mode = get_setting("SOFTWARE_API_AUTH", &file_config).unwrap_or_else(|| "bearer".to_string());
@@ -37,7 +45,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         .unwrap_or(false);
 
     let software = collect_software()?;
-    let payload = AgentPayload { host_ip, software };
+    let payload = AgentPayload {
+        host_ip,
+        hostname,
+        operating_system,
+        software,
+    };
 
     if dry_run {
         println!("{}", serde_json::to_string_pretty(&payload)?);
@@ -119,6 +132,112 @@ fn detect_host_ip() -> Result<String, Box<dyn Error>> {
         IpAddr::V4(ip) => Ok(ip.to_string()),
         IpAddr::V6(ip) => Ok(ip.to_string()),
     }
+}
+
+fn capture_output(program: &str, args: &[&str]) -> Option<String> {
+    let output = Command::new(program).args(args).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if text.is_empty() {
+        None
+    } else {
+        Some(text)
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn unquote(value: &str) -> String {
+    let v = value.trim();
+    if v.len() >= 2
+        && ((v.starts_with('"') && v.ends_with('"'))
+            || (v.starts_with('\'') && v.ends_with('\'')))
+    {
+        v[1..v.len() - 1].to_string()
+    } else {
+        v.to_string()
+    }
+}
+
+fn detect_hostname() -> String {
+    // Windows sets COMPUTERNAME; on Linux/systemd services HOSTNAME is often unset,
+    // so fall back to the `hostname` tool, then /etc/hostname.
+    if let Ok(name) = env::var("COMPUTERNAME") {
+        if !name.trim().is_empty() {
+            return name.trim().to_string();
+        }
+    }
+    if let Some(name) = capture_output("hostname", &[]) {
+        if let Some(first) = name.lines().next() {
+            let trimmed = first.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Ok(content) = fs::read_to_string("/etc/hostname") {
+            let trimmed = content.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+    }
+    "unknown".to_string()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn detect_operating_system() -> String {
+    // /etc/os-release is the freedesktop standard; PRETTY_NAME is human-readable and
+    // also carries the distro + version the server uses for OSV release matching.
+    if let Ok(content) = fs::read_to_string("/etc/os-release") {
+        let mut pretty = None;
+        let mut name = None;
+        let mut version = None;
+        for line in content.lines() {
+            if let Some(v) = line.strip_prefix("PRETTY_NAME=") {
+                pretty = Some(unquote(v));
+            } else if let Some(v) = line.strip_prefix("NAME=") {
+                name = Some(unquote(v));
+            } else if let Some(v) = line.strip_prefix("VERSION=") {
+                version = Some(unquote(v));
+            }
+        }
+        if let Some(p) = pretty {
+            if !p.is_empty() {
+                return p;
+            }
+        }
+        if let Some(n) = name {
+            return match version {
+                Some(v) if !v.is_empty() => format!("{} {}", n, v),
+                _ => n,
+            };
+        }
+    }
+    if let Some(uname) = capture_output("uname", &["-sr"]) {
+        return uname;
+    }
+    "unknown".to_string()
+}
+
+#[cfg(target_os = "windows")]
+fn detect_operating_system() -> String {
+    let script = "(Get-CimInstance Win32_OperatingSystem).Caption";
+    if let Some(caption) = capture_output(
+        "powershell",
+        &["-NoProfile", "-NonInteractive", "-Command", script],
+    ) {
+        if let Some(first) = caption.lines().next() {
+            let trimmed = first.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+    }
+    "Windows".to_string()
 }
 
 fn collect_software() -> Result<Vec<SoftwareEntry>, Box<dyn Error>> {
