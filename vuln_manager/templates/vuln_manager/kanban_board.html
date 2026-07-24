@@ -121,7 +121,8 @@
                                 updateCounts();
                                 sortColumn(toEl);
                             })
-                            .catch(() => {
+                            .catch((err) => {
+                                // Revert the card to where it was dragged from.
                                 const restoreIndex = Math.min(oldIndex, fromEl.children.length);
                                 const referenceNode = fromEl.children[restoreIndex] || null;
                                 fromEl.insertBefore(card, referenceNode);
@@ -129,9 +130,11 @@
                                 if (toEl !== fromEl && newIndex >= 0) {
                                     sortColumn(toEl);
                                 }
-                                if (oldStatus !== newStatus) {
-                                    alert('Status update rejected. Reason is required for Risk Accepted and False Positive.');
-                                }
+                                const msg = (err && err.message) ? err.message : 'unknown error';
+                                // 'reason_required' = user cancelled the reason prompt; not an error.
+                                if (msg === 'reason_required') return;
+                                console.error('Kanban: status update failed —', msg);
+                                alert('Status update failed: ' + msg);
                             });
                     }, 0);
                 }
@@ -166,10 +169,13 @@
                 body: JSON.stringify({ status: status, status_reason: statusReason })
             }).then(response => {
                 if (!response.ok) {
-                    return response.json().then(data => {
-                        throw new Error(data?.message || 'update_failed');
-                    }).catch(() => {
-                        throw new Error('update_failed');
+                    return response.text().then(body => {
+                        let detail = 'HTTP ' + response.status;
+                        try {
+                            const data = JSON.parse(body);
+                            if (data && data.message) detail += ' – ' + data.message;
+                        } catch (e) { /* non-JSON error body */ }
+                        throw new Error(detail);
                     });
                 }
                 return response;
