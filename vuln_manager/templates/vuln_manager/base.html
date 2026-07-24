@@ -20,11 +20,13 @@
         })();
     </script>
 
-    <!-- Ahead-of-time compiled Tailwind (replaces the runtime Play CDN, which froze on Kanban drag).
-         Rebuild after changing templates/theme:  cd tailwind && npm run build -->
-    <link rel="stylesheet" href="{% static 'vuln_manager/css/app.css' %}"/>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+    <!-- Compiled Tailwind — MUST come AFTER the Google Fonts links, so the utility
+         font-sizes (text-sm, text-lg, ...) win over Material Symbols' built-in
+         .material-symbols-outlined{font-size:24px}. Otherwise every icon renders at 24px.
+         Rebuild after changing templates/theme:  cd tailwind && npm run build -->
+    <link rel="stylesheet" href="{% static 'vuln_manager/css/app.css' %}"/>
 
     <!--
       CARBON THEME — color tokens live in tailwind/tailwind.config.js and are compiled

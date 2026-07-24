@@ -14,9 +14,10 @@
         })();
     </script>
     {% load static %}
-    <link rel="stylesheet" href="{% static 'vuln_manager/css/app.css' %}"/>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+    <!-- Compiled Tailwind after fonts so utility text sizes beat Material Symbols' 24px default -->
+    <link rel="stylesheet" href="{% static 'vuln_manager/css/app.css' %}"/>
     <!-- Tailwind compiled ahead-of-time into vuln_manager/static/vuln_manager/css/app.css -->
     <style>
         :root { --md-bg:236 238 240; --md-panel:255 255 255; --md-panel-2:246 247 248; --md-lowest:255 255 255; --md-text:20 24 28; --md-muted:91 99 107; --md-faint:139 146 154; --md-line:223 226 229; --md-accent:37 99 235; --md-accent-container:37 99 235; --md-on-accent:255 255 255; --md-crit:229 72 77; }
