@@ -68,6 +68,10 @@ class Scan(models.Model):
     raw_file = models.FileField(
         upload_to="scans/%Y/%m/%d/", null=True, blank=True)
 
+    class Meta:
+        # The dashboard's 14-day trend loop filters on uploaded_at 14x2 times.
+        indexes = [models.Index(fields=["uploaded_at"], name="scan_uploaded_idx")]
+
     def __str__(self):
         return f"{self.get_scan_type_display()} - {self.uploaded_at}"
 
@@ -87,6 +91,14 @@ class Host(models.Model):
     criticality = models.CharField(
         max_length=15, null=True, choices=CRITICALITY_CHOICES
     )
+
+    class Meta:
+        # The dashboard's cluster counts filter on (criticality, is_exposed).
+        indexes = [
+            models.Index(
+                fields=["criticality", "is_exposed"], name="host_crit_exposed_idx"
+            )
+        ]
 
     def __str__(self):
         return self.hostname or self.ip_address
@@ -237,6 +249,20 @@ class Vulnerability(models.Model):
     detection_count = models.PositiveIntegerField(default=1)
     wrike_task_id = models.CharField(max_length=50, blank=True, null=True)
     wrike_task_url = models.URLField(blank=True, null=True)
+
+    class Meta:
+        # The dashboard filters/aggregates heavily on status, severity and
+        # first_seen. Without these indexes every one of its ~40 queries is a
+        # full table scan, so page-load time grows linearly with the table and
+        # eventually exceeds gunicorn's request timeout.
+        indexes = [
+            models.Index(fields=["status"], name="vuln_status_idx"),
+            models.Index(fields=["severity"], name="vuln_severity_idx"),
+            models.Index(fields=["status", "severity"], name="vuln_status_sev_idx"),
+            models.Index(
+                fields=["severity", "first_seen"], name="vuln_sev_firstseen_idx"
+            ),
+        ]
 
     def __str__(self):
         return f"{self.cve_id} - {self.name} ({self.severity})"
