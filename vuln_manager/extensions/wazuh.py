@@ -119,11 +119,21 @@ def _handle_alert(data):
         pkg_name = package_data.get("name")
         pkg_version = package_data.get("version")
         if pkg_name:
-            software, _ = Software.objects.get_or_create(
-                name=pkg_name,
-                version=pkg_version,
-                defaults={"vendor": "Wazuh Detection"},
+            # A Software row is not unique on (name, version) — other flows
+            # (agent, scanner) also key on vendor/port, so several rows can
+            # share the same name+version. Take the first existing match
+            # instead of letting get_or_create raise MultipleObjectsReturned.
+            software = (
+                Software.objects.filter(name=pkg_name, version=pkg_version)
+                .order_by("pk")
+                .first()
             )
+            if software is None:
+                software = Software.objects.create(
+                    name=pkg_name,
+                    version=pkg_version,
+                    vendor="Wazuh Detection",
+                )
 
     host = None
     if agent_ip:
