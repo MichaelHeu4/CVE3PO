@@ -783,6 +783,47 @@ class WazuhWebhookAuthTests(TestCase):
         self.assertEqual(vuln.software.name, "libc6")
         self.assertEqual(vuln.software.version, "2.31-0ubuntu9")
 
+    def test_wazuh_webhook_handles_duplicate_software_rows(self):
+        # Software is not unique on (name, version): other flows also key on
+        # vendor/port, so two rows can share the same name+version. The webhook
+        # must not raise MultipleObjectsReturned (which previously crashed the
+        # alert and returned HTTP 400).
+        from vuln_manager.models import Software, Vulnerability
+
+        Software.objects.create(
+            name="openssl", version="1.1.1", vendor="Agent Report"
+        )
+        Software.objects.create(
+            name="openssl", version="1.1.1", vendor="Scanner"
+        )
+
+        payload = {
+            "rule": {"id": "23503", "description": "Vulnerability in openssl"},
+            "agent": {"id": "002", "name": "dup-host", "ip": "10.0.0.7"},
+            "data": {
+                "vulnerability": {
+                    "cve": "CVE-2026-9999",
+                    "severity": "High",
+                    "status": "Active",
+                    "package": {"name": "openssl", "version": "1.1.1"},
+                }
+            },
+        }
+        response = self.client.post(
+            self.url,
+            data=json.dumps(payload),
+            content_type="application/json",
+            HTTP_X_API_KEY="wazuh-token-123",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("status"), "upserted")
+
+        vuln = Vulnerability.objects.get(cve_id="CVE-2026-9999")
+        # It should reuse an existing row, not create a third one.
+        self.assertEqual(
+            Software.objects.filter(name="openssl", version="1.1.1").count(), 2
+        )
+        self.assertEqual(vuln.software.name, "openssl")
 
     def test_wazuh_webhook_handles_solved_status(self):
         # First, create an open vulnerability
