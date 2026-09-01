@@ -2,6 +2,7 @@ from django.core.paginator import Paginator
 from django.views.decorators.http import require_POST
 from django.shortcuts import render, redirect, get_object_or_404
 from django.db.models import Count, Q, Max, Case, When, Value, IntegerField, Avg
+from django.db.models.functions import TruncDate
 from pathlib import Path
 from .models import (
     CRITICALITY_WEIGHTS,
@@ -445,89 +446,126 @@ def dashboard(request):
         ]
     ).count()
 
-    # Open vulnerabilities (excluding fixed/fp/info)
-    all_open_vulns = Vulnerability.objects.exclude(
-        status__in=["fixed", "false_positive"]
+    # One aggregate over the whole table replaces ~9 separate COUNT queries
+    # (each previously a full scan of the vulnerabilities table).
+    status_counts = Vulnerability.objects.aggregate(
+        total=Count("id"),
+        fixed=Count("id", filter=Q(status="fixed")),
+        risk_accepted=Count("id", filter=Q(status="risk_accepted")),
+        false_positive=Count("id", filter=Q(status="false_positive")),
+        open_status=Count("id", filter=Q(status="open")),
+        in_progress=Count("id", filter=Q(status="in_progress")),
     )
-    vuln_count = all_open_vulns.exclude(severity="info").count()
-    resolved_count = Vulnerability.objects.filter(status="fixed").count()
-    ignored_count = Vulnerability.objects.filter(
-        status="risk_accepted").count()
-    total_non_fp = Vulnerability.objects.exclude(
-        status="false_positive").count()
+    resolved_count = status_counts["fixed"]
+    ignored_count = status_counts["risk_accepted"]
+    total_non_fp = status_counts["total"] - status_counts["false_positive"]
     remediation_rate = (
         round((resolved_count / total_non_fp) * 100, 1) if total_non_fp else 0
     )
-    impacted_assets_count = (
-        Host.objects.filter(
-            Q(vulnerabilities__in=all_open_vulns)
-            | Q(software_inventory__vulnerabilities__in=all_open_vulns)
-        )
-        .distinct()
-        .count()
+
+    # Open vulnerabilities (excluding fixed/false_positive). Fetch the small
+    # open set once and derive the severity split, ages and every SLA metric in
+    # Python, instead of issuing a separate full-table scan for each of them.
+    all_open_vulns = Vulnerability.objects.exclude(
+        status__in=["fixed", "false_positive"]
     )
+    sla_critical_days, sla_high_days = _get_sla_thresholds()
+    now_dt = now()
+    crit_breach_before = now_dt - timedelta(days=sla_critical_days)
+    high_breach_before = now_dt - timedelta(days=sla_high_days)
+    crit_appr_from = now_dt - timedelta(days=sla_critical_days)
+    crit_appr_before = now_dt - timedelta(days=max(0, sla_critical_days - 3))
+    high_appr_from = now_dt - timedelta(days=sla_high_days)
+    high_appr_before = now_dt - timedelta(days=max(0, sla_high_days - 7))
+    crit_compliant_before = now_dt - timedelta(days=max(0, sla_critical_days - 3))
+    high_compliant_before = now_dt - timedelta(days=max(0, sla_high_days - 7))
+
+    severity_map = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+    open_ages = []
+    open_total_rows = 0
+    sla_breach_count = 0
+    sla_approaching_count = 0
+    sla_compliant_count = 0
+    for sev, first_seen in all_open_vulns.values_list("severity", "first_seen"):
+        open_total_rows += 1
+        s = (sev or "").lower()
+        if s in severity_map:
+            severity_map[s] += 1
+        if first_seen:
+            open_ages.append(max((now_dt - first_seen).days, 0))
+
+        is_crit = s == "critical"
+        is_high = s == "high"
+        if first_seen and (
+            (is_crit and first_seen < crit_breach_before)
+            or (is_high and first_seen < high_breach_before)
+        ):
+            sla_breach_count += 1
+        if first_seen and (
+            (is_crit and crit_appr_from <= first_seen < crit_appr_before)
+            or (is_high and high_appr_from <= first_seen < high_appr_before)
+        ):
+            sla_approaching_count += 1
+        breached_for_compliance = first_seen and (
+            (is_crit and first_seen < crit_compliant_before)
+            or (is_high and first_seen < high_compliant_before)
+        )
+        if not breached_for_compliance:
+            sla_compliant_count += 1
+
+    vuln_count = open_total_rows - severity_map["info"]
+    avg_open_age_days = round(
+        sum(open_ages) / len(open_ages), 1) if open_ages else 0
+    oldest_open_days = max(open_ages) if open_ages else 0
+
+    reopened_30d = VulnerabilityAuditEvent.objects.filter(
+        action="reopened", created_at__gte=now_dt - timedelta(days=30)
+    ).count()
+
+    # Impacted assets: hosts carrying an open vuln directly or via installed
+    # software. Two id-set queries over the small open set, instead of an
+    # OR-joined DISTINCT count across the entire hosts table.
+    impacted_host_ids = set(
+        all_open_vulns.filter(host__isnull=False).values_list(
+            "host_id", flat=True
+        )
+    )
+    impacted_host_ids.update(
+        all_open_vulns.filter(software__hosts__isnull=False).values_list(
+            "software__hosts", flat=True
+        )
+    )
+    impacted_assets_count = len(impacted_host_ids)
     exposure_rate = (
         round((impacted_assets_count / host_count)
               * 100, 1) if host_count else 0
     )
-    open_ages = [
-        max((now() - opened_at).days, 0)
-        for opened_at in all_open_vulns.values_list("first_seen", flat=True)
-        if opened_at
-    ]
-    avg_open_age_days = round(
-        sum(open_ages) / len(open_ages), 1) if open_ages else 0
-    oldest_open_days = max(open_ages) if open_ages else 0
-    sla_critical_days, sla_high_days = _get_sla_thresholds()
-    sla_breach_count = all_open_vulns.filter(
-        Q(severity="critical", first_seen__lt=now() -
-          timedelta(days=sla_critical_days))
-        | Q(severity="high", first_seen__lt=now() - timedelta(days=sla_high_days))
-    ).count()
-    reopened_30d = VulnerabilityAuditEvent.objects.filter(
-        action="reopened", created_at__gte=now() - timedelta(days=30)
-    ).count()
 
-    # SLA Countdown Metrics
-    sla_approaching_count = all_open_vulns.filter(
-        Q(severity="critical", first_seen__gte=now() - timedelta(days=sla_critical_days),
-          first_seen__lt=now() - timedelta(days=max(0, sla_critical_days - 3)))
-        | Q(severity="high", first_seen__gte=now() - timedelta(days=sla_high_days),
-            first_seen__lt=now() - timedelta(days=max(0, sla_high_days - 7)))
-    ).count()
+    # Host Cluster Metrics (criticality x exposure) — one aggregate each
+    # instead of 4 + 4 separate COUNT queries.
+    HIGH_CRIT = ["Critical", "High"]
+    LOW_CRIT = ["Medium", "Low"]
+    host_clusters = Host.objects.aggregate(
+        c1=Count("id", filter=Q(criticality__in=HIGH_CRIT, is_exposed=True)),
+        c2=Count("id", filter=Q(criticality__in=LOW_CRIT, is_exposed=True)),
+        c3=Count("id", filter=Q(criticality__in=HIGH_CRIT, is_exposed=False)),
+        c4=Count("id", filter=Q(criticality__in=LOW_CRIT, is_exposed=False)),
+    )
+    cluster_1_count = host_clusters["c1"]
+    cluster_2_count = host_clusters["c2"]
+    cluster_3_count = host_clusters["c3"]
+    cluster_4_count = host_clusters["c4"]
 
-    sla_compliant_count = all_open_vulns.exclude(
-        Q(severity="critical", first_seen__lt=now() - timedelta(days=max(0, sla_critical_days - 3)))
-        | Q(severity="high", first_seen__lt=now() - timedelta(days=max(0, sla_high_days - 7)))
-    ).count()
-
-    # Host Cluster Metrics
-    cluster_1_count = Host.objects.filter(criticality__in=["Critical", "High"], is_exposed=True).count()
-    cluster_2_count = Host.objects.filter(criticality__in=["Medium", "Low"], is_exposed=True).count()
-    cluster_3_count = Host.objects.filter(criticality__in=["Critical", "High"], is_exposed=False).count()
-    cluster_4_count = Host.objects.filter(criticality__in=["Medium", "Low"], is_exposed=False).count()
-
-    cluster_1_vuln_count = Vulnerability.objects.filter(
-        host__criticality__in=["Critical", "High"], host__is_exposed=True
-    ).exclude(status__in=["fixed", "false_positive"]).count()
-
-    cluster_2_vuln_count = Vulnerability.objects.filter(
-        host__criticality__in=["Medium", "Low"], host__is_exposed=True
-    ).exclude(status__in=["fixed", "false_positive"]).count()
-
-    cluster_3_vuln_count = Vulnerability.objects.filter(
-        host__criticality__in=["Critical", "High"], host__is_exposed=False
-    ).exclude(status__in=["fixed", "false_positive"]).count()
-
-    cluster_4_vuln_count = Vulnerability.objects.filter(
-        host__criticality__in=["Medium", "Low"], host__is_exposed=False
-    ).exclude(status__in=["fixed", "false_positive"]).count()
-
-    # Severity distribution
-    vuln_stats = all_open_vulns.values("severity").annotate(count=Count("id"))
-    severity_map = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
-    for stat in vuln_stats:
-        severity_map[stat["severity"].lower()] = stat["count"]
+    vuln_clusters = all_open_vulns.aggregate(
+        c1=Count("id", filter=Q(host__criticality__in=HIGH_CRIT, host__is_exposed=True)),
+        c2=Count("id", filter=Q(host__criticality__in=LOW_CRIT, host__is_exposed=True)),
+        c3=Count("id", filter=Q(host__criticality__in=HIGH_CRIT, host__is_exposed=False)),
+        c4=Count("id", filter=Q(host__criticality__in=LOW_CRIT, host__is_exposed=False)),
+    )
+    cluster_1_vuln_count = vuln_clusters["c1"]
+    cluster_2_vuln_count = vuln_clusters["c2"]
+    cluster_3_vuln_count = vuln_clusters["c3"]
+    cluster_4_vuln_count = vuln_clusters["c4"]
 
     # Security Score Calculation
     # Critical=10, High=5, Medium=2, Low=1
@@ -544,32 +582,39 @@ def dashboard(request):
     else:
         score = 100
 
-    # Vulnerability Trend (Last 14 days)
-    # We want to show "Active" vs "Fixed"
-    trend_labels = []
-    trend_open = []
-    trend_fixed = []
-
+    # Vulnerability Trend (Last 14 days): "Active" vs "Fixed", cumulative by
+    # scan upload date. Two grouped queries + a running total in Python replace
+    # the previous 28 per-day COUNT queries (each a full join to scans with a
+    # non-indexable DATE() on uploaded_at).
     today = datetime.date.today()
-    for i in range(13, -1, -1):
-        day = today - datetime.timedelta(days=i)
-        trend_labels.append(day.strftime("%d.%m"))
+    trend_days = [today - datetime.timedelta(days=i) for i in range(13, -1, -1)]
+    trend_labels = [day.strftime("%d.%m") for day in trend_days]
 
-        # Open on that day (created before or on that day, and not fixed or fixed AFTER that day)
-        open_count = (
-            Vulnerability.objects.filter(scan__uploaded_at__date__lte=day)
-            .exclude(
-                status__in=["fixed", "false_positive"],
-            )
-            .count()
-        )
+    def _cumulative_by_upload_date(queryset):
+        per_date = [
+            (row["day"], row["c"])
+            for row in queryset.annotate(day=TruncDate("scan__uploaded_at"))
+            .values("day")
+            .annotate(c=Count("id"))
+            if row["day"] is not None
+        ]
+        per_date.sort()
+        series = []
+        running = 0
+        idx = 0
+        for day in trend_days:
+            while idx < len(per_date) and per_date[idx][0] <= day:
+                running += per_date[idx][1]
+                idx += 1
+            series.append(running)
+        return series
 
-        fixed_count = Vulnerability.objects.filter(
-            status="fixed", scan__uploaded_at__date__lte=day
-        ).count()
-
-        trend_open.append(open_count)
-        trend_fixed.append(fixed_count)
+    trend_open = _cumulative_by_upload_date(
+        Vulnerability.objects.exclude(status__in=["fixed", "false_positive"])
+    )
+    trend_fixed = _cumulative_by_upload_date(
+        Vulnerability.objects.filter(status="fixed")
+    )
 
     # Top Risky Assets (weighted). Count active (non-fixed / non-FP) vulns linked
     # to a host either directly (host FK) OR via installed software, deduped per
@@ -643,11 +688,11 @@ def dashboard(request):
         "proc_time": round(avg_proc_time_ms / 1000, 2),
     }
     status_map = {
-        "open": Vulnerability.objects.filter(status="open").count(),
-        "in_progress": Vulnerability.objects.filter(status="in_progress").count(),
+        "open": status_counts["open_status"],
+        "in_progress": status_counts["in_progress"],
         "fixed": resolved_count,
         "risk_accepted": ignored_count,
-        "false_positive": Vulnerability.objects.filter(status="false_positive").count(),
+        "false_positive": status_counts["false_positive"],
     }
 
     context = {
