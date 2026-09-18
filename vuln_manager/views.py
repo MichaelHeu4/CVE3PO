@@ -48,6 +48,7 @@ from django.utils.timezone import now
 import datetime
 from datetime import timedelta
 import logging
+import math
 import re
 
 from xhtml2pdf import pisa
@@ -455,6 +456,14 @@ def dashboard(request):
         false_positive=Count("id", filter=Q(status="false_positive")),
         open_status=Count("id", filter=Q(status="open")),
         in_progress=Count("id", filter=Q(status="in_progress")),
+        # Severity split of fixed vulns feeds the security score's remediation
+        # component; folded into this existing aggregate so it costs no extra
+        # query (severity values are stored lowercase, so an exact match uses
+        # the (status, severity) index).
+        fixed_critical=Count("id", filter=Q(status="fixed", severity="critical")),
+        fixed_high=Count("id", filter=Q(status="fixed", severity="high")),
+        fixed_medium=Count("id", filter=Q(status="fixed", severity="medium")),
+        fixed_low=Count("id", filter=Q(status="fixed", severity="low")),
     )
     resolved_count = status_counts["fixed"]
     ignored_count = status_counts["risk_accepted"]
@@ -567,20 +576,140 @@ def dashboard(request):
     cluster_3_vuln_count = vuln_clusters["c3"]
     cluster_4_vuln_count = vuln_clusters["c4"]
 
-    # Security Score Calculation
-    # Critical=10, High=5, Medium=2, Low=1
-    risk_points = (
-        severity_map["critical"] * 10
-        + severity_map["high"] * 5
-        + severity_map["medium"] * 2
-        + severity_map["low"] * 1
+    # Active (non-fixed / non-FP) crit/high/medium vulns linked to a host either
+    # directly (host FK) OR via installed software, deduped per (host, vuln).
+    # Gathered once here and reused twice below: by the security score's exposure
+    # component and by the Top Risky Assets ranking.
+    risk_weights = {"critical": 10, "high": 5, "medium": 2}
+    active_sev_vulns = Vulnerability.objects.exclude(
+        status__in=["fixed", "false_positive"]
+    ).filter(severity__in=risk_weights.keys())
+
+    severity_by_vuln = {}
+    host_vuln_pairs = set()
+    for row in active_sev_vulns.values("id", "severity", "host_id"):
+        severity_by_vuln[row["id"]] = row["severity"]
+        if row["host_id"]:
+            host_vuln_pairs.add((row["host_id"], row["id"]))
+    for row in active_sev_vulns.filter(software__hosts__isnull=False).values(
+        "id", "software__hosts"
+    ):
+        host_vuln_pairs.add((row["software__hosts"], row["id"]))
+
+    # Security Score (0–100): a composite of three sub-scores so that both the
+    # remediation effort and the current open risk shape the result, and the
+    # score degrades smoothly instead of collapsing to 0 under a large backlog
+    # (the previous formula was an unbounded penalty that clamped to 0 as soon
+    # as the open count grew, ignoring everything already fixed).
+    #
+    #   R – remediation effectiveness: severity-weighted share of vulns already
+    #       fixed vs. still open. Credits patching work.
+    #   S – SLA compliance: share of open critical/high still within SLA.
+    #   E – open critical/high exposure per host, on an exponential decay curve
+    #       so heavy backlogs bend the score down without a hard cliff. Each
+    #       open crit/high is weighted by the host it sits on, so risk on
+    #       internet-exposed / business-critical hosts counts more.
+    #
+    # Weights, host-context factors and the decay constant are calibrated
+    # against the live data set; tune them here.
+    SCORE_W_REMEDIATION = 0.4
+    SCORE_W_SLA = 0.3
+    SCORE_W_EXPOSURE = 0.3
+    SEV_WEIGHTS = {"critical": 10, "high": 5, "medium": 2, "low": 1}
+    # Host-context multipliers for the exposure sub-score: an open crit/high on
+    # an internet-exposed and/or business-critical host weighs more than the
+    # same finding on an internal, low-value host.
+    EXPOSURE_FACTOR = {True: 2.0, False: 1.0}
+    HOST_CRIT_FACTOR = {"Critical": 2.0, "High": 1.5, "Medium": 1.0, "Low": 0.75}
+    NEUTRAL_HOST_FACTOR = 1.0  # unknown criticality / vuln with no host
+    # Context-weighted crit/high risk density (per host) at which the exposure
+    # sub-score falls to ~37% (1/e). Higher = more lenient. Calibrated so the
+    # current backlog lands in the honest "needs attention" band.
+    EXPOSURE_DECAY_K = 61
+
+    fixed_by_severity = {
+        "critical": status_counts["fixed_critical"],
+        "high": status_counts["fixed_high"],
+        "medium": status_counts["fixed_medium"],
+        "low": status_counts["fixed_low"],
+    }
+    weighted_open = sum(severity_map[sev] * w for sev, w in SEV_WEIGHTS.items())
+    weighted_fixed = sum(
+        (fixed_by_severity[sev] or 0) * w for sev, w in SEV_WEIGHTS.items()
     )
 
-    if host_count > 0:
-        # Score starts at 100, drops based on risk density.
-        score = max(0, 100 - (risk_points / (host_count * 0.5)))
+    # R: severity-weighted remediation ratio.
+    if weighted_fixed + weighted_open > 0:
+        remediation_subscore = (
+            100 * weighted_fixed / (weighted_fixed + weighted_open)
+        )
     else:
-        score = 100
+        remediation_subscore = 100
+
+    # S: share of open critical/high still within SLA (sla_breach_count already
+    # counts only breached crit/high, so it is a subset of open_crit_high).
+    open_crit_high = severity_map["critical"] + severity_map["high"]
+    if open_crit_high > 0:
+        sla_subscore = 100 * (
+            1 - min(sla_breach_count, open_crit_high) / open_crit_high
+        )
+    else:
+        sla_subscore = 100
+
+    # E: context-weighted open critical/high exposure per host on an
+    # exponential decay curve. Each open crit/high contributes its severity
+    # weight scaled by the risk of the host it sits on (exposure x criticality),
+    # taking the worst-case host for a vuln attached to several, and a neutral
+    # factor for a vuln with no host. Reuses severity_by_vuln / host_vuln_pairs
+    # (already gathered above for the risky-asset ranking) so it needs no query
+    # of its own beyond the small host-context lookup (one row per host).
+    if host_count > 0:
+        host_ctx_factor = {
+            hid: EXPOSURE_FACTOR[bool(exposed)]
+            * HOST_CRIT_FACTOR.get(crit, NEUTRAL_HOST_FACTOR)
+            for hid, crit, exposed in Host.objects.values_list(
+                "id", "criticality", "is_exposed"
+            )
+        }
+        ch_best_factor = {}
+        for host_id, vuln_id in host_vuln_pairs:
+            if severity_by_vuln[vuln_id] not in ("critical", "high"):
+                continue
+            factor = host_ctx_factor.get(host_id, NEUTRAL_HOST_FACTOR)
+            ch_best_factor[vuln_id] = max(
+                ch_best_factor.get(vuln_id, 0.0), factor
+            )
+        effective_ch_risk = sum(
+            SEV_WEIGHTS[sev] * ch_best_factor.get(vid, NEUTRAL_HOST_FACTOR)
+            for vid, sev in severity_by_vuln.items()
+            if sev in ("critical", "high")
+        )
+        exposure_density = effective_ch_risk / host_count
+        exposure_subscore = 100 * math.exp(-exposure_density / EXPOSURE_DECAY_K)
+    else:
+        exposure_subscore = 100
+
+    score = (
+        SCORE_W_REMEDIATION * remediation_subscore
+        + SCORE_W_SLA * sla_subscore
+        + SCORE_W_EXPOSURE * exposure_subscore
+    )
+
+    # Breakdown for the score's info tooltip on the dashboard.
+    score_breakdown = {
+        "remediation": {
+            "value": round(remediation_subscore),
+            "weight": round(SCORE_W_REMEDIATION * 100),
+        },
+        "sla": {
+            "value": round(sla_subscore),
+            "weight": round(SCORE_W_SLA * 100),
+        },
+        "exposure": {
+            "value": round(exposure_subscore),
+            "weight": round(SCORE_W_EXPOSURE * 100),
+        },
+    }
 
     # Vulnerability Trend (Last 14 days): "Active" vs "Fixed", cumulative by
     # scan upload date. Two grouped queries + a running total in Python replace
@@ -616,25 +745,7 @@ def dashboard(request):
         Vulnerability.objects.filter(status="fixed")
     )
 
-    # Top Risky Assets (weighted). Count active (non-fixed / non-FP) vulns linked
-    # to a host either directly (host FK) OR via installed software, deduped per
-    # (host, vuln) so a vuln attached both ways is not counted twice.
-    risk_weights = {"critical": 10, "high": 5, "medium": 2}
-    active_sev_vulns = Vulnerability.objects.exclude(
-        status__in=["fixed", "false_positive"]
-    ).filter(severity__in=risk_weights.keys())
-
-    severity_by_vuln = {}
-    host_vuln_pairs = set()
-    for row in active_sev_vulns.values("id", "severity", "host_id"):
-        severity_by_vuln[row["id"]] = row["severity"]
-        if row["host_id"]:
-            host_vuln_pairs.add((row["host_id"], row["id"]))
-    for row in active_sev_vulns.filter(software__hosts__isnull=False).values(
-        "id", "software__hosts"
-    ):
-        host_vuln_pairs.add((row["software__hosts"], row["id"]))
-
+    # Top Risky Assets (weighted), from the (host, vuln) pairs gathered above.
     host_risk = {}
     for host_id, vuln_id in host_vuln_pairs:
         host_risk[host_id] = (
@@ -701,6 +812,7 @@ def dashboard(request):
         "vuln_count": vuln_count,
         "severity_map": severity_map,
         "score": round(score),
+        "score_breakdown": score_breakdown,
         "trend_labels": json.dumps(trend_labels),
         "trend_open": json.dumps(trend_open),
         "trend_fixed": json.dumps(trend_fixed),
