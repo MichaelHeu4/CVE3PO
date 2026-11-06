@@ -147,6 +147,23 @@ urlpatterns = [
         views.send_email_report_now,
         name="send_email_report_now",
     ),
+    path(
+        "modules/auto-enrich/config/",
+        views.save_auto_enrich_config,
+        name="save_auto_enrich_config",
+    ),
+    path(
+        "modules/auto-enrich/run/",
+        views.run_enrichment_now,
+        name="run_enrichment_now",
+    ),
+    path("modules/shodan/config/", views.save_shodan_config, name="save_shodan_config"),
+    path("modules/shodan/scan-all/", views.shodan_scan_all, name="shodan_scan_all"),
+    path(
+        "hosts/<int:pk>/shodan/",
+        views.host_shodan_lookup,
+        name="host_shodan_lookup",
+    ),
     path("users/", views.user_admin, name="user_admin"),
     path("audit-trail/", views.audit_trail, name="audit_trail"),
     path("users/<int:pk>/staff/", views.set_user_staff, name="set_user_staff"),

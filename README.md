@@ -16,6 +16,7 @@
 - OSV + NVD Enrichment
 - CycloneDX / Syft (SBOM JSON)
 - Wazuh Webhook Feed
+- Shodan Port-/Exposure-Lookup
 
 ### Asset- & Vulnerability-Management
 - Host-/Port-/Software-Inventar
@@ -27,6 +28,8 @@
 
 ### Automatisierung & Module
 - CVE3PO Agent API (Snapshot-Sync für Software-Inventar)
+- Auto Enrichment (wiederkehrender Scheduler: OSV/NVD/KEV/EPSS + optional Shodan)
+- Shodan Modul (Port-Discovery, automatisches Setzen von Internet Exposure)
 - AI Triage (OpenRouter oder Azure)
 - Wrike Integration
 - Email Reporting (PDF Report Versand)
@@ -93,7 +96,12 @@ docker compose up -d
 
 1. Anwendung öffnen: `http://localhost:8000`
 2. Account erstellen über `/register` (falls `DISABLE_REGISTER=False`)
-3. Optional Module unter `/modules` aktivieren (Agent, Wazuh, AI, Email, Wrike)
+3. Optional Module unter `/modules` aktivieren (Agent, Wazuh, AI, Email, Wrike, Auto Enrichment, Shodan)
+
+### Auto Enrichment & Shodan
+
+- **Auto Enrichment**: Unter `/modules` aktivieren und ein Intervall (Stunden, Default 24) setzen. Ein interner Scheduler prüft dann wiederkehrend das gesamte Software-Inventar gegen OSV/NVD und aktualisiert CISA KEV + EPSS, damit neue CVEs automatisch erkannt werden. Mit „Run Enrichment Now" lässt sich ein Lauf sofort anstoßen. Alternativ extern per Cron: `python manage.py enrich_feeds`.
+- **Shodan**: Modul aktivieren und den Shodan API Key hinterlegen. „Scan All Hosts Now" prüft alle Hosts, auf der Host-Detailseite gibt es „Fetch ports from Shodan" pro Host. Wird ein Host bei Shodan gefunden, werden dessen Ports importiert und `Internet Exposure` automatisch auf True gesetzt. Bei aktivem Shodan-Modul läuft der Shodan-Refresh auch im Auto-Enrichment-Task mit.
 
 Hinweis: Beim Container-Start werden Migrationen automatisch ausgeführt.
 
