@@ -2,6 +2,7 @@ from django.core.paginator import Paginator
 from django.views.decorators.http import require_POST
 from django.shortcuts import render, redirect, get_object_or_404
 from django.db.models import Count, Q, Max, Case, When, Value, IntegerField, Avg
+from django.db.models.functions import TruncDate
 from pathlib import Path
 from .models import (
     CRITICALITY_WEIGHTS,
@@ -26,6 +27,7 @@ from .utils.audit import log_vulnerability_event
 from .utils.vuln_dedup import create_or_update_vulnerability
 from .utils.osv_auto import enrich_software_with_feeds
 from .utils.enrichment import get_cve_details
+from .utils.listing import apply_sort
 from .extensions import wrike as wrike_ext
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -47,6 +49,7 @@ from django.utils.timezone import now
 import datetime
 from datetime import timedelta
 import logging
+import math
 import re
 
 from xhtml2pdf import pisa
@@ -445,135 +448,139 @@ def dashboard(request):
         ]
     ).count()
 
-    # Open vulnerabilities (excluding fixed/fp/info)
-    all_open_vulns = Vulnerability.objects.exclude(
-        status__in=["fixed", "false_positive"]
+    # One aggregate over the whole table replaces ~9 separate COUNT queries
+    # (each previously a full scan of the vulnerabilities table).
+    status_counts = Vulnerability.objects.aggregate(
+        total=Count("id"),
+        fixed=Count("id", filter=Q(status="fixed")),
+        risk_accepted=Count("id", filter=Q(status="risk_accepted")),
+        false_positive=Count("id", filter=Q(status="false_positive")),
+        open_status=Count("id", filter=Q(status="open")),
+        in_progress=Count("id", filter=Q(status="in_progress")),
+        # Severity split of fixed vulns feeds the security score's remediation
+        # component; folded into this existing aggregate so it costs no extra
+        # query (severity values are stored lowercase, so an exact match uses
+        # the (status, severity) index).
+        fixed_critical=Count("id", filter=Q(status="fixed", severity="critical")),
+        fixed_high=Count("id", filter=Q(status="fixed", severity="high")),
+        fixed_medium=Count("id", filter=Q(status="fixed", severity="medium")),
+        fixed_low=Count("id", filter=Q(status="fixed", severity="low")),
     )
-    vuln_count = all_open_vulns.exclude(severity="info").count()
-    resolved_count = Vulnerability.objects.filter(status="fixed").count()
-    ignored_count = Vulnerability.objects.filter(
-        status="risk_accepted").count()
-    total_non_fp = Vulnerability.objects.exclude(
-        status="false_positive").count()
+    resolved_count = status_counts["fixed"]
+    ignored_count = status_counts["risk_accepted"]
+    total_non_fp = status_counts["total"] - status_counts["false_positive"]
     remediation_rate = (
         round((resolved_count / total_non_fp) * 100, 1) if total_non_fp else 0
     )
-    impacted_assets_count = (
-        Host.objects.filter(
-            Q(vulnerabilities__in=all_open_vulns)
-            | Q(software_inventory__vulnerabilities__in=all_open_vulns)
-        )
-        .distinct()
-        .count()
+
+    # Open vulnerabilities (excluding fixed/false_positive). Fetch the small
+    # open set once and derive the severity split, ages and every SLA metric in
+    # Python, instead of issuing a separate full-table scan for each of them.
+    all_open_vulns = Vulnerability.objects.exclude(
+        status__in=["fixed", "false_positive"]
     )
+    sla_critical_days, sla_high_days = _get_sla_thresholds()
+    now_dt = now()
+    crit_breach_before = now_dt - timedelta(days=sla_critical_days)
+    high_breach_before = now_dt - timedelta(days=sla_high_days)
+    crit_appr_from = now_dt - timedelta(days=sla_critical_days)
+    crit_appr_before = now_dt - timedelta(days=max(0, sla_critical_days - 3))
+    high_appr_from = now_dt - timedelta(days=sla_high_days)
+    high_appr_before = now_dt - timedelta(days=max(0, sla_high_days - 7))
+    crit_compliant_before = now_dt - timedelta(days=max(0, sla_critical_days - 3))
+    high_compliant_before = now_dt - timedelta(days=max(0, sla_high_days - 7))
+
+    severity_map = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+    open_ages = []
+    open_total_rows = 0
+    sla_breach_count = 0
+    sla_approaching_count = 0
+    sla_compliant_count = 0
+    for sev, first_seen in all_open_vulns.values_list("severity", "first_seen"):
+        open_total_rows += 1
+        s = (sev or "").lower()
+        if s in severity_map:
+            severity_map[s] += 1
+        if first_seen:
+            open_ages.append(max((now_dt - first_seen).days, 0))
+
+        is_crit = s == "critical"
+        is_high = s == "high"
+        if first_seen and (
+            (is_crit and first_seen < crit_breach_before)
+            or (is_high and first_seen < high_breach_before)
+        ):
+            sla_breach_count += 1
+        if first_seen and (
+            (is_crit and crit_appr_from <= first_seen < crit_appr_before)
+            or (is_high and high_appr_from <= first_seen < high_appr_before)
+        ):
+            sla_approaching_count += 1
+        breached_for_compliance = first_seen and (
+            (is_crit and first_seen < crit_compliant_before)
+            or (is_high and first_seen < high_compliant_before)
+        )
+        if not breached_for_compliance:
+            sla_compliant_count += 1
+
+    vuln_count = open_total_rows - severity_map["info"]
+    avg_open_age_days = round(
+        sum(open_ages) / len(open_ages), 1) if open_ages else 0
+    oldest_open_days = max(open_ages) if open_ages else 0
+
+    reopened_30d = VulnerabilityAuditEvent.objects.filter(
+        action="reopened", created_at__gte=now_dt - timedelta(days=30)
+    ).count()
+
+    # Impacted assets: hosts carrying an open vuln directly or via installed
+    # software. Two id-set queries over the small open set, instead of an
+    # OR-joined DISTINCT count across the entire hosts table.
+    impacted_host_ids = set(
+        all_open_vulns.filter(host__isnull=False).values_list(
+            "host_id", flat=True
+        )
+    )
+    impacted_host_ids.update(
+        all_open_vulns.filter(software__hosts__isnull=False).values_list(
+            "software__hosts", flat=True
+        )
+    )
+    impacted_assets_count = len(impacted_host_ids)
     exposure_rate = (
         round((impacted_assets_count / host_count)
               * 100, 1) if host_count else 0
     )
-    open_ages = [
-        max((now() - opened_at).days, 0)
-        for opened_at in all_open_vulns.values_list("first_seen", flat=True)
-        if opened_at
-    ]
-    avg_open_age_days = round(
-        sum(open_ages) / len(open_ages), 1) if open_ages else 0
-    oldest_open_days = max(open_ages) if open_ages else 0
-    sla_critical_days, sla_high_days = _get_sla_thresholds()
-    sla_breach_count = all_open_vulns.filter(
-        Q(severity="critical", first_seen__lt=now() -
-          timedelta(days=sla_critical_days))
-        | Q(severity="high", first_seen__lt=now() - timedelta(days=sla_high_days))
-    ).count()
-    reopened_30d = VulnerabilityAuditEvent.objects.filter(
-        action="reopened", created_at__gte=now() - timedelta(days=30)
-    ).count()
 
-    # SLA Countdown Metrics
-    sla_approaching_count = all_open_vulns.filter(
-        Q(severity="critical", first_seen__gte=now() - timedelta(days=sla_critical_days),
-          first_seen__lt=now() - timedelta(days=max(0, sla_critical_days - 3)))
-        | Q(severity="high", first_seen__gte=now() - timedelta(days=sla_high_days),
-            first_seen__lt=now() - timedelta(days=max(0, sla_high_days - 7)))
-    ).count()
-
-    sla_compliant_count = all_open_vulns.exclude(
-        Q(severity="critical", first_seen__lt=now() - timedelta(days=max(0, sla_critical_days - 3)))
-        | Q(severity="high", first_seen__lt=now() - timedelta(days=max(0, sla_high_days - 7)))
-    ).count()
-
-    # Host Cluster Metrics
-    cluster_1_count = Host.objects.filter(criticality__in=["Critical", "High"], is_exposed=True).count()
-    cluster_2_count = Host.objects.filter(criticality__in=["Medium", "Low"], is_exposed=True).count()
-    cluster_3_count = Host.objects.filter(criticality__in=["Critical", "High"], is_exposed=False).count()
-    cluster_4_count = Host.objects.filter(criticality__in=["Medium", "Low"], is_exposed=False).count()
-
-    cluster_1_vuln_count = Vulnerability.objects.filter(
-        host__criticality__in=["Critical", "High"], host__is_exposed=True
-    ).exclude(status__in=["fixed", "false_positive"]).count()
-
-    cluster_2_vuln_count = Vulnerability.objects.filter(
-        host__criticality__in=["Medium", "Low"], host__is_exposed=True
-    ).exclude(status__in=["fixed", "false_positive"]).count()
-
-    cluster_3_vuln_count = Vulnerability.objects.filter(
-        host__criticality__in=["Critical", "High"], host__is_exposed=False
-    ).exclude(status__in=["fixed", "false_positive"]).count()
-
-    cluster_4_vuln_count = Vulnerability.objects.filter(
-        host__criticality__in=["Medium", "Low"], host__is_exposed=False
-    ).exclude(status__in=["fixed", "false_positive"]).count()
-
-    # Severity distribution
-    vuln_stats = all_open_vulns.values("severity").annotate(count=Count("id"))
-    severity_map = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
-    for stat in vuln_stats:
-        severity_map[stat["severity"].lower()] = stat["count"]
-
-    # Security Score Calculation
-    # Critical=10, High=5, Medium=2, Low=1
-    risk_points = (
-        severity_map["critical"] * 10
-        + severity_map["high"] * 5
-        + severity_map["medium"] * 2
-        + severity_map["low"] * 1
+    # Host Cluster Metrics (criticality x exposure) — one aggregate each
+    # instead of 4 + 4 separate COUNT queries.
+    HIGH_CRIT = ["Critical", "High"]
+    LOW_CRIT = ["Medium", "Low"]
+    host_clusters = Host.objects.aggregate(
+        c1=Count("id", filter=Q(criticality__in=HIGH_CRIT, is_exposed=True)),
+        c2=Count("id", filter=Q(criticality__in=LOW_CRIT, is_exposed=True)),
+        c3=Count("id", filter=Q(criticality__in=HIGH_CRIT, is_exposed=False)),
+        c4=Count("id", filter=Q(criticality__in=LOW_CRIT, is_exposed=False)),
     )
+    cluster_1_count = host_clusters["c1"]
+    cluster_2_count = host_clusters["c2"]
+    cluster_3_count = host_clusters["c3"]
+    cluster_4_count = host_clusters["c4"]
 
-    if host_count > 0:
-        # Score starts at 100, drops based on risk density.
-        score = max(0, 100 - (risk_points / (host_count * 0.5)))
-    else:
-        score = 100
+    vuln_clusters = all_open_vulns.aggregate(
+        c1=Count("id", filter=Q(host__criticality__in=HIGH_CRIT, host__is_exposed=True)),
+        c2=Count("id", filter=Q(host__criticality__in=LOW_CRIT, host__is_exposed=True)),
+        c3=Count("id", filter=Q(host__criticality__in=HIGH_CRIT, host__is_exposed=False)),
+        c4=Count("id", filter=Q(host__criticality__in=LOW_CRIT, host__is_exposed=False)),
+    )
+    cluster_1_vuln_count = vuln_clusters["c1"]
+    cluster_2_vuln_count = vuln_clusters["c2"]
+    cluster_3_vuln_count = vuln_clusters["c3"]
+    cluster_4_vuln_count = vuln_clusters["c4"]
 
-    # Vulnerability Trend (Last 14 days)
-    # We want to show "Active" vs "Fixed"
-    trend_labels = []
-    trend_open = []
-    trend_fixed = []
-
-    today = datetime.date.today()
-    for i in range(13, -1, -1):
-        day = today - datetime.timedelta(days=i)
-        trend_labels.append(day.strftime("%d.%m"))
-
-        # Open on that day (created before or on that day, and not fixed or fixed AFTER that day)
-        open_count = (
-            Vulnerability.objects.filter(scan__uploaded_at__date__lte=day)
-            .exclude(
-                status__in=["fixed", "false_positive"],
-            )
-            .count()
-        )
-
-        fixed_count = Vulnerability.objects.filter(
-            status="fixed", scan__uploaded_at__date__lte=day
-        ).count()
-
-        trend_open.append(open_count)
-        trend_fixed.append(fixed_count)
-
-    # Top Risky Assets (weighted). Count active (non-fixed / non-FP) vulns linked
-    # to a host either directly (host FK) OR via installed software, deduped per
-    # (host, vuln) so a vuln attached both ways is not counted twice.
+    # Active (non-fixed / non-FP) crit/high/medium vulns linked to a host either
+    # directly (host FK) OR via installed software, deduped per (host, vuln).
+    # Gathered once here and reused twice below: by the security score's exposure
+    # component and by the Top Risky Assets ranking.
     risk_weights = {"critical": 10, "high": 5, "medium": 2}
     active_sev_vulns = Vulnerability.objects.exclude(
         status__in=["fixed", "false_positive"]
@@ -590,6 +597,156 @@ def dashboard(request):
     ):
         host_vuln_pairs.add((row["software__hosts"], row["id"]))
 
+    # Security Score (0–100): a composite of three sub-scores so that both the
+    # remediation effort and the current open risk shape the result, and the
+    # score degrades smoothly instead of collapsing to 0 under a large backlog
+    # (the previous formula was an unbounded penalty that clamped to 0 as soon
+    # as the open count grew, ignoring everything already fixed).
+    #
+    #   R – remediation effectiveness: severity-weighted share of vulns already
+    #       fixed vs. still open. Credits patching work.
+    #   S – SLA compliance: share of open critical/high still within SLA.
+    #   E – open critical/high exposure per host, on an exponential decay curve
+    #       so heavy backlogs bend the score down without a hard cliff. Each
+    #       open crit/high is weighted by the host it sits on, so risk on
+    #       internet-exposed / business-critical hosts counts more.
+    #
+    # Weights, host-context factors and the decay constant are calibrated
+    # against the live data set; tune them here.
+    SCORE_W_REMEDIATION = 0.4
+    SCORE_W_SLA = 0.3
+    SCORE_W_EXPOSURE = 0.3
+    SEV_WEIGHTS = {"critical": 10, "high": 5, "medium": 2, "low": 1}
+    # Host-context multipliers for the exposure sub-score: an open crit/high on
+    # an internet-exposed and/or business-critical host weighs more than the
+    # same finding on an internal, low-value host.
+    EXPOSURE_FACTOR = {True: 2.0, False: 1.0}
+    HOST_CRIT_FACTOR = {"Critical": 2.0, "High": 1.5, "Medium": 1.0, "Low": 0.75}
+    NEUTRAL_HOST_FACTOR = 1.0  # unknown criticality / vuln with no host
+    # Context-weighted crit/high risk density (per host) at which the exposure
+    # sub-score falls to ~37% (1/e). Higher = more lenient. Calibrated so the
+    # current backlog lands in the honest "needs attention" band.
+    EXPOSURE_DECAY_K = 61
+
+    fixed_by_severity = {
+        "critical": status_counts["fixed_critical"],
+        "high": status_counts["fixed_high"],
+        "medium": status_counts["fixed_medium"],
+        "low": status_counts["fixed_low"],
+    }
+    weighted_open = sum(severity_map[sev] * w for sev, w in SEV_WEIGHTS.items())
+    weighted_fixed = sum(
+        (fixed_by_severity[sev] or 0) * w for sev, w in SEV_WEIGHTS.items()
+    )
+
+    # R: severity-weighted remediation ratio.
+    if weighted_fixed + weighted_open > 0:
+        remediation_subscore = (
+            100 * weighted_fixed / (weighted_fixed + weighted_open)
+        )
+    else:
+        remediation_subscore = 100
+
+    # S: share of open critical/high still within SLA (sla_breach_count already
+    # counts only breached crit/high, so it is a subset of open_crit_high).
+    open_crit_high = severity_map["critical"] + severity_map["high"]
+    if open_crit_high > 0:
+        sla_subscore = 100 * (
+            1 - min(sla_breach_count, open_crit_high) / open_crit_high
+        )
+    else:
+        sla_subscore = 100
+
+    # E: context-weighted open critical/high exposure per host on an
+    # exponential decay curve. Each open crit/high contributes its severity
+    # weight scaled by the risk of the host it sits on (exposure x criticality),
+    # taking the worst-case host for a vuln attached to several, and a neutral
+    # factor for a vuln with no host. Reuses severity_by_vuln / host_vuln_pairs
+    # (already gathered above for the risky-asset ranking) so it needs no query
+    # of its own beyond the small host-context lookup (one row per host).
+    if host_count > 0:
+        host_ctx_factor = {
+            hid: EXPOSURE_FACTOR[bool(exposed)]
+            * HOST_CRIT_FACTOR.get(crit, NEUTRAL_HOST_FACTOR)
+            for hid, crit, exposed in Host.objects.values_list(
+                "id", "criticality", "is_exposed"
+            )
+        }
+        ch_best_factor = {}
+        for host_id, vuln_id in host_vuln_pairs:
+            if severity_by_vuln[vuln_id] not in ("critical", "high"):
+                continue
+            factor = host_ctx_factor.get(host_id, NEUTRAL_HOST_FACTOR)
+            ch_best_factor[vuln_id] = max(
+                ch_best_factor.get(vuln_id, 0.0), factor
+            )
+        effective_ch_risk = sum(
+            SEV_WEIGHTS[sev] * ch_best_factor.get(vid, NEUTRAL_HOST_FACTOR)
+            for vid, sev in severity_by_vuln.items()
+            if sev in ("critical", "high")
+        )
+        exposure_density = effective_ch_risk / host_count
+        exposure_subscore = 100 * math.exp(-exposure_density / EXPOSURE_DECAY_K)
+    else:
+        exposure_subscore = 100
+
+    score = (
+        SCORE_W_REMEDIATION * remediation_subscore
+        + SCORE_W_SLA * sla_subscore
+        + SCORE_W_EXPOSURE * exposure_subscore
+    )
+
+    # Breakdown for the score's info tooltip on the dashboard.
+    score_breakdown = {
+        "remediation": {
+            "value": round(remediation_subscore),
+            "weight": round(SCORE_W_REMEDIATION * 100),
+        },
+        "sla": {
+            "value": round(sla_subscore),
+            "weight": round(SCORE_W_SLA * 100),
+        },
+        "exposure": {
+            "value": round(exposure_subscore),
+            "weight": round(SCORE_W_EXPOSURE * 100),
+        },
+    }
+
+    # Vulnerability Trend (Last 14 days): "Active" vs "Fixed", cumulative by
+    # scan upload date. Two grouped queries + a running total in Python replace
+    # the previous 28 per-day COUNT queries (each a full join to scans with a
+    # non-indexable DATE() on uploaded_at).
+    today = datetime.date.today()
+    trend_days = [today - datetime.timedelta(days=i) for i in range(13, -1, -1)]
+    trend_labels = [day.strftime("%d.%m") for day in trend_days]
+
+    def _cumulative_by_upload_date(queryset):
+        per_date = [
+            (row["day"], row["c"])
+            for row in queryset.annotate(day=TruncDate("scan__uploaded_at"))
+            .values("day")
+            .annotate(c=Count("id"))
+            if row["day"] is not None
+        ]
+        per_date.sort()
+        series = []
+        running = 0
+        idx = 0
+        for day in trend_days:
+            while idx < len(per_date) and per_date[idx][0] <= day:
+                running += per_date[idx][1]
+                idx += 1
+            series.append(running)
+        return series
+
+    trend_open = _cumulative_by_upload_date(
+        Vulnerability.objects.exclude(status__in=["fixed", "false_positive"])
+    )
+    trend_fixed = _cumulative_by_upload_date(
+        Vulnerability.objects.filter(status="fixed")
+    )
+
+    # Top Risky Assets (weighted), from the (host, vuln) pairs gathered above.
     host_risk = {}
     for host_id, vuln_id in host_vuln_pairs:
         host_risk[host_id] = (
@@ -643,11 +800,11 @@ def dashboard(request):
         "proc_time": round(avg_proc_time_ms / 1000, 2),
     }
     status_map = {
-        "open": Vulnerability.objects.filter(status="open").count(),
-        "in_progress": Vulnerability.objects.filter(status="in_progress").count(),
+        "open": status_counts["open_status"],
+        "in_progress": status_counts["in_progress"],
         "fixed": resolved_count,
         "risk_accepted": ignored_count,
-        "false_positive": Vulnerability.objects.filter(status="false_positive").count(),
+        "false_positive": status_counts["false_positive"],
     }
 
     context = {
@@ -656,6 +813,7 @@ def dashboard(request):
         "vuln_count": vuln_count,
         "severity_map": severity_map,
         "score": round(score),
+        "score_breakdown": score_breakdown,
         "trend_labels": json.dumps(trend_labels),
         "trend_open": json.dumps(trend_open),
         "trend_fixed": json.dumps(trend_fixed),
@@ -703,7 +861,18 @@ def host_list(request):
             | Q(operating_system__icontains=query)
             | Q(criticality__icontains=query)
         )
-    hosts_query = hosts_query.order_by("ip_address")
+    hosts_query, sort = apply_sort(
+        request,
+        hosts_query,
+        allowed={
+            "host": ["ip_address", "hostname"],
+            "os": "operating_system",
+            "criticality": "criticality",
+            "last_seen": "last_scanned",
+        },
+        default_key="host",
+        default_dir="asc",
+    )
 
     # Pagination
     paginator = Paginator(hosts_query, 25)  # 25 per page
@@ -727,7 +896,7 @@ def host_list(request):
     return render(
         request,
         "vuln_manager/host_list.html",
-        {"hosts": hosts, "query": query},
+        {"hosts": hosts, "query": query, "sort": sort},
     )
 
 
@@ -840,7 +1009,18 @@ def software_list(request):
             | Q(vendor__icontains=query)
             | Q(criticality__icontains=query)
         )
-    software_query = software_query.order_by("name")
+    software_query, sort = apply_sort(
+        request,
+        software_query,
+        allowed={
+            "name": "name",
+            "criticality": "criticality",
+            "version": "version",
+            "installs": "num_hosts",
+        },
+        default_key="name",
+        default_dir="asc",
+    )
 
     paginator = Paginator(software_query, 25)
     page_number = request.GET.get("page")
@@ -849,7 +1029,7 @@ def software_list(request):
     return render(
         request,
         "vuln_manager/software_list.html",
-        {"software": software, "query": query},
+        {"software": software, "query": query, "sort": sort},
     )
 
 
@@ -1138,37 +1318,87 @@ def host_form(request, pk=None):
 
 @login_required
 def port_list(request):
+    query = (request.GET.get("q") or "").strip()
     latest_scan_ids = Port.objects.values(
         "host").annotate(latest=Max("scan_id"))
     active_port_ids = [item["latest"]
                        for item in latest_scan_ids if item["latest"]]
-    active_ports = (
+    ports_query = (
         Port.objects.filter(scan_id__in=active_port_ids)
         .select_related("host")
-        .order_by("port_number")
     )
-    port_groups = {}
-    for port in active_ports:
+    if query:
+        ports_query = ports_query.filter(
+            Q(port_number__icontains=query)
+            | Q(service_name__icontains=query)
+            | Q(host__ip_address__icontains=query)
+            | Q(host__hostname__icontains=query)
+        )
+
+    # Group by (port, service): one block per exposed service, with its hosts.
+    groups_map = {}
+    for port in ports_query:
         key = (port.port_number, port.service_name)
-        if key not in port_groups:
-            port_groups[key] = []
-        port_groups[key].append(port.host)
-    sorted_ports = sorted(port_groups.items(), key=lambda x: x[0][0])
-    return render(request, "vuln_manager/port_list.html", {"port_groups": sorted_ports})
+        groups_map.setdefault(key, []).append(port.host)
+    groups = []
+    for (port_number, service_name), hosts in groups_map.items():
+        groups.append({
+            "port": port_number,
+            "service": service_name,
+            "hosts": sorted(hosts, key=lambda h: h.ip_address),
+            "count": len(hosts),
+        })
+    groups.sort(key=lambda g: (g["port"], g["service"] or ""))
+
+    paginator = Paginator(groups, 40)
+    page_number = request.GET.get("page")
+    port_groups = paginator.get_page(page_number)
+    return render(
+        request,
+        "vuln_manager/port_list.html",
+        {"port_groups": port_groups, "query": query},
+    )
 
 
 @login_required
 def scan_list(request):
-    scans = list(
-        Scan.objects.annotate(num_vulns=Count("vulnerabilities")).order_by(
-            "-uploaded_at"
-        )
-    )
+    query = (request.GET.get("q") or "").strip()
+    base = Scan.objects.annotate(num_vulns=Count("vulnerabilities"))
+
+    # Build the previous-same-type chain over the full chronological set so the
+    # "compare diff" link stays correct regardless of display sort/pagination.
+    prev_map = {}
     last_by_type = {}
-    for scan in reversed(scans):
-        scan.previous_same_type = last_by_type.get(scan.scan_type)
-        last_by_type[scan.scan_type] = scan
-    return render(request, "vuln_manager/scan_list.html", {"scans": scans})
+    for s in base.order_by("uploaded_at").values("id", "scan_type"):
+        prev_map[s["id"]] = last_by_type.get(s["scan_type"])
+        last_by_type[s["scan_type"]] = s["id"]
+
+    scans_query = base
+    if query:
+        scans_query = scans_query.filter(
+            Q(scan_type__icontains=query) | Q(raw_file__icontains=query)
+        )
+    scans_query, sort = apply_sort(
+        request,
+        scans_query,
+        allowed={
+            "type": "scan_type",
+            "date": "uploaded_at",
+            "findings": "num_vulns",
+        },
+        default_key="date",
+        default_dir="desc",
+    )
+
+    paginator = Paginator(scans_query, 50)
+    page = paginator.get_page(request.GET.get("page"))
+    for scan in page:
+        scan.previous_same_type = prev_map.get(scan.id)
+    return render(
+        request,
+        "vuln_manager/scan_list.html",
+        {"scans": page, "query": query, "sort": sort},
+    )
 
 
 @login_required
@@ -1366,7 +1596,20 @@ def vuln_list(request):
             | Q(software__version__icontains=query)
         ).distinct()
 
-    vulns_query = vulns_query.order_by("-severity", "cve_id")
+    vulns_query = vulns_query.annotate(sev_score=_severity_order_case())
+    vulns_query, sort = apply_sort(
+        request,
+        vulns_query,
+        allowed={
+            "cve": "cve_id",
+            "severity": ["sev_score", "cve_id"],
+            "name": "name",
+            "target": ["host__ip_address", "software__name"],
+            "status": "status",
+        },
+        default_key="severity",
+        default_dir="desc",
+    )
 
     # Pagination
     paginator = Paginator(vulns_query, 50)  # 50 per page for vulns
@@ -1395,6 +1638,7 @@ def vuln_list(request):
             "status_filter": status_filter,
             "metrics": metrics,
             "query": query,
+            "sort": sort,
         },
     )
 
@@ -1410,12 +1654,41 @@ def vuln_detail(request, pk):
         and bool(wrike_extension.api_token)
         and bool(settings_obj.wrike_folder_id)
     )
+
+    # All hosts touched by this finding: the directly linked host plus every
+    # host the affected software is installed on (deduplicated). Grouped into
+    # the same exposure x criticality clusters as the software detail page.
+    affected = {}
+    if vuln.host:
+        affected[vuln.host.id] = vuln.host
+    if vuln.software:
+        for host in vuln.software.hosts.all():
+            affected[host.id] = host
+    affected_count = len(affected)
+    cluster_1, cluster_2, cluster_3, cluster_4 = [], [], [], []
+    for host in sorted(affected.values(), key=lambda h: h.ip_address):
+        is_crit = host.criticality in ["Critical", "High"]
+        is_open = host.is_exposed
+        if is_crit and is_open:
+            cluster_1.append(host)
+        elif not is_crit and is_open:
+            cluster_2.append(host)
+        elif is_crit and not is_open:
+            cluster_3.append(host)
+        else:
+            cluster_4.append(host)
+
     return render(
         request,
         "vuln_manager/vuln_detail.html",
         {
             "vuln": vuln,
             "wrike_ready": wrike_ready,
+            "affected_count": affected_count,
+            "cluster_1": cluster_1,
+            "cluster_2": cluster_2,
+            "cluster_3": cluster_3,
+            "cluster_4": cluster_4,
             "audit_events": VulnerabilityAuditEvent.objects.filter(
                 vulnerability=vuln
             ).order_by("-created_at")[:20],
@@ -1487,13 +1760,26 @@ def ki_dashboard(request):
 
     all_vulns_query = (
         Vulnerability.objects.exclude(status="false_positive")
-        .order_by("-severity", "cve_id")
         .distinct()
     )
 
     # AI Stats
     triaged_vulns = all_vulns_query.exclude(ai_result="tbd").count()
     action_required = all_vulns_query.filter(ai_result="Act").count()
+
+    all_vulns_query = all_vulns_query.annotate(sev_score=_severity_order_case())
+    all_vulns_query, sort = apply_sort(
+        request,
+        all_vulns_query,
+        allowed={
+            "severity": ["sev_score", "cve_id"],
+            "cve": "cve_id",
+            "asset": ["host__ip_address", "software__name"],
+            "ai": "ai_result",
+        },
+        default_key="severity",
+        default_dir="desc",
+    )
     avg_proc_time_ms = (
         Vulnerability.objects.filter(ai_proc_time__gt=0).aggregate(Avg("ai_proc_time"))[
             "ai_proc_time__avg"
@@ -1522,6 +1808,7 @@ def ki_dashboard(request):
         "ai": ai,
         "ai_module_active": ai_extension.is_active,
         "selected_vuln": selected_vuln,
+        "sort": sort,
     }
     return render(request, "vuln_manager/ki_dashboard.html", context)
 
@@ -1627,13 +1914,32 @@ def toggle_extension(request, name_id):
 def user_admin(request):
     if not request.user.is_staff:
         return HttpResponseForbidden("forbidden")
-    managed_users = User.objects.all().order_by("username")
+    query = (request.GET.get("q") or "").strip()
+    managed_users = User.objects.all()
+    if query:
+        managed_users = managed_users.filter(
+            Q(username__icontains=query) | Q(email__icontains=query)
+        )
+    managed_users, sort = apply_sort(
+        request,
+        managed_users,
+        allowed={
+            "username": "username",
+            "email": "email",
+            "role": "is_staff",
+            "last_login": "last_login",
+        },
+        default_key="username",
+        default_dir="asc",
+    )
     system_settings = get_system_settings()
     return render(
         request,
         "vuln_manager/user_admin.html",
         {
             "managed_users": managed_users,
+            "query": query,
+            "sort": sort,
             "registration_disabled": system_settings.disable_register,
             "sla_critical_days": system_settings.sla_critical_days,
             "sla_high_days": system_settings.sla_high_days,
@@ -1658,7 +1964,7 @@ def audit_trail(request):
         "user",
         "vulnerability__host",
         "vulnerability__software",
-    ).order_by("-created_at")
+    )
 
     if action_filter:
         events_query = events_query.filter(action=action_filter)
@@ -1672,6 +1978,19 @@ def audit_trail(request):
             | Q(details__icontains=query)
         )
 
+    events_query, sort = apply_sort(
+        request,
+        events_query,
+        allowed={
+            "time": "created_at",
+            "action": "action",
+            "finding": "vulnerability__cve_id",
+            "actor": "actor",
+        },
+        default_key="time",
+        default_dir="desc",
+    )
+
     paginator = Paginator(events_query, 50)
     page_number = request.GET.get("page")
     events = paginator.get_page(page_number)
@@ -1684,6 +2003,7 @@ def audit_trail(request):
             "query": query,
             "action_filter": action_filter,
             "action_choices": VulnerabilityAuditEvent.ACTION_CHOICES,
+            "sort": sort,
         },
     )
 

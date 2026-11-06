@@ -23,7 +23,39 @@
 <!-- KPI strip -->
 <div class="grid grid-cols-2 lg:grid-cols-4 bg-surface-container border border-outline-variant rounded-md mb-4">
     <div class="p-4 border-b lg:border-b-0 border-r border-outline-variant">
-        <p class="text-[11px] text-outline mb-2">Security score</p>
+        <div class="group relative mb-2 flex items-center gap-1 w-max">
+            <p class="text-[11px] text-outline">Security score</p>
+            <span class="material-symbols-outlined text-[14px] leading-none text-outline cursor-help hover:text-on-surface transition-colors" tabindex="0">info</span>
+            <!-- Hover/focus info card: how the score is calculated -->
+            <div class="pointer-events-none absolute left-0 top-full z-30 mt-1.5 w-80 max-w-[calc(100vw-3rem)] rounded-md border border-outline-variant bg-surface-container-high shadow-lg p-3.5 opacity-0 translate-y-1 transition-all duration-150 group-hover:opacity-100 group-hover:translate-y-0 group-focus-within:opacity-100 group-focus-within:translate-y-0">
+                <p class="text-[12px] font-semibold text-on-surface">How this score is calculated</p>
+                <p class="mt-1 text-[11px] leading-relaxed text-on-surface-variant">A weighted blend of three factors (0&ndash;100). It rewards remediation and penalises current open risk, so it never collapses to 0 just because of a large backlog.</p>
+                <div class="mt-2.5 space-y-2">
+                    <div>
+                        <div class="flex items-baseline justify-between gap-2">
+                            <span class="text-[11px] font-medium text-on-surface">Remediation effectiveness</span>
+                            <span class="text-[11px] tabular-nums text-on-surface-variant">{{ score_breakdown.remediation.value }} <span class="text-outline">&middot; {{ score_breakdown.remediation.weight }}%</span></span>
+                        </div>
+                        <p class="text-[10px] leading-snug text-outline">Severity-weighted share of vulns already fixed vs. still open.</p>
+                    </div>
+                    <div>
+                        <div class="flex items-baseline justify-between gap-2">
+                            <span class="text-[11px] font-medium text-on-surface">SLA compliance</span>
+                            <span class="text-[11px] tabular-nums text-on-surface-variant">{{ score_breakdown.sla.value }} <span class="text-outline">&middot; {{ score_breakdown.sla.weight }}%</span></span>
+                        </div>
+                        <p class="text-[10px] leading-snug text-outline">Share of open critical/high findings still within SLA.</p>
+                    </div>
+                    <div>
+                        <div class="flex items-baseline justify-between gap-2">
+                            <span class="text-[11px] font-medium text-on-surface">Open exposure</span>
+                            <span class="text-[11px] tabular-nums text-on-surface-variant">{{ score_breakdown.exposure.value }} <span class="text-outline">&middot; {{ score_breakdown.exposure.weight }}%</span></span>
+                        </div>
+                        <p class="text-[10px] leading-snug text-outline">Open critical/high per host, weighted up for internet-exposed &amp; business-critical hosts.</p>
+                    </div>
+                </div>
+                <p class="mt-2.5 pt-2 border-t border-outline-variant text-[10px] tabular-nums text-on-surface-variant">Score = {{ score_breakdown.remediation.weight }}%&middot;R + {{ score_breakdown.sla.weight }}%&middot;S + {{ score_breakdown.exposure.weight }}%&middot;E = <span class="font-semibold text-on-surface">{{ score }}</span></p>
+            </div>
+        </div>
         <div class="flex items-baseline gap-1.5 tabular-nums">
             <span class="text-[26px] font-bold {% if score > 80 %}text-primary{% elif score > 50 %}text-tertiary{% else %}text-error{% endif %}">{{ score }}</span>
             <span class="text-[11px] text-outline">/ 100</span>

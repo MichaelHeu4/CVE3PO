@@ -1,0 +1,42 @@
+{% comment %}
+Collapsible host cluster for software_detail.
+Params: label, risk, accent (error|tertiary|secondary|primary), cluster (hosts),
+        ai (ai result), show_ai (truthy), software.
+{% endcomment %}
+<details class="group border border-outline-variant rounded-md bg-surface-container-low overflow-hidden" {% if cluster %}open{% endif %}>
+    <summary class="flex items-center justify-between p-3 cursor-pointer list-none select-none hover:bg-surface-container-high/50 transition-colors">
+        <div class="flex items-center gap-2.5">
+            <span class="w-1.5 h-8 rounded-full {% if accent == 'error' %}bg-error{% elif accent == 'tertiary' %}bg-tertiary{% elif accent == 'secondary' %}bg-outline{% else %}bg-primary{% endif %}"></span>
+            <div>
+                <span class="block text-xs font-semibold text-on-surface">{{ label }}</span>
+                <span class="block text-[11px] text-outline">{{ risk }}</span>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            {% if show_ai %}<span class="badge-soft {% if ai == 'Act' %}!text-error !border-error/30{% elif ai == 'Attend' %}!text-tertiary !border-tertiary/30{% endif %}">AI: {{ ai }}</span>{% endif %}
+            <span class="badge-soft">{{ cluster|length }}</span>
+            <span class="material-symbols-outlined text-outline text-base transition-transform group-open:rotate-180">expand_more</span>
+        </div>
+    </summary>
+    <div class="p-2 border-t border-outline-variant space-y-1.5">
+        {% for host in cluster %}
+        <div class="flex items-center justify-between p-2.5 bg-surface-container rounded-md">
+            <div>
+                <a href="{% url 'host_detail' host.id %}" class="font-medium text-on-surface hover:text-primary text-sm">{{ host.ip_address }}</a>
+                <p class="text-[11px] text-outline">{{ host.hostname|default:"Anonymous host" }}</p>
+            </div>
+            <div class="flex items-center gap-1">
+                <a href="{% url 'host_detail' host.id %}" class="icon-btn" aria-label="View"><span class="material-symbols-outlined text-base">visibility</span></a>
+                {% if software %}
+                <form action="{% url 'remove_host_from_software' software.id host.id %}" method="POST" onsubmit="return confirm('Remove host association with this software?')" class="inline">
+                    {% csrf_token %}
+                    <button type="submit" class="icon-btn-danger" aria-label="Unlink"><span class="material-symbols-outlined text-base">link_off</span></button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+        {% empty %}
+        <p class="text-[11px] text-outline text-center py-2">No assets</p>
+        {% endfor %}
+    </div>
+</details>

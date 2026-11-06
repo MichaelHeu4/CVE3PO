@@ -98,6 +98,24 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": db_path,
+        # SQLite serializes all writes on a single lock. Background feed
+        # enrichment (see vuln_manager/signals.py) writes from worker threads
+        # while web requests also write, so without tuning a request can block
+        # on the write lock past gunicorn's timeout and get SIGKILLed.
+        # - WAL lets readers proceed during a write and reduces contention.
+        # - timeout raises SQLite's busy timeout so a blocked write waits
+        #   instead of immediately raising "database is locked".
+        # - IMMEDIATE takes the write lock at BEGIN, avoiding deadlock-style
+        #   "database is locked" errors under concurrent writers.
+        "OPTIONS": {
+            "timeout": 30,
+            "transaction_mode": "IMMEDIATE",
+            "init_command": (
+                "PRAGMA journal_mode=WAL;"
+                "PRAGMA synchronous=NORMAL;"
+                "PRAGMA foreign_keys=ON;"
+            ),
+        },
     }
 }
 

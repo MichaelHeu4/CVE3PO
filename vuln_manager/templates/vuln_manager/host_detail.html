@@ -1,306 +1,197 @@
 {% extends 'vuln_manager/base.html' %}
 
-{% block title %}Asset Details: {{ host.ip_address }}{% endblock %}
-
-{% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
+{% block title %}{{ host.ip_address }}{% endblock %}
+{% block header_title %}Asset{% endblock %}
 
 {% block content %}
-<nav class="mb-5">
-    <ol class="flex items-center gap-2 text-[10px] font-bold text-outline/50">
-        <li><a href="{% url 'dashboard' %}" class="hover:text-primary transition-colors">Dashboard</a></li>
-        <li class="material-symbols-outlined text-xs">chevron_right</li>
-        <li><a href="{% url 'host_list' %}" class="hover:text-primary transition-colors">Assets</a></li>
-        <li class="material-symbols-outlined text-xs">chevron_right</li>
+<nav class="mb-4">
+    <ol class="flex items-center gap-1.5 text-xs text-outline">
+        <li><a href="{% url 'host_list' %}" class="hover:text-primary">Assets</a></li>
+        <li class="material-symbols-outlined text-sm">chevron_right</li>
         <li class="text-on-surface">{{ host.ip_address }}</li>
     </ol>
 </nav>
 
-<!-- Asset Header -->
-<section class="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
-    <div class="flex items-center gap-4">
-        <div class="w-20 h-20 rounded-md bg-surface-container-highest border border-outline-variant flex items-center justify-center text-primary">
-            <span class="material-symbols-outlined text-2xl">dns</span>
+<!-- Header -->
+<section class="page-header">
+    <div class="flex items-center gap-3">
+        <div class="w-12 h-12 rounded-md bg-surface-container-high border border-outline-variant flex items-center justify-center text-primary">
+            <span class="material-symbols-outlined">dns</span>
         </div>
         <div>
-            <div class="flex items-center gap-2 mb-2">
-                <span class="px-2 py-0.5 rounded bg-primary/10 text-primary text-[11px] font-bold border border-primary/20">Managed Asset</span>
-                <span class="w-1.5 h-1.5 rounded-full bg-outline-variant/30"></span>
-                <span class="text-[10px] text-outline font-bold">{{ host.hostname|default:"Unidentified Host" }}</span>
-                {% if host.operating_system %}
-                <span class="w-1.5 h-1.5 rounded-full bg-outline-variant/30"></span>
-                <span class="text-[10px] text-primary font-bold">{{ host.operating_system }}</span>
-                {% endif %}
-                <span class="w-1.5 h-1.5 rounded-full bg-outline-variant/30"></span>
-                <span class="text-[10px] {% if host.is_exposed %}text-error{% else %}text-outline{% endif %} font-bold">
-                    {% if host.is_exposed %}Internet Facing{% else %}Internal{% endif %}
-                </span>
+            <div class="flex flex-wrap items-center gap-2 mb-1 text-[11px] text-outline">
+                <span>{{ host.hostname|default:"Unidentified host" }}</span>
+                {% if host.operating_system %}<span>· {{ host.operating_system }}</span>{% endif %}
+                <span class="{% if host.is_exposed %}text-error{% endif %}">· {% if host.is_exposed %}Internet facing{% else %}Internal{% endif %}</span>
             </div>
-            <h1 class="font-headline font-bold text-2xl md:text-2xl text-on-surface tracking-tight">{{ host.ip_address }}</h1>
+            <h1 class="page-title">{{ host.ip_address }}</h1>
         </div>
     </div>
-    
-    <div class="flex items-center gap-4">
-        <div class="bg-surface-container-high px-6 py-4 rounded-md border border-outline-variant flex items-center gap-4">
-            <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
-                {% if has_agent_data %}
-                <span class="material-symbols-outlined text-primary text-xl" style="font-variation-settings: 'FILL' 1;">sensors</span>
-                {% endif %}
-            </div>
-            <div>
-                <p class="text-[11px] text-outline font-bold mb-0.5">Global Priority</p>
-                <p class="font-bold {%if host.criticality == 'Critical' %}text-error{%elif host.criticality == 'High' %}text-error{% elif host.criticality == 'Medium' %}text-tertiary{% else %}text-primary{% endif %} text-sm">
-                    {{ host.criticality|default:"NOT DEFINED" }}
-                </p>
-            </div>
-        </div>
+    <div class="flex items-center gap-2">
+        <div class="badge-soft">Priority: <span class="ml-1 {% if host.criticality == 'Critical' or host.criticality == 'High' %}!text-error{% elif host.criticality == 'Medium' %}!text-tertiary{% endif %}">{{ host.criticality|default:"Not set" }}</span></div>
         <form action="{% url 'delete_host' host.id %}" method="POST" onsubmit="return confirm('Delete host and its data?')">
             {% csrf_token %}
-            <button type="submit" class="w-14 h-14 rounded-md bg-surface-container-highest border border-error/20 text-error hover:bg-error hover:text-surface hover:border-error transition-all flex items-center justify-center group">
-                <span class="material-symbols-outlined text-2xl transition-transform group-hover:scale-110">delete</span>
-            </button>
+            <button type="submit" class="btn btn-danger"><span class="material-symbols-outlined">delete</span></button>
         </form>
     </div>
 </section>
 
-<!-- Tab Navigation -->
-<div class="flex items-center gap-1 mb-5 bg-surface-container-low p-1.5 rounded-md border border-outline-variant w-fit">
-    <a href="?tab=threats{% if show_mode %}&mode={{ show_mode }}{% endif %}{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="px-6 py-2.5 rounded-xl text-[10px] font-bold transition-all {% if active_tab == 'threats' %}bg-surface-variant text-on-surface {% else %}text-outline hover:text-on-surface{% endif %} flex items-center gap-2">
-        <span class="material-symbols-outlined text-sm">gpp_maybe</span> Threats
-    </a>
-    <a href="?tab=inventory{% if inventory_query %}&inv_q={{ inventory_query|urlencode }}{% endif %}" class="px-6 py-2.5 rounded-xl text-[10px] font-bold transition-all {% if active_tab == 'inventory' %}bg-surface-variant text-on-surface {% else %}text-outline hover:text-on-surface{% endif %} flex items-center gap-2">
-        <span class="material-symbols-outlined text-sm">inventory_2</span> Inventory
-    </a>
-    <a href="?tab=infrastructure" class="px-6 py-2.5 rounded-xl text-[10px] font-bold transition-all {% if active_tab == 'infrastructure' %}bg-surface-variant text-on-surface {% else %}text-outline hover:text-on-surface{% endif %} flex items-center gap-2">
-        <span class="material-symbols-outlined text-sm">router</span> Infrastructure
-    </a>
+<!-- Tabs -->
+<div class="flex items-center gap-1 mb-4 p-1 rounded-md bg-surface-container border border-outline-variant w-fit">
+    <a href="?tab=threats{% if show_mode %}&mode={{ show_mode }}{% endif %}{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="chip border-0 {% if active_tab == 'threats' %}chip-on{% endif %}"><span class="material-symbols-outlined text-sm mr-1">gpp_maybe</span> Threats</a>
+    <a href="?tab=inventory{% if inventory_query %}&inv_q={{ inventory_query|urlencode }}{% endif %}" class="chip border-0 {% if active_tab == 'inventory' %}chip-on{% endif %}"><span class="material-symbols-outlined text-sm mr-1">inventory_2</span> Inventory</a>
+    <a href="?tab=infrastructure" class="chip border-0 {% if active_tab == 'infrastructure' %}chip-on{% endif %}"><span class="material-symbols-outlined text-sm mr-1">router</span> Infrastructure</a>
 </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-6">
-    <!-- Main Content Area (Tabs) -->
-    <div class="lg:col-span-8">
-        
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+    <div class="lg:col-span-8 space-y-4">
         {% if active_tab == 'threats' %}
-        <!-- THREATS TAB -->
-        <div class="bg-surface-container rounded-md p-5 mb-5">
-            <h5 class="font-headline font-bold text-xs text-outline mb-5">Attack Surface Trend</h5>
-            <div style="height: 250px;">
-                <canvas id="hostTimeline"></canvas>
-            </div>
+        <div class="card p-4">
+            <h5 class="card-title mb-3">Attack surface trend</h5>
+            <div style="height: 240px;"><canvas id="hostTimeline"></canvas></div>
         </div>
 
-        <div class="bg-surface-container rounded-md p-5">
-            <div class="flex flex-col md:flex-row md:items-center justify-between mb-5 gap-4">
-                <h5 class="font-headline font-bold text-xs text-outline">Detected Threats</h5>
-                <div class="flex items-center gap-2 bg-surface-container-low p-1 rounded-xl">
-                    <a href="?tab=threats&mode=all{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="px-4 py-1.5 rounded-lg text-[11px] font-bold transition-all {% if show_mode == 'all' %}bg-surface-variant text-on-surface {% else %}text-outline hover:text-on-surface{% endif %}">All</a>
-                    <a href="?tab=threats&mode=direct{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="px-4 py-1.5 rounded-lg text-[11px] font-bold transition-all {% if show_mode == 'direct' %}bg-surface-variant text-on-surface {% else %}text-outline hover:text-on-surface{% endif %}">Direct</a>
+        <div class="card">
+            <div class="card-head flex-wrap gap-2">
+                <h5 class="card-title">Detected threats</h5>
+                <div class="flex items-center gap-1 p-1 rounded-md bg-surface-container-low border border-outline-variant">
+                    <a href="?tab=threats&mode=all{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="chip border-0 h-7 {% if show_mode == 'all' %}chip-on{% endif %}">All</a>
+                    <a href="?tab=threats&mode=direct{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="chip border-0 h-7 {% if show_mode == 'direct' %}chip-on{% endif %}">Direct</a>
                 </div>
             </div>
-            <div class="mb-6 flex flex-wrap items-center gap-2">
-                <span class="text-[11px] text-outline font-bold">Severity</span>
-                <a href="?tab=threats{% if show_mode %}&mode={{ show_mode }}{% endif %}" class="px-3 py-1 rounded-lg text-[11px] font-bold border transition-all {% if not severity_filter %}bg-surface-variant text-on-surface border-outline-variant{% else %}text-outline border-outline-variant hover:text-on-surface{% endif %}">All</a>
+            <div class="px-4 py-2 flex flex-wrap items-center gap-1.5 border-b border-outline-variant">
+                <span class="text-[11px] text-outline mr-1">Severity</span>
+                <a href="?tab=threats{% if show_mode %}&mode={{ show_mode }}{% endif %}" class="chip h-7 {% if not severity_filter %}chip-on{% endif %}">All</a>
                 {% for value, label in severity_choices %}
-                <a href="?tab=threats{% if show_mode %}&mode={{ show_mode }}{% endif %}&severity={{ value }}" class="px-3 py-1 rounded-lg text-[11px] font-bold border transition-all {% if severity_filter == value %}bg-surface-variant text-on-surface border-outline-variant{% else %}text-outline border-outline-variant hover:text-on-surface{% endif %}">
-                    {{ label }}
-                </a>
+                <a href="?tab=threats{% if show_mode %}&mode={{ show_mode }}{% endif %}&severity={{ value }}" class="chip h-7 {% if severity_filter == value %}chip-on{% endif %}">{{ label }}</a>
                 {% endfor %}
             </div>
-            
             <div class="overflow-x-auto">
-                <table class="w-full text-left">
+                <table class="data-table">
                     <thead>
-                        <tr class="text-[11px] font-bold text-outline/50 border-b border-outline-variant">
-                            <th class="px-4 py-3">Severity</th>
-                            <th class="px-4 py-3">CVE</th>
-                            <th class="px-4 py-3">Threat</th>
-                            <th class="px-4 py-3">Scan</th>
-                            <th class="px-4 py-3 text-right">Action</th>
-                        </tr>
+                        <tr><th>Severity</th><th>CVE</th><th>Threat</th><th>Scan</th><th class="text-right">Action</th></tr>
                     </thead>
                     <tbody>
                         {% for vuln in vulns %}
-                        <tr class="border-b border-outline-variant hover:bg-surface-container-high/40 transition-colors">
-                            <td class="px-4 py-3">
-                                <span class="badge severity-{{ vuln.severity|lower }} rounded-full px-3 py-1 text-[11px] font-bold min-w-[70px] inline-block text-center">{{ vuln.severity|upper }}</span>
+                        <tr>
+                            <td><span class="badge severity-{{ vuln.severity|lower }}">{{ vuln.severity|upper }}</span></td>
+                            <td class="whitespace-nowrap font-medium text-on-surface">{{ vuln.cve_id }}</td>
+                            <td class="max-w-md">
+                                <div class="truncate text-on-surface">{% if vuln.software %}<span class="text-primary">[{{ vuln.software.name }}]</span> {% endif %}{{ vuln.name }}</div>
+                                <div class="truncate text-[11px] text-outline">{{ vuln.description|default:"No details." }}</div>
                             </td>
-                            <td class="px-4 py-3 text-[10px] font-bold tracking-wider text-on-surface">{{ vuln.cve_id }}</td>
-                            <td class="px-4 py-3">
-                                <p class="text-[10px] text-on-surface line-clamp-1">
-                                    {% if vuln.software %}<span class="text-primary font-bold">[{{ vuln.software.name }}]</span> {% endif %}
-                                    {{ vuln.name }}
-                                </p>
-                                <p class="text-[10px] text-on-surface-variant line-clamp-1 mt-1">{{ vuln.description|default:"No technical details provided." }}</p>
-                            </td>
-                            <td class="px-4 py-3 text-[10px] font-bold text-outline">#{{ vuln.scan.id }}</td>
-                            <td class="px-4 py-3 text-right">
-                                <a href="{% url 'vuln_detail' vuln.id %}" class="text-[10px] font-bold text-primary hover:underline">Details</a>
-                            </td>
+                            <td class="text-outline">#{{ vuln.scan.id }}</td>
+                            <td class="text-right"><a href="{% url 'vuln_detail' vuln.id %}" class="text-primary text-xs font-medium hover:underline">Details</a></td>
                         </tr>
                         {% empty %}
-                        <tr>
-                            <td colspan="5" class="text-center py-12 text-outline text-[10px] font-bold">No Active Threats Detected</td>
-                        </tr>
+                        <tr><td colspan="5">{% include 'vuln_manager/partials/_empty.html' with icon='verified' title='No active threats' %}</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
-
-            <!-- Threats Pagination -->
             {% if vulns.paginator.num_pages > 1 %}
-            <div class="mt-8 flex items-center justify-between pt-6 border-t border-outline-variant">
-                <p class="text-[11px] font-bold text-outline">Page {{ vulns.number }} of {{ vulns.paginator.num_pages }}</p>
-                <div class="flex gap-2">
-                    {% if vulns.has_previous %}
-                    <a href="?tab=threats&vuln_page={{ vulns.previous_page_number }}{% if show_mode %}&mode={{ show_mode }}{% endif %}{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant"><span class="material-symbols-outlined text-sm">chevron_left</span></a>
-                    {% endif %}
-                    {% if vulns.has_next %}
-                    <a href="?tab=threats&vuln_page={{ vulns.next_page_number }}{% if show_mode %}&mode={{ show_mode }}{% endif %}{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant"><span class="material-symbols-outlined text-sm">chevron_right</span></a>
-                    {% endif %}
+            <div class="pagination">
+                <span>Page {{ vulns.number }} of {{ vulns.paginator.num_pages }}</span>
+                <div class="flex gap-1.5">
+                    {% if vulns.has_previous %}<a href="?tab=threats&vuln_page={{ vulns.previous_page_number }}{% if show_mode %}&mode={{ show_mode }}{% endif %}{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="page-btn"><span class="material-symbols-outlined text-base">chevron_left</span></a>{% endif %}
+                    {% if vulns.has_next %}<a href="?tab=threats&vuln_page={{ vulns.next_page_number }}{% if show_mode %}&mode={{ show_mode }}{% endif %}{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="page-btn"><span class="material-symbols-outlined text-base">chevron_right</span></a>{% endif %}
                 </div>
             </div>
             {% endif %}
         </div>
 
         {% elif active_tab == 'inventory' %}
-        <!-- INVENTORY TAB -->
-        <div class="bg-surface-container rounded-md p-5">
-            <div class="flex flex-col md:flex-row md:items-center justify-between mb-5 gap-4">
-                <h5 class="font-headline font-bold text-xs text-outline">Software Inventory</h5>
-                <form method="GET" class="relative w-full md:w-96">
+        <div class="card">
+            <div class="card-head flex-wrap gap-2">
+                <h5 class="card-title">Software inventory</h5>
+                <form method="GET" class="search w-full md:w-80">
                     <input type="hidden" name="tab" value="inventory">
-                    <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm">search</span>
-                    <input type="text" name="inv_q" placeholder="Search components across all inventory..." value="{{ inventory_query|default:'' }}" class="w-full bg-surface-container-low border-none rounded-xl pl-10 pr-24 py-2 text-[10px] text-on-surface focus:ring-1 focus:ring-primary/30">
-                    <button type="submit" class="absolute right-1 top-1/2 -translate-y-1/2 px-3 py-1 rounded-lg bg-primary text-surface text-[11px] font-bold">Search</button>
+                    <span class="material-symbols-outlined search-icon">search</span>
+                    <input type="text" name="inv_q" placeholder="Search components…" value="{{ inventory_query|default:'' }}" class="search-input">
                 </form>
             </div>
-            
             <div class="overflow-x-auto">
-                <table class="w-full text-left" id="swTable">
-                    <thead>
-                        <tr class="text-[11px] font-bold text-outline/50 border-b border-outline-variant">
-                            <th class="px-4 py-3">Component</th>
-                            <th class="px-4 py-3">Version</th>
-                            <th class="px-4 py-3 text-right">Security</th>
-                        </tr>
-                    </thead>
+                <table class="data-table">
+                    <thead><tr><th>Component</th><th>Version</th><th class="text-right">Security</th></tr></thead>
                     <tbody>
                         {% for sw in installed_software %}
-                        <tr class="border-b border-outline-variant hover:bg-surface-container-high/40 transition-colors cursor-pointer" onclick="window.location='{% url 'software_detail' sw.id %}'">
-                            <td class="px-4 py-3">
-                                <div class="flex items-center gap-3">
-                                    <span class="material-symbols-outlined text-outline text-lg">deployed_code</span>
-                                    <span class="text-xs font-bold text-on-surface">{{ sw.name }}</span>
-                                </div>
-                            </td>
-                            <td class="px-4 py-3 text-[10px] font-bold text-on-surface-variant">{{ sw.version|default:"-" }}</td>
-                            <td class="px-4 py-3 text-right">
-                                {% if sw.active_vulns > 0 %}
-                                <span class="bg-error/10 text-error px-3 py-1 rounded-full text-[11px] font-bold">{{ sw.active_vulns }} Vulns</span>
-                                {% else %}
-                                <span class="text-[11px] font-bold text-primary opacity-50">Secure</span>
-                                {% endif %}
-                            </td>
+                        <tr class="cursor-pointer" onclick="window.location='{% url 'software_detail' sw.id %}'">
+                            <td><span class="inline-flex items-center gap-2 font-medium text-on-surface"><span class="material-symbols-outlined text-base text-outline">deployed_code</span>{{ sw.name }}</span></td>
+                            <td class="text-on-surface-variant">{{ sw.version|default:"—" }}</td>
+                            <td class="text-right">{% if sw.active_vulns > 0 %}<span class="badge-soft !text-error !border-error/30">{{ sw.active_vulns }} vulns</span>{% else %}<span class="text-primary text-xs">Secure</span>{% endif %}</td>
                         </tr>
                         {% empty %}
-                        <tr>
-                            <td colspan="3" class="text-center py-12 text-outline text-[10px] font-bold">No data collected</td>
-                        </tr>
+                        <tr><td colspan="3">{% include 'vuln_manager/partials/_empty.html' with icon='inventory_2' title='No data collected' %}</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
-
-            <!-- Software Pagination -->
             {% if installed_software.paginator.num_pages > 1 %}
-            <div class="mt-8 flex items-center justify-between pt-6 border-t border-outline-variant">
-                <p class="text-[11px] font-bold text-outline">Page {{ installed_software.number }} of {{ installed_software.paginator.num_pages }}</p>
-                <div class="flex gap-2">
-                    {% if installed_software.has_previous %}
-                    <a href="?tab=inventory&sw_page={{ installed_software.previous_page_number }}{% if inventory_query %}&inv_q={{ inventory_query|urlencode }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant"><span class="material-symbols-outlined text-sm">chevron_left</span></a>
-                    {% endif %}
-                    {% if installed_software.has_next %}
-                    <a href="?tab=inventory&sw_page={{ installed_software.next_page_number }}{% if inventory_query %}&inv_q={{ inventory_query|urlencode }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant"><span class="material-symbols-outlined text-sm">chevron_right</span></a>
-                    {% endif %}
+            <div class="pagination">
+                <span>Page {{ installed_software.number }} of {{ installed_software.paginator.num_pages }}</span>
+                <div class="flex gap-1.5">
+                    {% if installed_software.has_previous %}<a href="?tab=inventory&sw_page={{ installed_software.previous_page_number }}{% if inventory_query %}&inv_q={{ inventory_query|urlencode }}{% endif %}" class="page-btn"><span class="material-symbols-outlined text-base">chevron_left</span></a>{% endif %}
+                    {% if installed_software.has_next %}<a href="?tab=inventory&sw_page={{ installed_software.next_page_number }}{% if inventory_query %}&inv_q={{ inventory_query|urlencode }}{% endif %}" class="page-btn"><span class="material-symbols-outlined text-base">chevron_right</span></a>{% endif %}
                 </div>
             </div>
             {% endif %}
         </div>
 
         {% elif active_tab == 'infrastructure' %}
-        <!-- INFRASTRUCTURE TAB -->
-        <div class="bg-surface-container rounded-md p-5">
-            <h5 class="font-headline font-bold text-xs text-outline mb-5">Network & Services</h5>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="card">
+            <div class="card-head"><h5 class="card-title">Network &amp; services</h5></div>
+            <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
                 {% for port in active_ports %}
-                <div class="flex items-center justify-between p-5 bg-surface-container-low rounded-md border border-outline-variant">
-                    <div class="flex items-center gap-4">
-                        <div class="w-10 h-10 rounded-xl bg-primary/5 flex items-center justify-center text-primary font-bold text-sm">{{ port.port_number }}</div>
-                        <div>
-                            <p class="text-xs font-bold text-on-surface">{{ port.service_name|upper }}</p>
-                            <p class="text-[11px] text-outline">Active Service</p>
-                        </div>
+                <div class="flex items-center justify-between p-3 bg-surface-container-low rounded-md border border-outline-variant">
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-md bg-surface-container-high flex items-center justify-center text-primary font-semibold text-sm tabular-nums">{{ port.port_number }}</div>
+                        <div><p class="text-sm font-medium text-on-surface">{{ port.service_name|upper }}</p><p class="text-[11px] text-outline">Active service</p></div>
                     </div>
                     <span class="w-2 h-2 rounded-full bg-primary"></span>
                 </div>
                 {% empty %}
-                <p class="text-outline text-[10px] font-bold py-8 text-center col-span-2">No active ports identified</p>
+                <p class="text-outline text-xs py-8 text-center col-span-2">No active ports identified</p>
                 {% endfor %}
             </div>
         </div>
         {% endif %}
     </div>
 
-    <!-- Sidebar (Shared Context) -->
-    <div class="lg:col-span-4 space-y-8">
-        <!-- Business Impact -->
-        <div class="bg-surface-container-high rounded-md p-5 border-l-4 {% if host.criticality == 'Critical' %}border-error{% elif host.criticality == 'High' %}border-tertiary{% elif host.criticality == 'Medium' %}border-primary{% else %}border-outline-variant{% endif %}">
-            <h5 class="font-headline font-bold text-xs text-outline mb-6">Asset Value</h5>
-            <form action="{% url 'update_host_criticality' host.id %}" method="POST">
-                {% csrf_token %}
-                <select name="criticality" onchange="this.form.submit()" class="w-full bg-surface-container-highest border-none rounded-xl px-5 py-4 text-on-surface text-[11px] font-bold appearance-none cursor-pointer">
-                    <option value="">NOT DEFINED</option>
-                    {% for val, label in criticality_choices %}
-                    <option value="{{ val }}" {% if host.criticality == val %}selected{% endif %}>{{ label|upper }}</option>
-                    {% endfor %}
-                </select>
-            </form>
-            <p class="text-[11px] text-outline-variant mt-4 leading-relaxed italic">Affects remediation prioritization and SLA tracking.</p>
+    <!-- Sidebar -->
+    <div class="lg:col-span-4 space-y-4">
+        <div class="card">
+            <div class="card-head"><h5 class="card-title">Asset value</h5></div>
+            <div class="p-4">
+                <form action="{% url 'update_host_criticality' host.id %}" method="POST">
+                    {% csrf_token %}
+                    <select name="criticality" onchange="this.form.submit()" class="search-input">
+                        <option value="">Not defined</option>
+                        {% for val, label in criticality_choices %}<option value="{{ val }}" {% if host.criticality == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                    </select>
+                </form>
+                <p class="text-[11px] text-outline mt-2">Affects remediation prioritization and SLA tracking.</p>
+            </div>
         </div>
-
-        <div class="bg-surface-container-high rounded-md p-5 border-l-4 {% if host.is_exposed %}border-error{% else %}border-outline-variant{% endif %}">
-            <h5 class="font-headline font-bold text-xs text-outline mb-6">Network Exposure</h5>
-            <form action="{% url 'update_host_exposure' host.id %}" method="POST">
-                {% csrf_token %}
-                <select name="is_exposed" onchange="this.form.submit()" class="w-full bg-surface-container-highest border-none rounded-xl px-5 py-4 text-on-surface text-[11px] font-bold appearance-none cursor-pointer">
-                    <option value="0" {% if not host.is_exposed %}selected{% endif %}>Internal</option>
-                    <option value="1" {% if host.is_exposed %}selected{% endif %}>Internet Facing (Exposed)</option>
-                </select>
-            </form>
-            <p class="text-[11px] text-outline-variant mt-4 leading-relaxed italic">Manual flag to indicate externally reachable assets.</p>
+        <div class="card">
+            <div class="card-head"><h5 class="card-title">Network exposure</h5></div>
+            <div class="p-4">
+                <form action="{% url 'update_host_exposure' host.id %}" method="POST">
+                    {% csrf_token %}
+                    <select name="is_exposed" onchange="this.form.submit()" class="search-input">
+                        <option value="0" {% if not host.is_exposed %}selected{% endif %}>Internal</option>
+                        <option value="1" {% if host.is_exposed %}selected{% endif %}>Internet facing (exposed)</option>
+                    </select>
+                </form>
+                <p class="text-[11px] text-outline mt-2">Manual flag for externally reachable assets.</p>
+            </div>
         </div>
-
-        <!-- Quick Stats -->
-        <div class="bg-surface-container rounded-md p-5 border border-outline-variant">
-            <h5 class="font-headline font-bold text-xs text-outline mb-6">Quick Metadata</h5>
-            <div class="space-y-4">
-                <div class="flex justify-between items-center">
-                    <span class="text-[10px] text-outline font-bold">First Seen</span>
-                    <span class="text-[10px] text-on-surface font-bold">{{ host.last_scanned|date:"d M Y" }}</span>
-                </div>
-                <div class="flex justify-between items-center">
-                    <span class="text-[10px] text-outline font-bold">Inventory Items</span>
-                    <span class="text-[10px] text-on-surface font-bold">{{ installed_software.paginator.count }}</span>
-                </div>
-                <div class="flex justify-between items-center">
-                    <span class="text-[10px] text-outline font-bold">Operating System</span>
-                    <span class="text-[10px] text-on-surface font-bold">{{ host.operating_system|default:"N/A" }}</span>
-                </div>
-                <div class="flex justify-between items-center">
-                    <span class="text-[10px] text-outline font-bold">Exposure</span>
-                    <span class="text-[10px] font-bold {% if host.is_exposed %}text-error{% else %}text-on-surface{% endif %}">
-                        {% if host.is_exposed %}Internet Facing{% else %}Internal{% endif %}
-                    </span>
-                </div>
+        <div class="card">
+            <div class="card-head"><h5 class="card-title">Metadata</h5></div>
+            <div class="p-4 space-y-2.5 text-xs">
+                <div class="flex justify-between"><span class="text-outline">Last scanned</span><span class="text-on-surface">{{ host.last_scanned|date:"d M Y" }}</span></div>
+                <div class="flex justify-between"><span class="text-outline">Inventory items</span><span class="text-on-surface">{{ installed_software.paginator.count }}</span></div>
+                <div class="flex justify-between"><span class="text-outline">Operating system</span><span class="text-on-surface">{{ host.operating_system|default:"N/A" }}</span></div>
+                <div class="flex justify-between"><span class="text-outline">Exposure</span><span class="{% if host.is_exposed %}text-error{% else %}text-on-surface{% endif %}">{% if host.is_exposed %}Internet facing{% else %}Internal{% endif %}</span></div>
             </div>
         </div>
     </div>
@@ -309,25 +200,22 @@
 <script>
 {% if active_tab == 'threats' %}
 document.addEventListener('DOMContentLoaded', function() {
+    const cs = getComputedStyle(document.documentElement);
+    const rgb = n => 'rgb(' + cs.getPropertyValue(n).trim() + ')';
+    const rgba = (n, a) => 'rgb(' + cs.getPropertyValue(n).trim() + ' / ' + a + ')';
     const ctx = document.getElementById('hostTimeline').getContext('2d');
     new Chart(ctx, {
         type: 'bar',
         data: {
             labels: {{ timeline_labels|safe }},
-            datasets: [{
-                data: {{ timeline_values|safe }},
-                backgroundColor: '#3bbffa',
-                borderRadius: 8,
-                barThickness: 20
-            }]
+            datasets: [{ data: {{ timeline_values|safe }}, backgroundColor: rgb('--md-accent'), borderRadius: 4, barThickness: 18 }]
         },
         options: {
-            responsive: true,
-            maintainAspectRatio: false,
+            responsive: true, maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: {
-                y: { beginAtZero: true, grid: { color: 'rgba(163, 170, 196, 0.05)' }, ticks: { color: '#a3aac4', font: { size: 10 } } },
-                x: { grid: { display: false }, ticks: { color: '#a3aac4', font: { size: 10 } } }
+                y: { beginAtZero: true, grid: { color: rgba('--md-line', 0.6) }, ticks: { color: rgb('--md-muted'), font: { size: 10 } } },
+                x: { grid: { display: false }, ticks: { color: rgb('--md-muted'), font: { size: 10 } } }
             }
         }
     });

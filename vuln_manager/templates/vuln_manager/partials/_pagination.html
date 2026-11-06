@@ -1,0 +1,18 @@
+{% load vuln_filters %}
+{% comment %}Pagination footer. Param: page (a Django Page object). Preserves all query params.{% endcomment %}
+<div class="pagination">
+    <span>Page {{ page.number }} of {{ page.paginator.num_pages }} &middot; {{ page.paginator.count }} total</span>
+    <div class="flex items-center gap-1.5">
+        {% if page.has_previous %}
+        <a class="page-btn" href="{% qs_replace page=page.previous_page_number %}" aria-label="Previous page">
+            <span class="material-symbols-outlined text-base">chevron_left</span>
+        </a>
+        {% endif %}
+        <span class="page-btn-current">{{ page.number }}</span>
+        {% if page.has_next %}
+        <a class="page-btn" href="{% qs_replace page=page.next_page_number %}" aria-label="Next page">
+            <span class="material-symbols-outlined text-base">chevron_right</span>
+        </a>
+        {% endif %}
+    </div>
+</div>
