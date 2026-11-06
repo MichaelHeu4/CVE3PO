@@ -69,7 +69,7 @@
                         </td>
                         <td><span class="font-medium {% if vuln.ai_result == 'Act' %}text-tertiary{% else %}text-on-surface-variant{% endif %}">{{ vuln.ai_result }}</span></td>
                         <td class="text-right">
-                            <a class="icon-btn" href="{% qs_replace selected_vuln=vuln.id page=None %}" aria-label="View rationale"><span class="material-symbols-outlined text-base">visibility</span></a>
+                            <a class="icon-btn" href="{% qs_replace selected_vuln=vuln.id page='' %}" aria-label="View rationale"><span class="material-symbols-outlined text-base">visibility</span></a>
                         </td>
                     </tr>
                     {% empty %}

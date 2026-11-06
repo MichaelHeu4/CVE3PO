@@ -27,10 +27,12 @@ Params: label, risk, accent (error|tertiary|secondary|primary), cluster (hosts),
             </div>
             <div class="flex items-center gap-1">
                 <a href="{% url 'host_detail' host.id %}" class="icon-btn" aria-label="View"><span class="material-symbols-outlined text-base">visibility</span></a>
+                {% if software %}
                 <form action="{% url 'remove_host_from_software' software.id host.id %}" method="POST" onsubmit="return confirm('Remove host association with this software?')" class="inline">
                     {% csrf_token %}
                     <button type="submit" class="icon-btn-danger" aria-label="Unlink"><span class="material-symbols-outlined text-base">link_off</span></button>
                 </form>
+                {% endif %}
             </div>
         </div>
         {% empty %}

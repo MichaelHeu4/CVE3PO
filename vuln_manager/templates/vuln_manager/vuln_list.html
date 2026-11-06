@@ -11,9 +11,9 @@
         <p class="page-subtitle">Detected security findings across your systems.</p>
     </div>
     <div class="flex items-center gap-1 p-1 rounded-md bg-surface-container border border-outline-variant">
-        <a href="{% qs_replace status='active' page=None %}" class="chip border-0 {% if status_filter == 'active' %}chip-on{% endif %}">Active</a>
-        <a href="{% qs_replace status='resolved' page=None %}" class="chip border-0 {% if status_filter == 'resolved' %}chip-on{% endif %}">Resolved</a>
-        <a href="{% qs_replace status='ignored' page=None %}" class="chip border-0 {% if status_filter == 'ignored' %}chip-on{% endif %}">Accepted</a>
+        <a href="{% qs_replace status='active' page='' %}" class="chip border-0 {% if status_filter == 'active' %}chip-on{% endif %}">Active</a>
+        <a href="{% qs_replace status='resolved' page='' %}" class="chip border-0 {% if status_filter == 'resolved' %}chip-on{% endif %}">Resolved</a>
+        <a href="{% qs_replace status='ignored' page='' %}" class="chip border-0 {% if status_filter == 'ignored' %}chip-on{% endif %}">Accepted</a>
     </div>
 </section>
 
@@ -51,9 +51,9 @@
         <input type="text" name="q" value="{{ query|default:'' }}" placeholder="Search by CVE, name or host…" class="search-input">
     </form>
     <div class="flex flex-wrap items-center gap-1.5">
-        <a href="{% qs_replace severity=None page=None %}" class="chip {% if not severity %}chip-on{% endif %}">All severities</a>
+        <a href="{% qs_replace severity='' page='' %}" class="chip {% if not severity %}chip-on{% endif %}">All severities</a>
         {% for value, label in severity_choices %}
-        <a href="{% qs_replace severity=value page=None %}" class="chip {% if severity == value %}chip-on{% endif %}">{{ label }}</a>
+        <a href="{% qs_replace severity=value page='' %}" class="chip {% if severity == value %}chip-on{% endif %}">{{ label }}</a>
         {% endfor %}
     </div>
 </div>

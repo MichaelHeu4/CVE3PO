@@ -88,18 +88,26 @@
     <!-- Sidebar -->
     <div class="lg:col-span-4 space-y-4">
         <div class="card">
-            <div class="card-head"><h5 class="card-title">Affected assets</h5></div>
+            <div class="card-head">
+                <h5 class="card-title">Affected assets</h5>
+                {% if affected_count %}<span class="badge-soft">{{ affected_count }} asset{{ affected_count|pluralize }}</span>{% endif %}
+            </div>
             <div class="p-4 space-y-3">
-                <div>
-                    <p class="text-[11px] text-outline">IP / Hostname</p>
-                    {% if vuln.host %}<a href="{% url 'host_detail' vuln.host.id %}" class="font-medium text-on-surface hover:text-primary">{{ vuln.host.ip_address }}</a>
-                    {% else %}<p class="font-medium text-on-surface">Global</p>{% endif %}
-                </div>
                 {% if vuln.software %}
                 <div>
-                    <p class="text-[11px] text-outline">Affected software</p>
-                    <a href="{% url 'software_detail' vuln.software.id %}" class="font-medium text-on-surface hover:text-primary">{{ vuln.software.name }}</a>
+                    <p class="text-[11px] text-outline mb-1">Affected software</p>
+                    <a href="{% url 'software_detail' vuln.software.id %}" class="font-medium text-on-surface hover:text-primary">{{ vuln.software.name }}{% if vuln.software.version %} <span class="text-outline font-normal">{{ vuln.software.version }}</span>{% endif %}</a>
                 </div>
+                {% endif %}
+                {% if affected_count %}
+                <div class="space-y-2">
+                    {% include 'vuln_manager/partials/_sw_cluster.html' with label='Critical & Exposed' risk='Critical risk' accent='error' cluster=cluster_1 %}
+                    {% include 'vuln_manager/partials/_sw_cluster.html' with label='Medium/Low & Exposed' risk='High risk' accent='tertiary' cluster=cluster_2 %}
+                    {% include 'vuln_manager/partials/_sw_cluster.html' with label='Critical & Controlled' risk='Medium risk' accent='secondary' cluster=cluster_3 %}
+                    {% include 'vuln_manager/partials/_sw_cluster.html' with label='Medium/Low & Controlled' risk='Low risk' accent='primary' cluster=cluster_4 %}
+                </div>
+                {% else %}
+                <p class="font-medium text-on-surface">Global</p>
                 {% endif %}
             </div>
         </div>

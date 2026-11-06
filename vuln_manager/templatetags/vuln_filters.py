@@ -19,7 +19,7 @@ def qs_replace(context, **kwargs):
         return ""
     params = request.GET.copy()
     for key, value in kwargs.items():
-        if value is None or value == "":
+        if value is None or value == "" or str(value).lower() == "none":
             params.pop(key, None)
         else:
             params[key] = value

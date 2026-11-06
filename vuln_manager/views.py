@@ -1335,25 +1335,28 @@ def port_list(request):
             | Q(host__hostname__icontains=query)
         )
 
-    ports_query, sort = apply_sort(
-        request,
-        ports_query,
-        allowed={
-            "port": "port_number",
-            "service": "service_name",
-            "host": ["host__ip_address", "host__hostname"],
-        },
-        default_key="port",
-        default_dir="asc",
-    )
+    # Group by (port, service): one block per exposed service, with its hosts.
+    groups_map = {}
+    for port in ports_query:
+        key = (port.port_number, port.service_name)
+        groups_map.setdefault(key, []).append(port.host)
+    groups = []
+    for (port_number, service_name), hosts in groups_map.items():
+        groups.append({
+            "port": port_number,
+            "service": service_name,
+            "hosts": sorted(hosts, key=lambda h: h.ip_address),
+            "count": len(hosts),
+        })
+    groups.sort(key=lambda g: (g["port"], g["service"] or ""))
 
-    paginator = Paginator(ports_query, 50)
+    paginator = Paginator(groups, 40)
     page_number = request.GET.get("page")
-    ports = paginator.get_page(page_number)
+    port_groups = paginator.get_page(page_number)
     return render(
         request,
         "vuln_manager/port_list.html",
-        {"ports": ports, "query": query, "sort": sort},
+        {"port_groups": port_groups, "query": query},
     )
 
 
@@ -1651,12 +1654,41 @@ def vuln_detail(request, pk):
         and bool(wrike_extension.api_token)
         and bool(settings_obj.wrike_folder_id)
     )
+
+    # All hosts touched by this finding: the directly linked host plus every
+    # host the affected software is installed on (deduplicated). Grouped into
+    # the same exposure x criticality clusters as the software detail page.
+    affected = {}
+    if vuln.host:
+        affected[vuln.host.id] = vuln.host
+    if vuln.software:
+        for host in vuln.software.hosts.all():
+            affected[host.id] = host
+    affected_count = len(affected)
+    cluster_1, cluster_2, cluster_3, cluster_4 = [], [], [], []
+    for host in sorted(affected.values(), key=lambda h: h.ip_address):
+        is_crit = host.criticality in ["Critical", "High"]
+        is_open = host.is_exposed
+        if is_crit and is_open:
+            cluster_1.append(host)
+        elif not is_crit and is_open:
+            cluster_2.append(host)
+        elif is_crit and not is_open:
+            cluster_3.append(host)
+        else:
+            cluster_4.append(host)
+
     return render(
         request,
         "vuln_manager/vuln_detail.html",
         {
             "vuln": vuln,
             "wrike_ready": wrike_ready,
+            "affected_count": affected_count,
+            "cluster_1": cluster_1,
+            "cluster_2": cluster_2,
+            "cluster_3": cluster_3,
+            "cluster_4": cluster_4,
             "audit_events": VulnerabilityAuditEvent.objects.filter(
                 vulnerability=vuln
             ).order_by("-created_at")[:20],
