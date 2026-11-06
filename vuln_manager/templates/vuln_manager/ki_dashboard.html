@@ -1,283 +1,136 @@
 {% extends 'vuln_manager/base.html' %}
 {% load vuln_filters %}
 {% block title %}AI Dashboard{% endblock %}
-{% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
+{% block header_title %}AI Dashboard{% endblock %}
 {% block content %}
-    <div class="p-5 flex-1 flex flex-col gap-4 max-w-[1600px] w-full mx-auto">
-        <!-- AI Efficiency Header (Bento Grid) -->
-        <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <!-- Auto-Triaged Card -->
-            <div class="bg-surface-container rounded-lg p-4 relative overflow-hidden group hover:bg-surface-container-high transition-colors ghost-border">
-                <div class="absolute -right-4 -top-4 w-24 h-24 bg-primary/10 rounded-full blur-2xl group-hover:bg-primary/20 transition-all">
-                </div>
-                <div class="flex justify-between items-start mb-4">
-                    <div class="p-2 bg-surface-container-low rounded-md">
-                        <span class="material-symbols-outlined text-primary">robot_2</span>
-                    </div>
-                </div>
-                <h3 class="font-body text-sm text-on-surface-variant mb-1">Auto-Triaged</h3>
-                <div class="flex items-baseline gap-2">
-                    <span class="font-headline text-2xl font-bold text-on-surface">{{ triaged_vulns }}</span>
-                    <span class="font-body text-sm text-on-surface-variant">/ {{ all_vulns.paginator.count }}</span>
-                </div>
+<section class="page-header">
+    <div>
+        <h1 class="page-title">AI triage</h1>
+        <p class="page-subtitle">AI-assisted prioritization of findings by impact and confidence.</p>
+    </div>
+</section>
+
+<!-- Stat strip -->
+<div class="grid grid-cols-1 md:grid-cols-3 bg-surface-container border border-outline-variant rounded-md mb-4">
+    <div class="p-4 border-b md:border-b-0 md:border-r border-outline-variant">
+        <p class="text-[11px] text-outline mb-2">Auto-triaged</p>
+        <div class="flex items-baseline gap-1.5 tabular-nums"><span class="text-[26px] font-bold text-on-surface">{{ triaged_vulns }}</span><span class="text-[11px] text-outline">/ {{ all_vulns.paginator.count }}</span></div>
+    </div>
+    <div class="p-4 border-b md:border-b-0 md:border-r border-outline-variant">
+        <p class="text-[11px] text-outline mb-2">Action required</p>
+        <div class="flex items-baseline gap-1.5 tabular-nums"><span class="text-[26px] font-bold {% if action_required %}text-tertiary{% else %}text-on-surface{% endif %}">{{ action_required }}</span><span class="text-[11px] text-outline">/ {{ all_vulns.paginator.count }}</span></div>
+    </div>
+    <div class="p-4">
+        <p class="text-[11px] text-outline mb-2">Model</p>
+        <div class="text-base font-semibold text-on-surface truncate">{{ ai.model }}</div>
+        <p class="mt-2 text-[11px] text-outline">Avg {{ ai.proc_time }}s / alert</p>
+    </div>
+</div>
+
+<div class="flex flex-col xl:flex-row gap-4">
+    <!-- Triage queue -->
+    <div class="flex-1 table-wrap">
+        <div class="card-head">
+            <div>
+                <h3 class="card-title">Triage queue</h3>
+                <p class="card-note mt-0.5">Prioritized by AI confidence &amp; impact</p>
             </div>
-            <!-- Manual Review Card -->
-            <div class="bg-surface-container rounded-lg p-4 relative overflow-hidden group hover:bg-surface-container-high transition-colors ghost-border">
-                <div class="flex justify-between items-start mb-4">
-                    <div class="p-2 bg-surface-container-low rounded-md">
-                        <span class="material-symbols-outlined text-tertiary">engineering</span>
-                    </div>
+            <form action="{% url 'do_triage' %}" method="post">
+                {% csrf_token %}
+                <button type="submit" {% if not ai_module_active %}disabled{% endif %} class="btn btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
+                    <span class="material-symbols-outlined">auto_fix</span> Run AI triage
+                </button>
+            </form>
+        </div>
+        {% if not ai_module_active %}
+        <div class="px-4 py-2 text-[11px] text-outline border-b border-outline-variant bg-surface-container-low">
+            AI Triage is disabled. Enable it in <a href="{% url 'extensions' %}" class="text-primary hover:underline">Modules</a>.
+        </div>
+        {% endif %}
+        <div class="overflow-x-auto">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        {% include 'vuln_manager/partials/_sort_th.html' with label='Severity' key='severity' sort=sort.key dir=sort.dir %}
+                        {% include 'vuln_manager/partials/_sort_th.html' with label='CVE ID' key='cve' sort=sort.key dir=sort.dir %}
+                        {% include 'vuln_manager/partials/_sort_th.html' with label='Asset' key='asset' sort=sort.key dir=sort.dir %}
+                        {% include 'vuln_manager/partials/_sort_th.html' with label='AI result' key='ai' sort=sort.key dir=sort.dir %}
+                        <th class="text-right">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for vuln in all_vulns %}
+                    <tr>
+                        <td><span class="badge severity-{{ vuln.severity|lower }}">{{ vuln.severity|upper }}</span></td>
+                        <td class="font-medium text-on-surface whitespace-nowrap">{{ vuln.cve_id }}</td>
+                        <td>
+                            <div class="text-on-surface">{% if vuln.most_critical_host %}{{ vuln.most_critical_host }}{% else %}—{% endif %}</div>
+                            {% if vuln.software %}<div class="text-[11px] text-outline">{{ vuln.software }}</div>{% endif %}
+                        </td>
+                        <td><span class="font-medium {% if vuln.ai_result == 'Act' %}text-tertiary{% else %}text-on-surface-variant{% endif %}">{{ vuln.ai_result }}</span></td>
+                        <td class="text-right">
+                            <a class="icon-btn" href="{% qs_replace selected_vuln=vuln.id page=None %}" aria-label="View rationale"><span class="material-symbols-outlined text-base">visibility</span></a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5">{% include 'vuln_manager/partials/_empty.html' with icon='robot_2' title='Nothing to triage' %}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if all_vulns.paginator.count %}{% include 'vuln_manager/partials/_pagination.html' with page=all_vulns %}{% endif %}
+    </div>
+
+    <!-- Rationale pane -->
+    <div class="w-full xl:w-96">
+        <div class="card">
+            <div class="card-head">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary text-xl">psychology</span>
+                    <h3 class="card-title">AI rationale</h3>
                 </div>
-                <h3 class="font-body text-sm text-on-surface-variant mb-1">Action Required</h3>
-                <div class="flex items-baseline gap-2">
-                    <span class="font-headline text-2xl font-bold text-on-surface">{{ action_required }}</span>
-                    <span class="font-body text-sm text-on-surface-variant">/ {{ all_vulns.paginator.count }}</span>
-                </div>
+                {% if selected_vuln and selected_vuln.ai_result != "tbd" %}
+                <span class="badge-soft !text-primary !border-primary/30">{{ selected_vuln.ai_result }}</span>
+                {% endif %}
             </div>
-            <!-- Total Processed Card -->
-            <div class="bg-surface-container rounded-lg p-4 relative overflow-hidden group hover:bg-surface-container-high transition-colors ghost-border flex flex-col justify-between">
-                <div class="absolute right-0 bottom-0 opacity-10 pointer-events-none">
-                    <span class="material-symbols-outlined text-4xl">memory</span>
+            {% if selected_vuln %}
+            <div class="p-4 space-y-5">
+                <div>
+                    <span class="text-[11px] font-semibold text-primary">Analysis &amp; reasoning</span>
+                    <p class="mt-1.5 text-sm text-on-surface leading-relaxed bg-surface-container-low p-3 rounded-md border-l-2 border-primary">{{ selected_vuln.ai_reason }}</p>
                 </div>
                 <div>
-                    <h3 class="font-body text-sm text-on-surface-variant mb-1">Using Model</h3>
-                    <span class="font-headline text-2xl font-bold text-on-surface">{{ ai.model }}</span>
-                </div>
-                <div class="mt-4 pt-4 border-t border-outline-variant flex items-center justify-between">
-                    <span class="text-xs font-body text-on-surface-variant">Avg. processing time: {{ ai.proc_time }}s/alert</span>
-                    <div class="flex items-center gap-1 text-xs text-primary">
-                        <span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
-                        System Active
+                    <span class="text-[11px] font-semibold text-tertiary">Remediation strategy</span>
+                    <div class="mt-1.5 bg-surface-container-low p-3 rounded-md border border-outline-variant">
+                        <div class="flex items-center gap-2 mb-1.5"><span class="material-symbols-outlined text-tertiary text-sm">build</span><span class="text-xs font-semibold text-on-surface">Patching suggestion</span></div>
+                        <p class="text-sm text-on-surface">{{ selected_vuln.ai_suggestion }}</p>
                     </div>
                 </div>
-            </div>
-        </section>
-        <!-- Main Split Layout -->
-        <div class="flex flex-col xl:flex-row gap-4 flex-1">
-            <!-- Triage Queue Table -->
-            <div class="flex-1 bg-surface-container rounded-lg flex flex-col ghost-border overflow-hidden">
-                <div class="p-5 border-b border-outline-variant flex justify-between items-center bg-surface-container-low">
-                    <div>
-                        <h3 class="font-headline font-bold text-on-surface text-lg">Triage Queue</h3>
-                        <p class="font-body text-xs text-on-surface-variant mt-0.5">Prioritized by AI Confidence &amp; Potential Impact</p>
+                <div class="pt-4 border-t border-outline-variant space-y-2">
+                    <span class="text-[11px] font-semibold text-on-surface-variant">Contextual indicators</span>
+                    {% if selected_vuln.nuclei_poc %}
+                    <div class="flex items-start gap-2.5">
+                        <span class="material-symbols-outlined text-error text-[18px]">warning</span>
+                        <div><span class="block text-xs font-semibold text-on-surface">Exploit available</span><span class="block text-[11px] text-outline line-clamp-1">{{ selected_vuln.nuclei_poc }}</span></div>
                     </div>
-                    <form action="{% url 'do_triage' %}" method="post">
-                        {% csrf_token %}
-                        <button type="submit" {% if not ai_module_active %}disabled{% endif %} class="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-md hover:bg-primary-hover transition-colors font-body text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed">
-                            <span class="material-symbols-outlined text-[18px]">auto_fix</span>
-                            Run AI Triage
-                        </button>
-                    </form>
-                </div>
-                {% if not ai_module_active %}
-                <div class="px-5 py-2 text-[10px] font-bold tracking-wider text-outline border-b border-outline-variant bg-surface-container-low">
-                    AI Triage module is disabled. Enable and configure it in <a href="{% url 'extensions' %}" class="text-primary hover:underline">Modules</a>.
-                </div>
-                {% endif %}
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left border-collapse" id="aiQueueTable">
-                        <thead>
-                            <tr class="border-b border-outline-variant bg-surface-container-low/50">
-                                <th data-sort-type="text" class="sortable-th cursor-pointer select-none py-3 px-5 font-body text-xs font-medium text-on-surface-variant tracking-wider">Severity</th>
-                                <th data-sort-type="text" class="sortable-th cursor-pointer select-none py-3 px-5 font-body text-xs font-medium text-on-surface-variant tracking-wider">CVE ID</th>
-                                <th data-sort-type="text" class="sortable-th cursor-pointer select-none py-3 px-5 font-body text-xs font-medium text-on-surface-variant tracking-wider">
-                                    Asset Affected
-                                </th>
-                                <th data-sort-type="text" class="sortable-th cursor-pointer select-none py-3 px-5 font-body text-xs font-medium text-on-surface-variant tracking-wider">AI Result</th>
-                                <th class="py-3 px-5 font-body text-xs font-medium text-on-surface-variant tracking-wider text-right">
-                                    Actions
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody class="font-body text-sm">
-                            <!-- Row 1 - Active --> <!-- bg-surface-container-highest/30 => "active" -->
-                            {% for vuln in all_vulns %}
-                            <tr class="border-b border-outline-variant hover:bg-surface-container-high transition-colors">
-                                <td class="py-4 px-5" data-sort-value="{{ vuln.severity }}">
-                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider bg-error-container text-on-error-container">
-                                        {{ vuln.severity }}
-                                    </span>
-                                </td>
-                                <td class="py-4 px-5 font-medium text-on-surface" data-sort-value="{{ vuln.cve_id }}">{{ vuln.cve_id }}</td>
-                                <td class="py-4 px-5" data-sort-value="{% if vuln.most_critical_host %}{{ vuln.most_critical_host }}{% else %}n/a{% endif %} {% if vuln.software %}{{ vuln.software }}{% endif %}">
-                                    <div class="flex flex-col">
-                                        <span class="text-on-surface">
-                                            {% if vuln.most_critical_host %}
-                                                {{ vuln.most_critical_host }}
-                                            {% else %}
-                                                n/a
-                                            {% endif %}
-                                        </span>
-                                        <span class="text-xs text-on-surface-variant">{% if vuln.software %} {{ vuln.software }} {% endif %}</span>
-                                    </div>
-                                </td>
-                                <td class="py-4 px-5" data-sort-value="{{ vuln.ai_result }}">
-                                    <div class="flex items-center gap-3">
-                                        <span class="text-primary font-bold w-8 text-right">{{ vuln.ai_result }}</span>
-                                    </div>
-                                </td>
-                                <td class="py-4 px-5 text-right">
-                                    <a class="text-on-surface-variant hover:text-primary transition-colors p-1" href="?selected_vuln={{vuln.id}}">
-                                        <span class="material-symbols-outlined text-[20px]">eye_tracking</span>
-                                    </a>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                
-                <!-- Pagination -->
-                <div class="p-5 border-t border-outline-variant flex justify-between items-center bg-surface-container-low/30">
-                    <p class="text-[10px] font-bold text-outline">
-                        Page {{ all_vulns.number }} of {{ all_vulns.paginator.num_pages }}
-                    </p>
-                    <div class="flex gap-2">
-                        {% if all_vulns.has_previous %}
-                            <a href="?page={{ all_vulns.previous_page_number }}{% if selected_vuln %}&selected_vuln={{ selected_vuln.id }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant">
-                                <span class="material-symbols-outlined text-sm">chevron_left</span>
-                            </a>
-                        {% endif %}
-                        
-                        <button class="w-8 h-8 rounded-lg bg-primary text-surface flex items-center justify-center text-[10px] font-bold">
-                            {{ all_vulns.number }}
-                        </button>
-                        
-                        {% if all_vulns.has_next %}
-                            <a href="?page={{ all_vulns.next_page_number }}{% if selected_vuln %}&selected_vuln={{ selected_vuln.id }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant">
-                                <span class="material-symbols-outlined text-sm">chevron_right</span>
-                            </a>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-            <!-- AI Rationale Pane (Contextual Details) -->
-            <div class="w-full xl:w-96 flex flex-col gap-4">
-                <!-- Rationale Card -->
-                <div class="bg-surface-container-highest rounded-lg p-4 ghost-border ambient-shadow relative overflow-hidden flex-1">
-                    <div class="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-bl-full pointer-events-none"></div>
-                    <div class="flex items-center justify-between mb-6 border-b border-outline-variant pb-4">
-                        <div class="flex items-center gap-2">
-                            <span class="material-symbols-outlined text-primary text-xl">psychology</span>
-                            <h3 class="font-headline font-bold text-on-surface">AI Rationale</h3>
+                    {% endif %}
+                    {% if selected_vuln.host or selected_vuln.software.hosts.all %}
+                    <div class="flex items-start gap-2.5">
+                        <span class="material-symbols-outlined text-primary text-[18px]">hub</span>
+                        <div><span class="block text-xs font-semibold text-on-surface">System details</span>
+                            <span class="block text-[11px] text-outline">{% if selected_vuln.most_critical_host.criticality == "Critical" or selected_vuln.most_critical_host.criticality == "High" %}High-value asset{% else %}Standard internal asset{% endif %}</span>
                         </div>
-                        {% if selected_vuln.ai_result != "tbd" %}
-                        <span class="px-3 py-1 rounded-md bg-primary text-on-primary font-bold text-sm">
-                            {{ selected_vuln.ai_result }}
-                        </span>
-                        {% endif %}
-                    </div>
-                    
-                    {% if selected_vuln %}
-                    <div class="space-y-6">
-                        <!-- Gedankengang -->
-                        <div class="flex flex-col gap-2">
-                            <span class="text-[10px] font-body font-bold text-primary">Analysis & Reasoning</span>
-                            <p class="font-body text-sm text-on-surface leading-relaxed italic bg-surface-container-low/50 p-3 rounded-md border-l-2 border-primary">
-                                "{{ selected_vuln.ai_reason }}"
-                            </p>
-                        </div>
-
-                        <!-- Patching Vorschlag -->
-                        <div class="flex flex-col gap-2">
-                            <span class="text-[10px] font-body font-bold text-tertiary">Remediation Strategy</span>
-                            <div class="bg-tertiary-container/20 p-4 rounded-lg border border-tertiary/10">
-                                <div class="flex items-center gap-2 mb-2">
-                                    <span class="material-symbols-outlined text-tertiary text-sm">build</span>
-                                    <span class="text-xs font-bold text-on-surface">Patching Suggestion</span>
-                                </div>
-                                <p class="font-body text-sm text-on-surface">
-                                    {{ selected_vuln.ai_suggestion }}
-                                </p>
-                            </div>
-                        </div>
-
-                        <!-- Findings & Indicators -->
-                        <div class="flex flex-col gap-3 pt-4 border-t border-outline-variant">
-                            <span class="text-[10px] font-body font-bold text-on-surface-variant mb-1">Contextual Indicators</span>
-                            
-                            {% if selected_vuln.nuclei_poc %}
-                            <div class="flex items-start gap-3 p-2 rounded-md hover:bg-error-container/10 transition-colors">
-                                <span class="material-symbols-outlined text-error text-[18px]">warning</span>
-                                <div>
-                                    <span class="block text-xs font-bold text-on-surface">Exploit Available</span>
-                                    <span class="block text-[10px] text-on-surface-variant line-clamp-1">{{ selected_vuln.nuclei_poc }}</span>
-                                </div>
-                            </div>
-                            {% endif %}
-
-                            {% if selected_vuln.host or selected_vuln.software.hosts.all %}
-                            <div class="flex items-start gap-3 p-2 rounded-md hover:bg-primary-container/10 transition-colors">
-                                <span class="material-symbols-outlined text-primary text-[18px]">hub</span>
-                                <div>
-                                    <span class="block text-xs font-bold text-on-surface">System Details</span>
-                                    <span class="block text-[10px] text-on-surface-variant">
-                                        {% if selected_vuln.most_critical_host.criticality == "Critical" or selected_vuln.most_critical_host.criticality == "High" %}
-                                            High-Value Asset detected
-                                        {% else %}
-                                            Standard Internal Asset
-                                        {% endif %}
-                                    </span>
-                                </div>
-                            </div>
-                            {% endif %}
-                        </div>
-                    </div>
-                    {% else %}
-                    <div class="flex flex-col items-center justify-center py-12 text-center">
-                        <span class="material-symbols-outlined text-outline text-2xl mb-4 opacity-20">target</span>
-                        <p class="font-body text-sm text-on-surface-variant">
-                            Select a vulnerability from the queue<br>to view the AI's deep analysis.
-                        </p>
                     </div>
                     {% endif %}
                 </div>
             </div>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-state-icon"><span class="material-symbols-outlined">target</span></div>
+                <p class="text-sm text-on-surface-variant">Select a finding from the queue<br>to view the AI's analysis.</p>
+            </div>
+            {% endif %}
         </div>
     </div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-function makeTableSortable(tableId) {
-    const table = document.getElementById(tableId);
-    if (!table) return;
-    const tbody = table.querySelector("tbody");
-    const headers = table.querySelectorAll("thead th.sortable-th");
-    const sortState = {};
-
-    headers.forEach((header, index) => {
-        sortState[index] = "none";
-        header.addEventListener("click", () => {
-            const type = header.dataset.sortType || "text";
-            const rows = Array.from(tbody.querySelectorAll("tr"));
-            const next = sortState[index] === "asc" ? "desc" : "asc";
-            sortState[index] = next;
-
-            rows.sort((a, b) => {
-                const aCell = a.children[index];
-                const bCell = b.children[index];
-                const aRaw = (aCell?.dataset.sortValue || aCell?.innerText || "").trim();
-                const bRaw = (bCell?.dataset.sortValue || bCell?.innerText || "").trim();
-
-                if (type === "number") {
-                    const aNum = parseFloat(aRaw.replace(",", ".")) || 0;
-                    const bNum = parseFloat(bRaw.replace(",", ".")) || 0;
-                    return next === "asc" ? aNum - bNum : bNum - aNum;
-                }
-
-                return next === "asc"
-                    ? aRaw.localeCompare(bRaw, undefined, { sensitivity: "base" })
-                    : bRaw.localeCompare(aRaw, undefined, { sensitivity: "base" });
-            });
-
-            rows.forEach((row) => tbody.appendChild(row));
-        });
-    });
-}
-
-document.addEventListener("DOMContentLoaded", function () {
-    makeTableSortable("aiQueueTable");
-});
-</script>
+</div>
 {% endblock %}

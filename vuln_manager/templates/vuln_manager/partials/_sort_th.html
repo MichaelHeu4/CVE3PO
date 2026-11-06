@@ -1,0 +1,13 @@
+{% load vuln_filters %}
+{% comment %}
+Sortable table header cell.
+Params: label, key (sort key for this column), sort (active key), dir (active dir),
+        thclass (optional extra classes on <th>, e.g. "num" / "text-center").
+{% endcomment %}
+{% sort_dir sort key dir as next_dir %}
+<th class="{{ thclass }}">
+    <a href="{% qs_replace sort=key dir=next_dir page=None %}" class="th-sort{% if sort == key %} is-active{% endif %}">
+        <span>{{ label }}</span>
+        <span class="material-symbols-outlined arrow">{% if dir == 'asc' %}arrow_upward{% else %}arrow_downward{% endif %}</span>
+    </a>
+</th>

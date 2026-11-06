@@ -1,204 +1,79 @@
 {% extends 'vuln_manager/base.html' %}
 
-{% block title %}Systems{% endblock %}
-
-{% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
+{% block title %}Assets{% endblock %}
+{% block header_title %}Assets{% endblock %}
 
 {% block content %}
-<section class="mb-5 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+<section class="page-header">
     <div>
-        <h1 class="font-headline font-bold text-2xl text-on-surface tracking-tight mb-1">All <span class="text-primary">Systems</span></h1>
-        <p class="text-on-surface-variant text-sm font-medium">Overview of all identified computers and servers in your network.</p>
+        <h1 class="page-title">Assets</h1>
+        <p class="page-subtitle">All identified hosts and servers in your network.</p>
     </div>
-    <div class="flex flex-wrap gap-3">
-        <a href="{% url 'host_add' %}" class="bg-surface-container-highest border border-outline-variant text-on-surface px-5 py-2.5 rounded-md font-bold text-[10px] hover:bg-surface-variant transition-all flex items-center gap-2">
-            <span class="material-symbols-outlined text-sm">add_circle</span> Add Host
-        </a>
-        <a href="{% url 'scan_import' %}" class="bg-primary text-surface px-6 py-2.5 rounded-md font-bold text-[10px] hover:brightness-110 transition-all flex items-center gap-2">
-            <span class="material-symbols-outlined text-sm">upload_file</span> Import Scan
-        </a>
+    <div class="flex flex-wrap gap-2">
+        <a href="{% url 'host_add' %}" class="btn btn-ghost"><span class="material-symbols-outlined">add</span> Add host</a>
+        <a href="{% url 'scan_import' %}" class="btn btn-primary"><span class="material-symbols-outlined">upload_file</span> Import scan</a>
     </div>
 </section>
 
-<!-- Search Bar -->
-<div class="bg-surface-container-low rounded-md p-4 mb-6 border border-outline-variant flex flex-col md:flex-row gap-3 items-stretch md:items-center">
-    <form method="GET" class="relative flex-grow w-full">
-        <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-lg">search</span>
-        <input type="text" name="q" placeholder="Search by IP, name or priority..." value="{{ query|default:'' }}" class="w-full bg-surface-container border-none rounded-md pl-12 pr-40 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30 transition-all">
-        <button type="submit" class="absolute right-20 top-1/2 -translate-y-1/2 px-4 py-1.5 rounded-xl bg-primary text-surface text-[10px] font-bold">Search</button>
-        <a href="{% url 'host_list' %}" class="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-1.5 rounded-xl bg-surface-container-highest text-outline text-[10px] font-bold border border-outline-variant hover:text-on-surface transition-colors">Clear</a>
+<div class="toolbar">
+    <form method="GET" class="search">
+        {% if sort.key %}<input type="hidden" name="sort" value="{{ sort.key }}"><input type="hidden" name="dir" value="{{ sort.dir }}">{% endif %}
+        <span class="material-symbols-outlined search-icon">search</span>
+        <input type="text" name="q" value="{{ query|default:'' }}" placeholder="Search by IP, name, OS or priority…" class="search-input">
     </form>
-    <a href="{% url 'export_dashboard_pdf' %}" class="shrink-0 px-5 py-3 rounded-md bg-surface-container-highest text-on-surface-variant text-[10px] font-bold border border-outline-variant hover:text-primary hover:border-primary/40 transition-all flex items-center justify-center gap-2">
-        <span class="material-symbols-outlined text-sm">download</span> Export Report
-    </a>
+    <a href="{% url 'export_dashboard_pdf' %}" class="btn btn-subtle"><span class="material-symbols-outlined">download</span> Export report</a>
 </div>
 
-<div class="bg-surface-container rounded-md overflow-hidden border border-outline-variant">
+<div class="table-wrap">
     <div class="overflow-x-auto">
-        <table class="w-full text-left border-collapse" id="hostTable">
+        <table class="data-table">
             <thead>
-                <tr class="bg-surface-container-highest/30 border-b border-outline-variant">
-                    <th data-sort-type="text" class="sortable-th cursor-pointer select-none px-6 py-5 text-[10px] font-bold text-outline font-headline">Name / IP</th>
-                    <th data-sort-type="text" class="sortable-th cursor-pointer select-none px-6 py-5 text-[10px] font-bold text-outline font-headline">OS</th>
-                    <th data-sort-type="text" class="sortable-th cursor-pointer select-none px-6 py-5 text-[10px] font-bold text-outline font-headline text-center">Priority</th>
-                    <th data-sort-type="number" class="sortable-th cursor-pointer select-none px-6 py-5 text-[10px] font-bold text-outline font-headline text-center">Ports</th>
-                    <th data-sort-type="number" class="sortable-th cursor-pointer select-none px-6 py-5 text-[10px] font-bold text-outline font-headline text-center">Vulnerabilities</th>
-                    <th data-sort-type="text" class="sortable-th cursor-pointer select-none px-6 py-5 text-[10px] font-bold text-outline font-headline text-center">Last Seen</th>
-                    <th class="px-6 py-5 text-[10px] font-bold text-outline font-headline text-right">Actions</th>
+                <tr>
+                    {% include 'vuln_manager/partials/_sort_th.html' with label='Name / IP' key='host' sort=sort.key dir=sort.dir %}
+                    {% include 'vuln_manager/partials/_sort_th.html' with label='OS' key='os' sort=sort.key dir=sort.dir %}
+                    {% include 'vuln_manager/partials/_sort_th.html' with label='Priority' key='criticality' sort=sort.key dir=sort.dir %}
+                    <th class="num">Ports</th>
+                    <th class="num">Vulns</th>
+                    {% include 'vuln_manager/partials/_sort_th.html' with label='Last seen' key='last_seen' sort=sort.key dir=sort.dir thclass='whitespace-nowrap' %}
+                    <th class="text-right">Actions</th>
                 </tr>
             </thead>
-            <tbody class="divide-y divide-outline-variant/5">
+            <tbody>
                 {% for host in hosts %}
-                <tr class="hover:bg-primary/5 transition-colors group">
-                    <td class="px-6 py-4" data-sort-value="{{ host.ip_address }} {{ host.hostname|default:'n/a' }}">
-                        <div class="flex items-center gap-4">
-                            <div class="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center text-primary border border-outline-variant">
-                                <span class="material-symbols-outlined text-xl">dns</span>
-                            </div>
-                            <div>
-                                <a href="{% url 'host_detail' host.id %}" class="font-headline font-bold text-on-surface hover:text-primary transition-colors block text-sm tracking-tight">{{ host.ip_address }}</a>
-                                <p class="text-[10px] text-outline font-bold truncate max-w-[150px]">{{ host.hostname|default:"n/a" }}</p>
-                            </div>
-                        </div>
+                <tr>
+                    <td class="whitespace-nowrap">
+                        <a href="{% url 'host_detail' host.id %}" class="font-semibold text-on-surface hover:text-primary">{{ host.ip_address }}</a>
+                        <div class="text-[11px] text-outline truncate max-w-[180px]">{{ host.hostname|default:"—" }}</div>
                     </td>
-                    <td class="px-6 py-4" data-sort-value="{{ host.operating_system|default:'n/a' }}">
-                        <span class="text-[10px] text-on-surface-variant font-bold tracking-wider">
-                            {{ host.operating_system|default:"n/a" }}
-                        </span>
-                    </td>
-                    <td class="px-6 py-4 text-center" data-sort-value="{{ host.criticality|default:'Not set' }}">
+                    <td class="text-on-surface-variant whitespace-nowrap">{{ host.operating_system|default:"—" }}</td>
+                    <td>
                         {% if host.criticality %}
-                        <span class="inline-flex px-3 py-1 rounded-full text-[11px] font-bold {% if host.criticality == 'Critical' %}bg-error/10 text-error border border-error/20 {% elif host.criticality == 'High' %}bg-tertiary/10 text-tertiary border border-tertiary/20{% else %}bg-primary/10 text-primary border border-primary/20{% endif %}">
-                            {{ host.criticality }}
-                        </span>
-                        {% else %}
-                        <span class="text-outline/30 text-[11px] font-bold italic">Not set</span>
-                        {% endif %}
+                        <span class="badge-soft {% if host.criticality == 'Critical' %}!text-error !border-error/30{% elif host.criticality == 'High' %}!text-tertiary !border-tertiary/30{% endif %}">{{ host.criticality }}</span>
+                        {% else %}<span class="text-outline text-xs">—</span>{% endif %}
                     </td>
-                    <td class="px-6 py-4 text-center" data-sort-value="{{ host.current_port_count }}">
-                        <span class="text-sm font-bold text-on-surface">{{ host.current_port_count }}</span>
-                        <span class="text-[11px] text-outline font-bold ml-1">Ports</span>
+                    <td class="num">{{ host.current_port_count }}</td>
+                    <td class="num">
+                        {% if host.num_vulns %}<span class="text-error font-medium">{{ host.num_vulns }}</span>{% else %}<span class="text-outline">0</span>{% endif %}
+                        {% if host.num_info %}<span class="text-outline"> + {{ host.num_info }}i</span>{% endif %}
                     </td>
-                    <td class="px-6 py-4" data-sort-value="{{ host.num_vulns|add:host.num_info }}">
-                        <div class="flex justify-center gap-2">
-                            {% if host.num_vulns > 0 %}
-                            <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-error/5 border border-error/10 text-error">
-                                <span class="text-xs font-bold">{{ host.num_vulns }}</span>
-                                <span class="material-symbols-outlined text-[12px]">pest_control</span>
-                            </div>
-                            {% endif %}
-                            {% if host.num_info > 0 %}
-                            <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-primary/5 border border-primary/10 text-primary">
-                                <span class="text-xs font-bold">{{ host.num_info }}</span>
-                                <span class="material-symbols-outlined text-[12px]">info</span>
-                            </div>
-                            {% endif %}
-                            {% if host.num_vulns == 0 and host.num_info == 0 %}
-                            <span class="text-[11px] text-primary-container font-bold">Safe</span>
-                            {% endif %}
-                        </div>
-                    </td>
-                    <td class="px-6 py-4 text-center" data-sort-value="{{ host.last_scanned|date:'YmdHis' }}">
-                        <p class="text-[11px] font-bold text-on-surface">{{ host.last_scanned|date:"d M Y" }}</p>
-                        <p class="text-[11px] text-outline/50 tracking-tight">Scan</p>
-                    </td>
-                    <td class="px-6 py-4">
-                        <div class="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <a href="{% url 'host_detail' host.id %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-on-surface hover:bg-primary hover:text-surface transition-all flex items-center justify-center">
-                                <span class="material-symbols-outlined text-base">visibility</span>
-                            </a>
-                            <a href="{% url 'host_edit' host.id %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-primary hover:bg-primary hover:text-surface transition-all flex items-center justify-center">
-                                <span class="material-symbols-outlined text-base">edit</span>
-                            </a>
-                            <form action="{% url 'delete_host' host.id %}" method="POST" onsubmit="return confirm('Delete this system and its data?')">
+                    <td class="text-on-surface-variant whitespace-nowrap">{{ host.last_scanned|date:"d M Y" }}</td>
+                    <td class="text-right whitespace-nowrap">
+                        <div class="inline-flex items-center gap-1">
+                            <a href="{% url 'host_detail' host.id %}" class="icon-btn" aria-label="View"><span class="material-symbols-outlined text-base">visibility</span></a>
+                            <a href="{% url 'host_edit' host.id %}" class="icon-btn" aria-label="Edit"><span class="material-symbols-outlined text-base">edit</span></a>
+                            <form action="{% url 'delete_host' host.id %}" method="POST" onsubmit="return confirm('Delete this host and its data?')" class="inline">
                                 {% csrf_token %}
-                                <button type="submit" class="w-8 h-8 rounded-lg bg-surface-container-highest text-error hover:bg-error hover:text-surface transition-all flex items-center justify-center">
-                                    <span class="material-symbols-outlined text-base">delete</span>
-                                </button>
+                                <button type="submit" class="icon-btn-danger" aria-label="Delete"><span class="material-symbols-outlined text-base">delete</span></button>
                             </form>
                         </div>
                     </td>
                 </tr>
+                {% empty %}
+                <tr><td colspan="7">{% include 'vuln_manager/partials/_empty.html' with icon='dns' title='No hosts found' text='Import a scan or add a host manually to start.' %}</td></tr>
                 {% endfor %}
             </tbody>
         </table>
-        
-        {% if not hosts %}
-        <div class="text-center py-24 bg-surface-container-low">
-            <div class="w-16 h-16 bg-surface-container-highest rounded-full flex items-center justify-center mx-auto mb-4">
-                <span class="material-symbols-outlined text-outline-variant text-3xl">dns</span>
-            </div>
-            <h3 class="text-on-surface font-headline font-bold text-xl">No systems found</h3>
-            <p class="text-outline text-xs mt-2">Import a scan or add a host manually to start.</p>
-        </div>
-        {% endif %}
     </div>
-    
-    <!-- Pagination Footer -->
-    <div class="bg-surface-container-highest/20 px-8 py-6 flex items-center justify-between border-t border-outline-variant">
-        <p class="text-[10px] font-bold text-outline">
-            Page {{ hosts.number }} of {{ hosts.paginator.num_pages }} ({{ hosts.paginator.count }} total)
-        </p>
-        <div class="flex gap-2">
-            {% if hosts.has_previous %}
-                <a href="?page={{ hosts.previous_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}" class="w-10 h-10 rounded-xl bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant">
-                    <span class="material-symbols-outlined text-base">chevron_left</span>
-                </a>
-            {% endif %}
-            
-            <button class="w-10 h-10 rounded-xl bg-primary text-surface flex items-center justify-center text-xs font-bold">
-                {{ hosts.number }}
-            </button>
-            
-            {% if hosts.has_next %}
-                <a href="?page={{ hosts.next_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}" class="w-10 h-10 rounded-xl bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant">
-                    <span class="material-symbols-outlined text-base">chevron_right</span>
-                </a>
-            {% endif %}
-        </div>
-    </div>
+    {% if hosts.paginator.count %}{% include 'vuln_manager/partials/_pagination.html' with page=hosts %}{% endif %}
 </div>
-
-<script>
-function makeTableSortable(tableId) {
-    const table = document.getElementById(tableId);
-    if (!table) return;
-    const tbody = table.querySelector("tbody");
-    const headers = table.querySelectorAll("thead th.sortable-th");
-    const sortState = {};
-
-    headers.forEach((header, index) => {
-        sortState[index] = "none";
-        header.addEventListener("click", () => {
-            const type = header.dataset.sortType || "text";
-            const rows = Array.from(tbody.querySelectorAll("tr"));
-            const next = sortState[index] === "asc" ? "desc" : "asc";
-            sortState[index] = next;
-
-            rows.sort((a, b) => {
-                const aCell = a.children[index];
-                const bCell = b.children[index];
-                const aRaw = (aCell?.dataset.sortValue || aCell?.innerText || "").trim();
-                const bRaw = (bCell?.dataset.sortValue || bCell?.innerText || "").trim();
-
-                if (type === "number") {
-                    const aNum = parseFloat(aRaw.replace(",", ".")) || 0;
-                    const bNum = parseFloat(bRaw.replace(",", ".")) || 0;
-                    return next === "asc" ? aNum - bNum : bNum - aNum;
-                }
-
-                return next === "asc"
-                    ? aRaw.localeCompare(bRaw, undefined, { sensitivity: "base" })
-                    : bRaw.localeCompare(aRaw, undefined, { sensitivity: "base" });
-            });
-
-            rows.forEach((row) => tbody.appendChild(row));
-        });
-    });
-}
-
-document.addEventListener("DOMContentLoaded", function () {
-    makeTableSortable("hostTable");
-});
-</script>
 {% endblock %}

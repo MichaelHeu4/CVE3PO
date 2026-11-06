@@ -1,63 +1,54 @@
 {% extends 'vuln_manager/base.html' %}
 
 {% block title %}Agent Install{% endblock %}
-{% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
+{% block header_title %}Agent install{% endblock %}
 
 {% block content %}
-<div class="max-w-5xl mx-auto space-y-8">
-    <section>
-        <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight mb-2">Agent <span class="text-primary">Install</span></h1>
-        <p class="text-on-surface-variant text-sm">Deployment guide with prefilled URLs for your current instance.</p>
+<div class="max-w-4xl mx-auto space-y-4">
+    <section class="page-header">
+        <div>
+            <h1 class="page-title">Agent install</h1>
+            <p class="page-subtitle">Deployment guide with prefilled URLs for this instance.</p>
+        </div>
     </section>
 
-    <div class="bg-surface-container rounded-md p-5">
-        <h2 class="font-headline font-bold text-xs text-outline mb-4">1. Download Installer</h2>
-        <pre class="bg-surface-container-low rounded-xl p-4 text-[11px] text-on-surface overflow-x-auto">wget -O install.sh {{ install_script_url }}</pre>
+    <div class="card p-5">
+        <h2 class="card-title mb-3">1. Download installer</h2>
+        <pre class="bg-surface-container-low border border-outline-variant rounded-md p-3 text-xs text-on-surface overflow-x-auto m-0"><code class="font-mono">wget -O install.sh {{ install_script_url }}</code></pre>
     </div>
 
-    <div class="bg-surface-container rounded-md p-5">
-        <h2 class="font-headline font-bold text-xs text-outline mb-4">2. Run Installation</h2>
-        <pre class="bg-surface-container-low rounded-xl p-4 text-[11px] text-on-surface overflow-x-auto">sudo bash install.sh \
+    <div class="card p-5">
+        <h2 class="card-title mb-3">2. Run installation</h2>
+        <pre class="bg-surface-container-low border border-outline-variant rounded-md p-3 text-xs text-on-surface overflow-x-auto m-0"><code class="font-mono">sudo bash install.sh \
   --binary-url {{ binary_url }} \
   --sha256-url {{ sha256_url }} \
   --api-url {{ api_url }} \
-  --token &lt;AGENT_API_TOKEN&gt;</pre>
-        <p class="text-[10px] text-outline mt-4">The API token is shown in <strong>Modules → CVE3PO Agent</strong>.</p>
+  --token &lt;AGENT_API_TOKEN&gt;</code></pre>
+        <p class="text-[11px] text-outline mt-3">The API token is shown in <strong>Modules → CVE3PO Agent</strong>.</p>
     </div>
 
-    <div class="bg-surface-container rounded-md p-5">
-        <h2 class="font-headline font-bold text-xs text-outline mb-4">3. Verify Service</h2>
-        <pre class="bg-surface-container-low rounded-xl p-4 text-[11px] text-on-surface overflow-x-auto">sudo systemctl status cve3po-agent.timer --no-pager
+    <div class="card p-5">
+        <h2 class="card-title mb-3">3. Verify service</h2>
+        <pre class="bg-surface-container-low border border-outline-variant rounded-md p-3 text-xs text-on-surface overflow-x-auto m-0"><code class="font-mono">sudo systemctl status cve3po-agent.timer --no-pager
 sudo systemctl status cve3po-agent.service --no-pager
-sudo journalctl -u cve3po-agent -n 100 --no-pager</pre>
+sudo journalctl -u cve3po-agent -n 100 --no-pager</code></pre>
     </div>
 
-    <div class="bg-surface-container rounded-md p-5">
-        <h2 class="font-headline font-bold text-xs text-outline mb-4">Hosts with Agent Data</h2>
+    <div class="table-wrap">
+        <div class="card-head"><h2 class="card-title">Hosts with agent data</h2></div>
         <div class="overflow-x-auto">
-            <table class="w-full text-left">
-                <thead>
-                    <tr class="text-[11px] font-bold text-outline/50 border-b border-outline-variant">
-                        <th class="px-4 py-3">Host</th>
-                        <th class="px-4 py-3">Hostname</th>
-                        <th class="px-4 py-3">Operating System</th>
-                        <th class="px-4 py-3 text-right">Agent Packages</th>
-                    </tr>
-                </thead>
+            <table class="data-table">
+                <thead><tr><th>Host</th><th>Hostname</th><th>Operating system</th><th class="num">Agent packages</th></tr></thead>
                 <tbody>
                     {% for row in agent_hosts %}
-                    <tr class="border-b border-outline-variant hover:bg-surface-container-high/40 transition-colors">
-                        <td class="px-4 py-3">
-                            <a href="{% url 'host_detail' row.host_id %}" class="text-primary text-[11px] font-bold hover:underline">{{ row.host__ip_address }}</a>
-                        </td>
-                        <td class="px-4 py-3 text-[10px] text-on-surface">{{ row.host__hostname|default:"-" }}</td>
-                        <td class="px-4 py-3 text-[10px] text-on-surface-variant">{{ row.host__operating_system|default:"-" }}</td>
-                        <td class="px-4 py-3 text-right text-[10px] font-bold text-on-surface">{{ row.agent_packages }}</td>
+                    <tr>
+                        <td><a href="{% url 'host_detail' row.host_id %}" class="text-primary font-medium hover:underline">{{ row.host__ip_address }}</a></td>
+                        <td class="text-on-surface-variant">{{ row.host__hostname|default:"—" }}</td>
+                        <td class="text-on-surface-variant">{{ row.host__operating_system|default:"—" }}</td>
+                        <td class="num">{{ row.agent_packages }}</td>
                     </tr>
                     {% empty %}
-                    <tr>
-                        <td colspan="4" class="text-center py-10 text-outline text-[10px] font-bold">No hosts received agent inventory yet</td>
-                    </tr>
+                    <tr><td colspan="4">{% include 'vuln_manager/partials/_empty.html' with icon='terminal' title='No agent inventory yet' %}</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

@@ -1,467 +1,113 @@
 {% extends 'vuln_manager/base.html' %}
 
-{% block title %}Software Detail: {{ software.name }}{% endblock %}
-
-{% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
+{% block title %}{{ software.name }}{% endblock %}
+{% block header_title %}Software{% endblock %}
 
 {% block content %}
-<section class="mb-6 flex justify-between items-end">
+<nav class="mb-4">
+    <ol class="flex items-center gap-1.5 text-xs text-outline">
+        <li><a href="{% url 'software_list' %}" class="hover:text-primary">Software</a></li>
+        <li class="material-symbols-outlined text-sm">chevron_right</li>
+        <li class="text-on-surface">{{ software.name }}</li>
+    </ol>
+</nav>
+
+<section class="page-header">
     <div>
-        <div class="flex items-center gap-4 mb-2">
-            <h1 class="font-headline font-extrabold text-2xl text-on-surface tracking-tight">{{ software.name }}</h1>
-            {% if software.criticality %}
-            <span class="px-3 py-1 rounded-lg text-[10px] font-bold {% if software.criticality == 'Critical' %}bg-error/10 text-error border border-error/20 {% elif software.criticality == 'High' %}bg-tertiary/10 text-tertiary border border-tertiary/20{% else %}bg-primary/10 text-primary border border-primary/20{% endif %}">
-                {{ software.criticality }}
-            </span>
-            {% endif %}
+        <div class="flex items-center gap-2 mb-1">
+            <h1 class="page-title">{{ software.name }}</h1>
+            {% if software.criticality %}<span class="badge-soft {% if software.criticality == 'Critical' %}!text-error !border-error/30{% elif software.criticality == 'High' %}!text-tertiary !border-tertiary/30{% endif %}">{{ software.criticality }}</span>{% endif %}
         </div>
-        <p class="text-on-surface-variant font-body text-sm">Author: <span class="text-primary font-bold text-[10px]">{{ software.vendor|default:"Unknown Authority" }}</span></p>
+        <p class="page-subtitle">Vendor: {{ software.vendor|default:"Unknown" }}</p>
     </div>
-    <div class="flex gap-3">
-        <a href="{% url 'software_edit' software.id %}" class="px-6 py-2.5 rounded-xl border border-primary/20 text-primary text-[10px] font-bold hover:bg-primary hover:text-surface transition-all flex items-center gap-2">
-            <span class="material-symbols-outlined text-sm">edit</span> Edit Software
-        </a>
+    <div class="flex gap-2">
+        <a href="{% url 'software_edit' software.id %}" class="btn btn-ghost"><span class="material-symbols-outlined">edit</span> Edit</a>
         <form action="{% url 'delete_software' software.id %}" method="POST" onsubmit="return confirm('Delete software?')">
             {% csrf_token %}
-            <button type="submit" class="px-6 py-2.5 rounded-xl border border-error/20 text-error text-[10px] font-bold hover:bg-error hover:text-surface transition-all flex items-center gap-2">
-                <span class="material-symbols-outlined text-sm">delete</span> Delete Software
-            </button>
+            <button type="submit" class="btn btn-danger"><span class="material-symbols-outlined">delete</span> Delete</button>
         </form>
     </div>
 </section>
 
-<div class="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-6">
-    <!-- Analysis Sidebar -->
-    <div class="lg:col-span-5 space-y-8">
-        <div class="bg-surface-container rounded-md p-5 border border-outline-variant">
-            <h5 class="font-headline font-bold text-xs text-outline mb-5">Software Info</h5>
-            
-            <div class="space-y-6">
-                <div>
-                    <p class="text-[11px] text-outline mb-1">Version Identifier</p>
-                    <span class="px-3 py-1 rounded-lg bg-surface-container-highest text-on-surface font-bold text-sm border border-outline-variant">
-                        {{ software.version|default:"v. unknown" }}
-                    </span>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+    <!-- Left column -->
+    <div class="lg:col-span-5 space-y-4">
+        <div class="card">
+            <div class="card-head"><h5 class="card-title">Software info</h5></div>
+            <div class="p-4 space-y-3">
+                <div><p class="text-[11px] text-outline mb-1">Version</p><span class="badge-soft">{{ software.version|default:"unknown" }}</span></div>
+                <div><p class="text-[11px] text-outline mb-1">Port / protocol</p><span class="inline-flex items-center gap-2 text-sm text-on-surface"><span class="material-symbols-outlined text-primary text-base">settings_input_component</span>Port {{ software.listening_port|default:"none" }}</span></div>
+                <div class="pt-3 border-t border-outline-variant space-y-2">
+                    <a href="{% url 'scan_import' %}?software={{ software.id }}" class="btn btn-primary w-full"><span class="material-symbols-outlined">upload_file</span> Import SAST / scan</a>
+                    <form action="{% url 'software_rescan_osv' software.id %}" method="POST">{% csrf_token %}
+                        <button {% if not osv_rescan_possible %}disabled{% endif %} class="btn btn-ghost w-full disabled:opacity-40 disabled:cursor-not-allowed"><span class="material-symbols-outlined">search</span> Re-scan via OSV + NVD</button>
+                    </form>
+                    {% if not osv_rescan_possible %}<p class="text-[11px] text-outline">Version required for OSV/NVD lookup.</p>{% endif %}
+                    {% if ai_triage_active %}
+                    <form action="{% url 'triage_single_software' software.id %}" method="POST">{% csrf_token %}
+                        <button type="submit" class="btn btn-subtle w-full"><span class="material-symbols-outlined">psychology</span> Run AI triage</button>
+                    </form>
+                    {% endif %}
                 </div>
-
-                <div>
-                    <p class="text-[11px] text-outline mb-1">Port / Protocol</p>
-                    <div class="flex items-center gap-3 text-on-surface">
-                        <span class="material-symbols-outlined text-primary text-sm">settings_input_component</span>
-                        <span class="font-bold text-sm">PORT {{ software.listening_port|default:"None" }}</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="mt-10 pt-6 border-t border-outline-variant">
-                <a href="{% url 'scan_import' %}?software={{ software.id }}" class="bg-primary text-surface w-full py-3 rounded-xl font-bold text-xs hover:brightness-110 transition-all flex items-center justify-center gap-2">
-                    <span class="material-symbols-outlined text-sm">upload_file</span> Import SAST / Scan
-                </a>
-                <form action="{% url 'software_rescan_osv' software.id %}" method="POST" class="mt-3">
-                    {% csrf_token %}
-                    <button {% if not osv_rescan_possible %}disabled{% endif %} class="w-full py-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 border border-primary/20 text-primary hover:bg-primary/10 disabled:opacity-40 disabled:cursor-not-allowed">
-                        <span class="material-symbols-outlined text-sm">search</span> Re-Scan via OSV + NVD
-                    </button>
-                </form>
-                {% if not osv_rescan_possible %}
-                <p class="text-[11px] text-outline tracking-wider mt-2">Version required for OSV/NVD lookup.</p>
-                {% endif %}
-                
-                {% if ai_triage_active %}
-                <form action="{% url 'triage_single_software' software.id %}" method="POST" class="mt-3">
-                    {% csrf_token %}
-                    <button type="submit" class="bg-tertiary text-surface w-full py-3 rounded-xl font-bold text-xs hover:brightness-110 transition-all flex items-center justify-center gap-2">
-                        <span class="material-symbols-outlined text-sm">psychology</span> Run AI Triage
-                    </button>
-                </form>
-                {% endif %}
             </div>
         </div>
 
         {% if software.ai_triage_time %}
-        <div class="bg-surface-container rounded-md p-5 border border-outline-variant">
-            <div class="flex items-center justify-between mb-5">
-                <h5 class="font-headline font-bold text-xs text-tertiary flex items-center gap-2">
-                    <span class="material-symbols-outlined text-sm">psychology</span> AI Triage
-                </h5>
-                <span class="text-[11px] text-outline tracking-wider">
-                    {{ software.ai_triage_time|date:"Y-m-d H:i" }}
-                </span>
-            </div>
-            
-            <div class="space-y-4">
+        <div class="card">
+            <div class="card-head"><h5 class="card-title flex items-center gap-1.5"><span class="material-symbols-outlined text-sm text-tertiary">psychology</span> AI triage</h5><span class="text-[11px] text-outline">{{ software.ai_triage_time|date:"Y-m-d H:i" }}</span></div>
+            <div class="p-4 space-y-3">
                 <div>
-                    <span class="block text-outline text-[11px] tracking-wider mb-1">Analyst Reasoning</span>
-                    <p class="p-4 bg-surface-container-low rounded-md text-on-surface-variant font-body leading-relaxed text-xs max-h-40 overflow-y-auto">
-                        {{ software.ai_reason }}
-                    </p>
+                    <p class="text-[11px] text-outline mb-1">Reasoning</p>
+                    <p class="p-3 bg-surface-container-low rounded-md text-on-surface-variant text-xs leading-relaxed max-h-40 overflow-y-auto">{{ software.ai_reason }}</p>
                 </div>
-                
-                <div class="grid grid-cols-2 gap-3 pt-2">
-                    <div class="p-3 bg-surface-container-low rounded-xl">
-                        <span class="block text-[10px] text-outline mb-1">Cluster 1 (Open/High)</span>
-                        <span class="inline-flex px-2 py-0.5 rounded text-[11px] font-bold tracking-wider
- {% if software.ai_result_cluster_1 == 'Act' %}bg-error/20 text-error border border-error/30 
- {% elif software.ai_result_cluster_1 == 'Attend' %}bg-tertiary/20 text-tertiary border border-tertiary/30
- {% else %}bg-primary/20 text-primary border border-primary/30{% endif %}">
-                            {{ software.ai_result_cluster_1 }}
-                        </span>
-                    </div>
-                    <div class="p-3 bg-surface-container-low rounded-xl">
-                        <span class="block text-[10px] text-outline mb-1">Cluster 2 (Open/Low)</span>
-                        <span class="inline-flex px-2 py-0.5 rounded text-[11px] font-bold tracking-wider
- {% if software.ai_result_cluster_2 == 'Act' %}bg-error/20 text-error border border-error/30 
- {% elif software.ai_result_cluster_2 == 'Attend' %}bg-tertiary/20 text-tertiary border border-tertiary/30
- {% else %}bg-primary/20 text-primary border border-primary/30{% endif %}">
-                            {{ software.ai_result_cluster_2 }}
-                        </span>
-                    </div>
-                    <div class="p-3 bg-surface-container-low rounded-xl">
-                        <span class="block text-[10px] text-outline mb-1">Cluster 3 (Ctrl/High)</span>
-                        <span class="inline-flex px-2 py-0.5 rounded text-[11px] font-bold tracking-wider
- {% if software.ai_result_cluster_3 == 'Act' %}bg-error/20 text-error border border-error/30 
- {% elif software.ai_result_cluster_3 == 'Attend' %}bg-tertiary/20 text-tertiary border border-tertiary/30
- {% else %}bg-primary/20 text-primary border border-primary/30{% endif %}">
-                            {{ software.ai_result_cluster_3 }}
-                        </span>
-                    </div>
-                    <div class="p-3 bg-surface-container-low rounded-xl">
-                        <span class="block text-[10px] text-outline mb-1">Cluster 4 (Ctrl/Low)</span>
-                        <span class="inline-flex px-2 py-0.5 rounded text-[11px] font-bold tracking-wider
- {% if software.ai_result_cluster_4 == 'Act' %}bg-error/20 text-error border border-error/30 
- {% elif software.ai_result_cluster_4 == 'Attend' %}bg-tertiary/20 text-tertiary border border-tertiary/30
- {% else %}bg-primary/20 text-primary border border-primary/30{% endif %}">
-                            {{ software.ai_result_cluster_4 }}
-                        </span>
-                    </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="p-2.5 bg-surface-container-low rounded-md"><span class="block text-[10px] text-outline mb-1">Open / High</span><span class="badge-soft {% if software.ai_result_cluster_1 == 'Act' %}!text-error !border-error/30{% elif software.ai_result_cluster_1 == 'Attend' %}!text-tertiary !border-tertiary/30{% endif %}">{{ software.ai_result_cluster_1 }}</span></div>
+                    <div class="p-2.5 bg-surface-container-low rounded-md"><span class="block text-[10px] text-outline mb-1">Open / Low</span><span class="badge-soft {% if software.ai_result_cluster_2 == 'Act' %}!text-error !border-error/30{% elif software.ai_result_cluster_2 == 'Attend' %}!text-tertiary !border-tertiary/30{% endif %}">{{ software.ai_result_cluster_2 }}</span></div>
+                    <div class="p-2.5 bg-surface-container-low rounded-md"><span class="block text-[10px] text-outline mb-1">Ctrl / High</span><span class="badge-soft {% if software.ai_result_cluster_3 == 'Act' %}!text-error !border-error/30{% elif software.ai_result_cluster_3 == 'Attend' %}!text-tertiary !border-tertiary/30{% endif %}">{{ software.ai_result_cluster_3 }}</span></div>
+                    <div class="p-2.5 bg-surface-container-low rounded-md"><span class="block text-[10px] text-outline mb-1">Ctrl / Low</span><span class="badge-soft {% if software.ai_result_cluster_4 == 'Act' %}!text-error !border-error/30{% elif software.ai_result_cluster_4 == 'Attend' %}!text-tertiary !border-tertiary/30{% endif %}">{{ software.ai_result_cluster_4 }}</span></div>
                 </div>
             </div>
         </div>
         {% endif %}
-        <div class="bg-surface-container rounded-md p-5">
-          <div class="flex items-center justify-between mb-5">
-              <h5 class="font-headline font-bold text-xs text-outline">Deployments</h5>
-              <span class="px-2.5 py-0.5 rounded-full bg-surface-container-highest text-outline text-[10px] font-bold tracking-wider">
-                  {{ hosts|length }} Asset{{ hosts|length|pluralize }}
-              </span>
-          </div>
-          
-          <div class="space-y-4">
-              {% if not hosts %}
-              <div class="text-center py-20">
-                  <span class="material-symbols-outlined text-outline-variant text-4xl mb-4 opacity-20">inventory</span>
-                  <p class="text-outline text-[10px] font-bold">No Host Deployments Found</p>
-              </div>
-              {% else %}
-              
-              <!-- Cluster 1: Critical & Exposed -->
-              <details class="group border border-error/10 rounded-md bg-surface-container-low overflow-hidden transition-all duration-300" {% if cluster_1 %}open{% endif %}>
-                  <summary class="flex items-center justify-between p-5 cursor-pointer list-none select-none hover:bg-surface-container-high/50 transition-colors">
-                      <div class="flex items-center gap-4">
-                          <div class="w-10 h-10 rounded-xl bg-error/10 text-error flex items-center justify-center">
-                              <span class="material-symbols-outlined">gpp_bad</span>
-                          </div>
-                          <div>
-                              <span class="block text-xs font-bold text-on-surface tracking-wider text-left">Critical & Exposed</span>
-                              <span class="inline-flex mt-1 items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-error/15 text-error border border-error/30">
-                                  Critical Risk
-                              </span>
-                          </div>
-                      </div>
-                      <div class="flex items-center gap-3">
-                          {% if software.ai_triage_time %}
-                          <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider
- {% if software.ai_result_cluster_1 == 'Act' %}bg-error/20 text-error border border-error/30 
- {% elif software.ai_result_cluster_1 == 'Attend' %}bg-tertiary/20 text-tertiary border border-tertiary/30
- {% else %}bg-primary/20 text-primary border border-primary/30{% endif %}">
-                              AI: {{ software.ai_result_cluster_1 }}
-                          </span>
-                          {% endif %}
-                          <span class="px-2 py-0.5 rounded bg-error/10 text-error text-[10px] font-bold">
-                              {{ cluster_1|length }}
-                          </span>
-                          <span class="material-symbols-outlined text-outline transition-transform duration-300 group-open:rotate-180">expand_more</span>
-                      </div>
-                  </summary>
-                  <div class="p-5 border-t border-error/10 space-y-3 bg-surface-container-lowest/30">
-                      {% for host in cluster_1 %}
-                      <div class="flex items-center justify-between p-4 bg-surface-container/50 hover:bg-surface-container-high rounded-xl transition-all group/host">
-                          <div class="flex items-center gap-4">
-                              <div class="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center text-primary group-hover/host:scale-105 transition-transform">
-                                  <span class="material-symbols-outlined">dns</span>
-                              </div>
-                              <div>
-                                  <a href="{% url 'host_detail' host.id %}" class="font-bold text-on-surface hover:text-primary transition-colors block text-xs">{{ host.ip_address }}</a>
-                                  <div class="flex items-center gap-2 mt-0.5">
-                                      <p class="text-[11px] text-outline">{{ host.hostname|default:"Anonymous Host" }}</p>
-                                      {% if software.ai_triage_time %}
-                                      <span class="inline-flex items-center px-1.5 py-0.2 rounded text-[7px] font-bold tracking-wider
- {% if software.ai_result_cluster_1 == 'Act' %}bg-error/10 text-error border border-error/20
- {% elif software.ai_result_cluster_1 == 'Attend' %}bg-tertiary/10 text-tertiary border border-tertiary/20
- {% else %}bg-primary/10 text-primary border border-primary/20{% endif %}">
-                                          Priority: {{ software.ai_result_cluster_1 }}
-                                      </span>
-                                      {% endif %}
-                                  </div>
-                              </div>
-                          </div>
-                          <div class="flex items-center gap-2">
-                              <a href="{% url 'host_detail' host.id %}" class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-outline hover:text-primary hover:bg-primary/10 transition-all">
-                                  <span class="material-symbols-outlined text-[16px]">visibility</span>
-                              </a>
-                              <form action="{% url 'remove_host_from_software' software.id host.id %}" method="POST" onsubmit="return confirm('Remove host association with this software?')">
-                                  {% csrf_token %}
-                                  <button type="submit" class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-error/50 hover:text-error hover:bg-error/10 transition-all">
-                                      <span class="material-symbols-outlined text-[16px]">link_off</span>
-                                  </button>
-                              </form>
-                          </div>
-                      </div>
-                      {% empty %}
-                      <p class="text-[10px] text-outline text-center py-2 font-bold opacity-50">No Assets</p>
-                      {% endfor %}
-                  </div>
-              </details>
 
-              <!-- Cluster 2: Medium/Low & Open -->
-              <details class="group border border-tertiary/10 rounded-md bg-surface-container-low overflow-hidden transition-all duration-300" {% if cluster_2 %}open{% endif %}>
-                  <summary class="flex items-center justify-between p-5 cursor-pointer list-none select-none hover:bg-surface-container-high/50 transition-colors">
-                      <div class="flex items-center gap-4">
-                          <div class="w-10 h-10 rounded-xl bg-tertiary/10 text-tertiary flex items-center justify-center">
-                              <span class="material-symbols-outlined">warning</span>
-                          </div>
-                          <div>
-                              <span class="block text-xs font-bold text-on-surface tracking-wider text-left">Medium/Low & Exposed</span>
-                              <span class="inline-flex mt-1 items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-tertiary/15 text-tertiary border border-tertiary/30">
-                                  High Risk
-                              </span>
-                          </div>
-                      </div>
-                      <div class="flex items-center gap-3">
-                          {% if software.ai_triage_time %}
-                          <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider
- {% if software.ai_result_cluster_2 == 'Act' %}bg-error/20 text-error border border-error/30 
- {% elif software.ai_result_cluster_2 == 'Attend' %}bg-tertiary/20 text-tertiary border border-tertiary/30
- {% else %}bg-primary/20 text-primary border border-primary/30{% endif %}">
-                              AI: {{ software.ai_result_cluster_2 }}
-                          </span>
-                          {% endif %}
-                          <span class="px-2 py-0.5 rounded bg-tertiary/10 text-tertiary text-[10px] font-bold">
-                              {{ cluster_2|length }}
-                          </span>
-                          <span class="material-symbols-outlined text-outline transition-transform duration-300 group-open:rotate-180">expand_more</span>
-                      </div>
-                  </summary>
-                  <div class="p-5 border-t border-tertiary/10 space-y-3 bg-surface-container-lowest/30">
-                      {% for host in cluster_2 %}
-                      <div class="flex items-center justify-between p-4 bg-surface-container/50 hover:bg-surface-container-high rounded-xl transition-all group/host">
-                          <div class="flex items-center gap-4">
-                              <div class="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center text-primary group-hover/host:scale-105 transition-transform">
-                                  <span class="material-symbols-outlined">dns</span>
-                              </div>
-                              <div>
-                                  <a href="{% url 'host_detail' host.id %}" class="font-bold text-on-surface hover:text-primary transition-colors block text-xs">{{ host.ip_address }}</a>
-                                  <div class="flex items-center gap-2 mt-0.5">
-                                      <p class="text-[11px] text-outline">{{ host.hostname|default:"Anonymous Host" }}</p>
-                                      {% if software.ai_triage_time %}
-                                      <span class="inline-flex items-center px-1.5 py-0.2 rounded text-[7px] font-bold tracking-wider
- {% if software.ai_result_cluster_2 == 'Act' %}bg-error/10 text-error border border-error/20
- {% elif software.ai_result_cluster_2 == 'Attend' %}bg-tertiary/10 text-tertiary border border-tertiary/20
- {% else %}bg-primary/10 text-primary border border-primary/20{% endif %}">
-                                          Priority: {{ software.ai_result_cluster_2 }}
-                                      </span>
-                                      {% endif %}
-                                  </div>
-                              </div>
-                          </div>
-                          <div class="flex items-center gap-2">
-                              <a href="{% url 'host_detail' host.id %}" class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-outline hover:text-primary hover:bg-primary/10 transition-all">
-                                  <span class="material-symbols-outlined text-[16px]">visibility</span>
-                              </a>
-                              <form action="{% url 'remove_host_from_software' software.id host.id %}" method="POST" onsubmit="return confirm('Remove host association with this software?')">
-                                  {% csrf_token %}
-                                  <button type="submit" class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-error/50 hover:text-error hover:bg-error/10 transition-all">
-                                      <span class="material-symbols-outlined text-[16px]">link_off</span>
-                                  </button>
-                              </form>
-                          </div>
-                      </div>
-                      {% empty %}
-                      <p class="text-[10px] text-outline text-center py-2 font-bold opacity-50">No Assets</p>
-                      {% endfor %}
-                  </div>
-              </details>
-
-              <!-- Cluster 3: Critical & Controlled -->
-              <details class="group border border-secondary/15 rounded-md bg-surface-container-low overflow-hidden transition-all duration-300" {% if cluster_3 %}open{% endif %}>
-                  <summary class="flex items-center justify-between p-5 cursor-pointer list-none select-none hover:bg-surface-container-high/50 transition-colors">
-                      <div class="flex items-center gap-4">
-                          <div class="w-10 h-10 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center">
-                              <span class="material-symbols-outlined">security</span>
-                          </div>
-                          <div>
-                              <span class="block text-xs font-bold text-on-surface tracking-wider text-left">Critical & Controlled</span>
-                              <span class="inline-flex mt-1 items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-secondary/15 text-secondary border border-secondary/30">
-                                  Medium Risk
-                              </span>
-                          </div>
-                      </div>
-                      <div class="flex items-center gap-3">
-                          {% if software.ai_triage_time %}
-                          <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider
- {% if software.ai_result_cluster_3 == 'Act' %}bg-error/20 text-error border border-error/30 
- {% elif software.ai_result_cluster_3 == 'Attend' %}bg-tertiary/20 text-tertiary border border-tertiary/30
- {% else %}bg-primary/20 text-primary border border-primary/30{% endif %}">
-                              AI: {{ software.ai_result_cluster_3 }}
-                          </span>
-                          {% endif %}
-                          <span class="px-2 py-0.5 rounded bg-secondary/10 text-secondary text-[10px] font-bold">
-                              {{ cluster_3|length }}
-                          </span>
-                          <span class="material-symbols-outlined text-outline transition-transform duration-300 group-open:rotate-180">expand_more</span>
-                      </div>
-                  </summary>
-                  <div class="p-5 border-t border-secondary/15 space-y-3 bg-surface-container-lowest/30">
-                      {% for host in cluster_3 %}
-                      <div class="flex items-center justify-between p-4 bg-surface-container/50 hover:bg-surface-container-high rounded-xl transition-all group/host">
-                          <div class="flex items-center gap-4">
-                              <div class="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center text-primary group-hover/host:scale-105 transition-transform">
-                                  <span class="material-symbols-outlined">dns</span>
-                              </div>
-                              <div>
-                                  <a href="{% url 'host_detail' host.id %}" class="font-bold text-on-surface hover:text-primary transition-colors block text-xs">{{ host.ip_address }}</a>
-                                  <div class="flex items-center gap-2 mt-0.5">
-                                      <p class="text-[11px] text-outline">{{ host.hostname|default:"Anonymous Host" }}</p>
-                                      {% if software.ai_triage_time %}
-                                      <span class="inline-flex items-center px-1.5 py-0.2 rounded text-[7px] font-bold tracking-wider
- {% if software.ai_result_cluster_3 == 'Act' %}bg-error/10 text-error border border-error/20
- {% elif software.ai_result_cluster_3 == 'Attend' %}bg-tertiary/10 text-tertiary border border-tertiary/20
- {% else %}bg-primary/10 text-primary border border-primary/20{% endif %}">
-                                          Priority: {{ software.ai_result_cluster_3 }}
-                                      </span>
-                                      {% endif %}
-                                  </div>
-                              </div>
-                          </div>
-                          <div class="flex items-center gap-2">
-                              <a href="{% url 'host_detail' host.id %}" class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-outline hover:text-primary hover:bg-primary/10 transition-all">
-                                  <span class="material-symbols-outlined text-[16px]">visibility</span>
-                              </a>
-                              <form action="{% url 'remove_host_from_software' software.id host.id %}" method="POST" onsubmit="return confirm('Remove host association with this software?')">
-                                  {% csrf_token %}
-                                  <button type="submit" class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-error/50 hover:text-error hover:bg-error/10 transition-all">
-                                      <span class="material-symbols-outlined text-[16px]">link_off</span>
-                                  </button>
-                              </form>
-                          </div>
-                      </div>
-                      {% empty %}
-                      <p class="text-[10px] text-outline text-center py-2 font-bold opacity-50">No Assets</p>
-                      {% endfor %}
-                  </div>
-              </details>
-
-              <!-- Cluster 4: Medium/Low & Controlled -->
-              <details class="group border border-outline-variant rounded-md bg-surface-container-low overflow-hidden transition-all duration-300" {% if cluster_4 %}open{% endif %}>
-                  <summary class="flex items-center justify-between p-5 cursor-pointer list-none select-none hover:bg-surface-container-high/50 transition-colors">
-                      <div class="flex items-center gap-4">
-                          <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
-                              <span class="material-symbols-outlined">verified_user</span>
-                          </div>
-                          <div>
-                              <span class="block text-xs font-bold text-on-surface tracking-wider text-left">Medium/Low & Controlled</span>
-                              <span class="inline-flex mt-1 items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-primary/15 text-primary border border-primary/30">
-                                  Low Risk
-                              </span>
-                          </div>
-                      </div>
-                      <div class="flex items-center gap-3">
-                          {% if software.ai_triage_time %}
-                          <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider
- {% if software.ai_result_cluster_4 == 'Act' %}bg-error/20 text-error border border-error/30 
- {% elif software.ai_result_cluster_4 == 'Attend' %}bg-tertiary/20 text-tertiary border border-tertiary/30
- {% else %}bg-primary/20 text-primary border border-primary/30{% endif %}">
-                              AI: {{ software.ai_result_cluster_4 }}
-                          </span>
-                          {% endif %}
-                          <span class="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-bold">
-                              {{ cluster_4|length }}
-                          </span>
-                          <span class="material-symbols-outlined text-outline transition-transform duration-300 group-open:rotate-180">expand_more</span>
-                      </div>
-                  </summary>
-                  <div class="p-5 border-t border-outline-variant space-y-3 bg-surface-container-lowest/30">
-                      {% for host in cluster_4 %}
-                      <div class="flex items-center justify-between p-4 bg-surface-container/50 hover:bg-surface-container-high rounded-xl transition-all group/host">
-                          <div class="flex items-center gap-4">
-                              <div class="w-10 h-10 rounded-xl bg-surface-container-highest flex items-center justify-center text-primary group-hover/host:scale-105 transition-transform">
-                                  <span class="material-symbols-outlined">dns</span>
-                              </div>
-                              <div>
-                                  <a href="{% url 'host_detail' host.id %}" class="font-bold text-on-surface hover:text-primary transition-colors block text-xs">{{ host.ip_address }}</a>
-                                  <div class="flex items-center gap-2 mt-0.5">
-                                      <p class="text-[11px] text-outline">{{ host.hostname|default:"Anonymous Host" }}</p>
-                                      {% if software.ai_triage_time %}
-                                      <span class="inline-flex items-center px-1.5 py-0.2 rounded text-[7px] font-bold tracking-wider
- {% if software.ai_result_cluster_4 == 'Act' %}bg-error/10 text-error border border-error/20
- {% elif software.ai_result_cluster_4 == 'Attend' %}bg-tertiary/10 text-tertiary border border-tertiary/20
- {% else %}bg-primary/10 text-primary border border-primary/20{% endif %}">
-                                          Priority: {{ software.ai_result_cluster_4 }}
-                                      </span>
-                                      {% endif %}
-                                  </div>
-                              </div>
-                          </div>
-                          <div class="flex items-center gap-2">
-                              <a href="{% url 'host_detail' host.id %}" class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-outline hover:text-primary hover:bg-primary/10 transition-all">
-                                  <span class="material-symbols-outlined text-[16px]">visibility</span>
-                              </a>
-                              <form action="{% url 'remove_host_from_software' software.id host.id %}" method="POST" onsubmit="return confirm('Remove host association with this software?')">
-                                  {% csrf_token %}
-                                  <button type="submit" class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-error/50 hover:text-error hover:bg-error/10 transition-all">
-                                      <span class="material-symbols-outlined text-[16px]">link_off</span>
-                                  </button>
-                              </form>
-                          </div>
-                      </div>
-                      {% empty %}
-                      <p class="text-[10px] text-outline text-center py-2 font-bold opacity-50">No Assets</p>
-                      {% endfor %}
-                  </div>
-              </details>
-              {% endif %}
-          </div>
+        <div class="card">
+            <div class="card-head"><h5 class="card-title">Deployments</h5><span class="badge-soft">{{ hosts|length }} asset{{ hosts|length|pluralize }}</span></div>
+            <div class="p-4 space-y-2">
+                {% if not hosts %}
+                {% include 'vuln_manager/partials/_empty.html' with icon='inventory_2' title='No host deployments' %}
+                {% else %}
+                {% include 'vuln_manager/partials/_sw_cluster.html' with label='Critical & Exposed' risk='Critical risk' accent='error' cluster=cluster_1 ai=software.ai_result_cluster_1 show_ai=software.ai_triage_time software=software %}
+                {% include 'vuln_manager/partials/_sw_cluster.html' with label='Medium/Low & Exposed' risk='High risk' accent='tertiary' cluster=cluster_2 ai=software.ai_result_cluster_2 show_ai=software.ai_triage_time software=software %}
+                {% include 'vuln_manager/partials/_sw_cluster.html' with label='Critical & Controlled' risk='Medium risk' accent='secondary' cluster=cluster_3 ai=software.ai_result_cluster_3 show_ai=software.ai_triage_time software=software %}
+                {% include 'vuln_manager/partials/_sw_cluster.html' with label='Medium/Low & Controlled' risk='Low risk' accent='primary' cluster=cluster_4 ai=software.ai_result_cluster_4 show_ai=software.ai_triage_time software=software %}
+                {% endif %}
+            </div>
         </div>
     </div>
 
+    <!-- Right column: associated threats -->
     <div class="lg:col-span-7">
-        <div class="bg-surface-container rounded-md p-5 border border-outline-variant">
-            <div class="flex items-center justify-between mb-5">
-                <h5 class="font-headline font-bold text-xs text-error">Associated Threats</h5>
-                <span class="w-6 h-6 rounded-full bg-error/10 text-error flex items-center justify-center text-[10px] font-bold">{{ vulns|length }}</span>
-            </div>
-            <div class="mb-6 flex flex-wrap items-center gap-2">
-                <span class="text-[11px] text-outline font-bold">Severity</span>
-                <a href="{% url 'software_detail' software.id %}" class="px-3 py-1 rounded-lg text-[11px] font-bold border transition-all {% if not severity_filter %}bg-surface-variant text-on-surface border-outline-variant{% else %}text-outline border-outline-variant hover:text-on-surface{% endif %}">All</a>
+        <div class="card">
+            <div class="card-head"><h5 class="card-title">Associated threats</h5><span class="badge-soft">{{ vulns|length }}</span></div>
+            <div class="px-4 py-2 flex flex-wrap items-center gap-1.5 border-b border-outline-variant">
+                <span class="text-[11px] text-outline mr-1">Severity</span>
+                <a href="{% url 'software_detail' software.id %}" class="chip h-7 {% if not severity_filter %}chip-on{% endif %}">All</a>
                 {% for value, label in severity_choices %}
-                <a href="{% url 'software_detail' software.id %}?severity={{ value }}" class="px-3 py-1 rounded-lg text-[11px] font-bold border transition-all {% if severity_filter == value %}bg-surface-variant text-on-surface border-outline-variant{% else %}text-outline border-outline-variant hover:text-on-surface{% endif %}">
-                    {{ label }}
-                </a>
+                <a href="{% url 'software_detail' software.id %}?severity={{ value }}" class="chip h-7 {% if severity_filter == value %}chip-on{% endif %}">{{ label }}</a>
                 {% endfor %}
             </div>
-            
-            <div class="space-y-4">
+            <div class="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {% for v in vulns %}
-                <div class="p-4 bg-surface-container-low rounded-md group hover:bg-surface-container-high transition-all">
-                    <div class="flex justify-between items-start mb-2">
-                        <span class="badge severity-{{ v.severity|lower }} rounded-full px-2 py-0.5 text-[10px] font-bold">{{ v.severity|upper }}</span>
-                        <span class="text-[10px] text-outline font-bold">{{ v.host.ip_address|default:"Global" }}</span>
+                <div class="p-3 bg-surface-container-low rounded-md border border-outline-variant">
+                    <div class="flex justify-between items-start mb-1.5">
+                        <span class="badge severity-{{ v.severity|lower }}">{{ v.severity|upper }}</span>
+                        <span class="text-[11px] text-outline">{{ v.host.ip_address|default:"Global" }}</span>
                     </div>
-                    <a href="{% url 'vuln_detail' v.id %}" class="font-bold text-on-surface text-xs hover:text-primary transition-colors block truncate">{{ v.cve_id }}</a>
-                    <p class="text-[11px] text-outline-variant truncate mt-1">{{ v.name }}</p>
+                    <a href="{% url 'vuln_detail' v.id %}" class="font-medium text-on-surface text-sm hover:text-primary block truncate">{{ v.cve_id }}</a>
+                    <p class="text-[11px] text-outline truncate mt-0.5">{{ v.name }}</p>
                 </div>
                 {% empty %}
-                <p class="text-[10px] text-outline text-center py-4 font-bold opacity-50">No Vulnerabilities</p>
+                <div class="sm:col-span-2">{% include 'vuln_manager/partials/_empty.html' with icon='verified' title='No vulnerabilities' %}</div>
                 {% endfor %}
             </div>
         </div>

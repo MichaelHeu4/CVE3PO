@@ -2,235 +2,115 @@
 {% load vuln_filters %}
 
 {% block title %}Vulnerabilities{% endblock %}
-
-{% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
+{% block header_title %}Vulnerabilities{% endblock %}
 
 {% block content %}
-<!-- Header Section -->
-<section class="mb-6">
-    <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
-        <div>
-            <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight">Security <span class="text-primary">Alerts</span></h1>
-            <p class="text-on-surface-variant font-body max-w-xl text-sm">Overview of detected security flaws across your systems.</p>
-        </div>
-        <div class="flex flex-wrap items-center gap-2 bg-surface-container-low p-1.5 rounded-xl border border-outline-variant">
-            <a href="{% url 'vuln_list' %}?status=active{% if severity %}&severity={{ severity }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="px-6 py-2 rounded-lg text-[10px] font-bold transition-all {% if status_filter == 'active' %}bg-surface-variant text-on-surface {% else %}text-outline hover:text-on-surface{% endif %}">Active</a>
-            <a href="{% url 'vuln_list' %}?status=resolved{% if severity %}&severity={{ severity }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="px-6 py-2 rounded-lg text-[10px] font-bold transition-all {% if status_filter == 'resolved' %}bg-surface-variant text-on-surface {% else %}text-outline hover:text-on-surface{% endif %}">Resolved</a>
-            <a href="{% url 'vuln_list' %}?status=ignored{% if severity %}&severity={{ severity }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="px-6 py-2 rounded-lg text-[10px] font-bold transition-all {% if status_filter == 'ignored' %}bg-surface-variant text-on-surface {% else %}text-outline hover:text-on-surface{% endif %}">Accepted</a>
-        </div>
+<section class="page-header">
+    <div>
+        <h1 class="page-title">Vulnerabilities</h1>
+        <p class="page-subtitle">Detected security findings across your systems.</p>
     </div>
-
-    {% if status_filter == 'resolved' and request.user.is_staff %}
-    <div class="flex justify-end mb-6">
-        <form action="{% url 'delete_fixed_vulnerabilities' %}" method="POST"
-              onsubmit="return confirm('Delete ALL fixed vulnerabilities permanently? This cannot be undone.');">
-            {% csrf_token %}
-            <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-error/40 bg-error/10 hover:bg-error/20 text-error transition-all text-[10px] font-bold tracking-wider">
-                <span class="material-symbols-outlined text-sm">delete_sweep</span>
-                Delete all fixed
-            </button>
-        </form>
-    </div>
-    {% endif %}
-
-    <div class="mt-2 mb-6 flex flex-wrap items-center gap-2">
-        <span class="text-[11px] text-outline font-bold">Severity</span>
-        <a href="{% url 'vuln_list' %}?status={{ status_filter }}{% if query %}&q={{ query|urlencode }}{% endif %}" class="px-3 py-1 rounded-lg text-[11px] font-bold border transition-all {% if not severity %}bg-surface-variant text-on-surface border-outline-variant{% else %}text-outline border-outline-variant hover:text-on-surface{% endif %}">All</a>
-        {% for value, label in severity_choices %}
-        <a href="{% url 'vuln_list' %}?status={{ status_filter }}&severity={{ value }}{% if query %}&q={{ query|urlencode }}{% endif %}" class="px-3 py-1 rounded-lg text-[11px] font-bold border transition-all {% if severity == value %}bg-surface-variant text-on-surface border-outline-variant{% else %}text-outline border-outline-variant hover:text-on-surface{% endif %}">
-            {{ label }}
-        </a>
-        {% endfor %}
-    </div>
-
-    <!-- Metrics Summary -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div class="bg-surface-container rounded-md p-4 border-l-4 border-error">
-            <p class="text-outline font-label text-[11px] mb-2 font-bold">Critical Severity</p>
-            <h2 class="text-3xl font-headline font-bold text-on-surface mb-2">{{ metrics.critical }}</h2>
-            {% if metrics.critical > 0 %}
-            <p class="text-[11px] text-error font-bold flex items-center gap-1">
-                <span class="material-symbols-outlined text-xs">priority_high</span> Action Required
-            </p>
-            {% else %}
-            <p class="text-[11px] text-primary font-bold flex items-center gap-1">
-                <span class="material-symbols-outlined text-xs">check_circle</span> All Clear
-            </p>
-            {% endif %}
-        </div>
-        <div class="bg-surface-container rounded-md p-4 border-l-4 border-tertiary">
-            <p class="text-outline font-label text-[11px] mb-2 font-bold">High Risk</p>
-            <h2 class="text-3xl font-headline font-bold text-on-surface mb-2">{{ metrics.high }}</h2>
-            {% if metrics.high > 0 %}
-            <p class="text-[11px] text-tertiary font-bold">Awaiting Fix</p>
-            {% else %}
-            <p class="text-[11px] text-primary font-bold">Resolved</p>
-            {% endif %}
-        </div>
-        <div class="bg-surface-container rounded-md p-4 border-l-4 border-primary">
-            <p class="text-outline font-label text-[11px] mb-2 font-bold">Impacted Systems</p>
-            <h2 class="text-3xl font-headline font-bold text-on-surface mb-2">{{ metrics.impacted_assets }}</h2>
-            <p class="text-[11px] text-outline/60 font-bold">Out of {{metrics.assets_total}} Hosts</p>
-        </div>
-        <div class="bg-surface-container rounded-md p-4 border-l-4 border-primary-container">
-            <p class="text-outline font-label text-[11px] mb-2 font-bold">Affected Software</p>
-            <h2 class="text-3xl font-headline font-bold text-on-surface mb-2">{{ metrics.impacted_software }}</h2>
-            <p class="text-[11px] text-outline/60 font-bold">Out of {{metrics.software_total}} Programs</p>
-        </div>
+    <div class="flex items-center gap-1 p-1 rounded-md bg-surface-container border border-outline-variant">
+        <a href="{% qs_replace status='active' page=None %}" class="chip border-0 {% if status_filter == 'active' %}chip-on{% endif %}">Active</a>
+        <a href="{% qs_replace status='resolved' page=None %}" class="chip border-0 {% if status_filter == 'resolved' %}chip-on{% endif %}">Resolved</a>
+        <a href="{% qs_replace status='ignored' page=None %}" class="chip border-0 {% if status_filter == 'ignored' %}chip-on{% endif %}">Accepted</a>
     </div>
 </section>
 
-<!-- Search Bar -->
-<div class="bg-surface-container-low rounded-md p-4 mb-6 border border-outline-variant">
-    <form method="GET" class="relative w-full">
-        <input type="hidden" name="status" value="{{ status_filter }}">
-        {% if severity %}<input type="hidden" name="severity" value="{{ severity }}">{% endif %}
-        <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-lg">search</span>
-        <input type="text" name="q" placeholder="Search by CVE, name or host..." value="{{ query|default:'' }}" class="w-full bg-surface-container border-none rounded-md pl-12 pr-40 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30 transition-all">
-        <button type="submit" class="absolute right-20 top-1/2 -translate-y-1/2 px-4 py-1.5 rounded-xl bg-primary text-surface text-[10px] font-bold">Search</button>
-        <a href="{% url 'vuln_list' %}?status={{ status_filter }}{% if severity %}&severity={{ severity }}{% endif %}" class="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-1.5 rounded-xl bg-surface-container-highest text-outline text-[10px] font-bold border border-outline-variant hover:text-on-surface transition-colors">Clear</a>
-    </form>
+<!-- KPI strip -->
+<div class="grid grid-cols-2 lg:grid-cols-4 bg-surface-container border border-outline-variant rounded-md mb-4">
+    <div class="p-4 border-b lg:border-b-0 border-r border-outline-variant">
+        <p class="text-[11px] text-outline mb-2">Critical</p>
+        <div class="flex items-baseline gap-2 tabular-nums"><span class="text-[26px] font-bold {% if metrics.critical %}text-error{% else %}text-on-surface{% endif %}">{{ metrics.critical }}</span></div>
+        <p class="mt-2.5 text-[11px] text-outline">{% if metrics.critical %}Action required{% else %}All clear{% endif %}</p>
+    </div>
+    <div class="p-4 border-b lg:border-b-0 lg:border-r border-outline-variant">
+        <p class="text-[11px] text-outline mb-2">High</p>
+        <div class="flex items-baseline gap-2 tabular-nums"><span class="text-[26px] font-bold {% if metrics.high %}text-tertiary{% else %}text-on-surface{% endif %}">{{ metrics.high }}</span></div>
+        <p class="mt-2.5 text-[11px] text-outline">Awaiting fix</p>
+    </div>
+    <div class="p-4 border-r border-outline-variant">
+        <p class="text-[11px] text-outline mb-2">Impacted hosts</p>
+        <div class="flex items-baseline gap-1.5 tabular-nums"><span class="text-[26px] font-bold text-on-surface">{{ metrics.impacted_assets }}</span><span class="text-[11px] text-outline">/ {{ metrics.assets_total }}</span></div>
+        <p class="mt-2.5 text-[11px] text-outline">Hosts affected</p>
+    </div>
+    <div class="p-4">
+        <p class="text-[11px] text-outline mb-2">Affected software</p>
+        <div class="flex items-baseline gap-1.5 tabular-nums"><span class="text-[26px] font-bold text-on-surface">{{ metrics.impacted_software }}</span><span class="text-[11px] text-outline">/ {{ metrics.software_total }}</span></div>
+        <p class="mt-2.5 text-[11px] text-outline">Packages affected</p>
+    </div>
 </div>
 
-<!-- Main Table -->
-<div class="bg-surface-container rounded-md overflow-hidden border border-outline-variant">
+<!-- Toolbar: search + severity filter -->
+<div class="toolbar">
+    <form method="GET" class="search">
+        <input type="hidden" name="status" value="{{ status_filter }}">
+        {% if severity %}<input type="hidden" name="severity" value="{{ severity }}">{% endif %}
+        {% if sort.key %}<input type="hidden" name="sort" value="{{ sort.key }}"><input type="hidden" name="dir" value="{{ sort.dir }}">{% endif %}
+        <span class="material-symbols-outlined search-icon">search</span>
+        <input type="text" name="q" value="{{ query|default:'' }}" placeholder="Search by CVE, name or host…" class="search-input">
+    </form>
+    <div class="flex flex-wrap items-center gap-1.5">
+        <a href="{% qs_replace severity=None page=None %}" class="chip {% if not severity %}chip-on{% endif %}">All severities</a>
+        {% for value, label in severity_choices %}
+        <a href="{% qs_replace severity=value page=None %}" class="chip {% if severity == value %}chip-on{% endif %}">{{ label }}</a>
+        {% endfor %}
+    </div>
+</div>
+
+{% if status_filter == 'resolved' and request.user.is_staff %}
+<div class="flex justify-end mb-3">
+    <form action="{% url 'delete_fixed_vulnerabilities' %}" method="POST"
+          onsubmit="return confirm('Delete ALL fixed vulnerabilities permanently? This cannot be undone.');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger"><span class="material-symbols-outlined">delete_sweep</span> Delete all fixed</button>
+    </form>
+</div>
+{% endif %}
+
+<!-- Table -->
+<div class="table-wrap">
     <div class="overflow-x-auto">
-        <table class="w-full text-left border-collapse" id="vulnTable">
+        <table class="data-table">
             <thead>
-                <tr class="bg-surface-container-highest/30 border-b border-outline-variant">
-                    <th data-sort-type="text" class="sortable-th cursor-pointer select-none px-6 py-5 text-[10px] font-bold text-outline font-headline">CVE ID</th>
-                    <th data-sort-type="text" class="sortable-th cursor-pointer select-none px-6 py-5 text-[10px] font-bold text-outline font-headline text-center">Priority</th>
-                    <th data-sort-type="text" class="sortable-th cursor-pointer select-none px-6 py-5 text-[10px] font-bold text-outline font-headline">Vulnerability Name</th>
-                    <th data-sort-type="text" class="sortable-th cursor-pointer select-none px-6 py-5 text-[10px] font-bold text-outline font-headline text-center">Target</th>
-                    <th data-sort-type="text" class="sortable-th cursor-pointer select-none px-6 py-5 text-[10px] font-bold text-outline font-headline text-center">State</th>
-                    <th class="px-6 py-5 text-[10px] font-bold text-outline font-headline text-right">Action</th>
+                <tr>
+                    {% include 'vuln_manager/partials/_sort_th.html' with label='CVE ID' key='cve' sort=sort.key dir=sort.dir %}
+                    {% include 'vuln_manager/partials/_sort_th.html' with label='Severity' key='severity' sort=sort.key dir=sort.dir %}
+                    {% include 'vuln_manager/partials/_sort_th.html' with label='Name' key='name' sort=sort.key dir=sort.dir %}
+                    {% include 'vuln_manager/partials/_sort_th.html' with label='Target' key='target' sort=sort.key dir=sort.dir %}
+                    {% include 'vuln_manager/partials/_sort_th.html' with label='Status' key='status' sort=sort.key dir=sort.dir %}
+                    <th class="text-right">Action</th>
                 </tr>
             </thead>
-            <tbody class="divide-y divide-outline-variant/5">
+            <tbody>
                 {% for vuln in vulns %}
-                <tr class="hover:bg-primary/5 transition-colors group">
-                    <td class="px-6 py-4">
-                        <a href="{% url 'vuln_detail' vuln.id %}" class="font-headline font-bold text-primary hover:text-primary-container transition-colors text-sm tracking-tight flex items-center gap-2">
-                            <span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
-                            {{ vuln.cve_id }}
-                        </a>
+                <tr>
+                    <td class="whitespace-nowrap">
+                        <a href="{% url 'vuln_detail' vuln.id %}" class="font-semibold text-primary hover:underline">{{ vuln.cve_id }}</a>
                     </td>
-                    <td class="px-6 py-4 text-center">
-                        <span class="badge severity-{{ vuln.severity|lower }} rounded-lg px-3 py-1 text-[11px] font-bold">
-                            {{ vuln.severity|upper }}
-                        </span>
+                    <td><span class="badge severity-{{ vuln.severity|lower }}">{{ vuln.severity|upper }}</span></td>
+                    <td class="max-w-md">
+                        <div class="truncate text-on-surface">{{ vuln.name|truncatewords:10 }}</div>
+                        <div class="text-[11px] text-outline">{{ vuln.scan.get_scan_type_display }}</div>
                     </td>
-                    <td class="px-6 py-4">
-                        <p class="font-bold text-on-surface text-sm leading-tight mb-1 group-hover:text-primary transition-colors tracking-tight">{{ vuln.name|truncatewords:8 }}</p>
-                        <p class="text-[11px] text-outline/50 font-bold tracking-tight italic">{{ vuln.scan.get_scan_type_display }}</p>
+                    <td class="whitespace-nowrap">
+                        {% if vuln.host %}<span class="badge-soft">{{ vuln.host.ip_address }}</span>
+                        {% elif vuln.software %}<span class="badge-soft">{{ vuln.software.name|truncatechars:20 }}</span>
+                        {% else %}<span class="text-outline text-xs">Global</span>{% endif %}
                     </td>
-                    <td class="px-6 py-4 text-center">
-                        {% if vuln.host %}
-                        <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-container-highest border border-outline-variant text-[10px] font-bold text-on-surface tracking-tight">
-                            {{ vuln.host.ip_address }}
-                        </div>
-                        {% elif vuln.software %}
-                        <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/10 border border-primary/20 text-[10px] font-bold text-primary tracking-tight">
-                            {{ vuln.software.name|truncatechars:12 }}
-                        </div>
-                        {% else %}
-                        <span class="text-[11px] text-outline/20 font-bold italic">Global</span>
-                        {% endif %}
+                    <td class="whitespace-nowrap">
+                        <span class="status-dot"><span class="w-1.5 h-1.5 rounded-full {% if vuln.status == 'fixed' %}bg-primary{% elif vuln.status == 'in_progress' %}bg-tertiary{% else %}bg-outline{% endif %}"></span>{{ vuln.get_status_display }}</span>
                     </td>
-                    <td class="px-6 py-4 text-center">
-                        <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-surface-container-highest/50 border border-outline-variant">
-                            <span class="w-2 h-2 rounded-full {% if vuln.status == 'fixed' %}bg-primary{% elif vuln.status == 'in_progress' %}bg-tertiary{% else %}bg-outline-variant{% endif %}"></span>
-                            <span class="text-[10px] font-bold text-on-surface">{{ vuln.get_status_display }}</span>
-                        </div>
-                    </td>
-                    <td class="px-6 py-4 text-right">
-                        <a href="{% url 'vuln_detail' vuln.id %}" class="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-surface-container-highest border border-outline-variant text-outline group-hover:text-primary group-hover:border-primary/30 transition-all">
-                            <span class="material-symbols-outlined">chevron_right</span>
-                        </a>
+                    <td class="text-right">
+                        <a href="{% url 'vuln_detail' vuln.id %}" class="icon-btn" aria-label="Open"><span class="material-symbols-outlined text-base">chevron_right</span></a>
                     </td>
                 </tr>
                 {% empty %}
-                <tr>
-                    <td colspan="6" class="text-center py-32 bg-surface-container-low">
-                        <div class="w-20 h-20 bg-surface-container-highest rounded-full flex items-center justify-center mx-auto mb-6">
-                            <span class="material-symbols-outlined text-outline-variant text-2xl">verified</span>
-                        </div>
-                        <h3 class="text-on-surface font-headline font-bold text-xl tracking-tight">All Systems Clear</h3>
-                        <p class="text-outline text-xs mt-2">No vulnerabilities detected in your environment.</p>
-                    </td>
-                </tr>
+                <tr><td colspan="6">{% include 'vuln_manager/partials/_empty.html' with icon='verified' title='All systems clear' text='No vulnerabilities match the current filters.' %}</td></tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
-    
-    <!-- Pagination Footer -->
-    <div class="bg-surface-container-highest/20 px-8 py-6 flex items-center justify-between border-t border-outline-variant">
-        <p class="text-[10px] font-bold text-outline">
-            Page {{ vulns.number }} of {{ vulns.paginator.num_pages }} ({{ vulns.paginator.count }} total)
-        </p>
-        <div class="flex gap-2">
-            {% if vulns.has_previous %}
-              <a href="?page={{ vulns.previous_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if severity %}&severity={{ severity }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="w-10 h-10 rounded-xl bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant">
-                  <span class="material-symbols-outlined text-base">chevron_left</span>
-              </a>
-            {% endif %}
-            
-            <button class="w-10 h-10 rounded-xl bg-primary text-surface flex items-center justify-center text-xs font-bold">
-                {{ vulns.number }}
-            </button>
-            
-            {% if vulns.has_next %}
-                <a href="?page={{ vulns.next_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if severity %}&severity={{ severity }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="w-10 h-10 rounded-xl bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant">
-                    <span class="material-symbols-outlined text-base">chevron_right</span>
-                </a>
-            {% endif %}
-        </div>
-    </div>
+    {% if vulns.paginator.count %}{% include 'vuln_manager/partials/_pagination.html' with page=vulns %}{% endif %}
 </div>
-
-<script>
-function makeTableSortable(tableId) {
-    const table = document.getElementById(tableId);
-    if (!table) return;
-    const tbody = table.querySelector("tbody");
-    const headers = table.querySelectorAll("thead th.sortable-th");
-    const sortState = {};
-
-    headers.forEach((header, index) => {
-        sortState[index] = "none";
-        header.addEventListener("click", () => {
-            const type = header.dataset.sortType || "text";
-            const rows = Array.from(tbody.querySelectorAll("tr")).filter(
-                (row) => !row.querySelector("td[colspan]")
-            );
-            const next = sortState[index] === "asc" ? "desc" : "asc";
-            sortState[index] = next;
-
-            rows.sort((a, b) => {
-                const aCell = a.children[index];
-                const bCell = b.children[index];
-                const aRaw = (aCell?.dataset.sortValue || aCell?.innerText || "").trim();
-                const bRaw = (bCell?.dataset.sortValue || bCell?.innerText || "").trim();
-
-                if (type === "number") {
-                    const aNum = parseFloat(aRaw.replace(",", ".")) || 0;
-                    const bNum = parseFloat(bRaw.replace(",", ".")) || 0;
-                    return next === "asc" ? aNum - bNum : bNum - aNum;
-                }
-
-                return next === "asc"
-                    ? aRaw.localeCompare(bRaw, undefined, { sensitivity: "base" })
-                    : bRaw.localeCompare(aRaw, undefined, { sensitivity: "base" });
-            });
-
-            rows.forEach((row) => tbody.appendChild(row));
-        });
-    });
-}
-
-document.addEventListener("DOMContentLoaded", function () {
-    makeTableSortable("vulnTable");
-});
-</script>
 {% endblock %}

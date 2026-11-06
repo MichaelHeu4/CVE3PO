@@ -1,93 +1,61 @@
 {% extends 'vuln_manager/base.html' %}
 
 {% block title %}Audit Trail{% endblock %}
-{% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
+{% block header_title %}Audit Trail{% endblock %}
 
 {% block content %}
-<div class="max-w-7xl mx-auto space-y-8">
-    <section>
-        <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight mb-2">Global <span class="text-primary">Audit Trail</span></h1>
-        <p class="text-on-surface-variant text-sm">All vulnerability lifecycle and update events across the platform.</p>
-    </section>
-
-    <div class="bg-surface-container rounded-md p-4">
-        <form method="GET" class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-            <div class="md:col-span-7">
-                <label class="block text-[10px] font-bold text-outline mb-2">Search</label>
-                <input type="text" name="q" value="{{ query }}" placeholder="CVE, finding name, user, actor, or details..." class="w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30">
-            </div>
-            <div class="md:col-span-3">
-                <label class="block text-[10px] font-bold text-outline mb-2">Action</label>
-                <select name="action" class="w-full bg-surface-container-low border-none rounded-xl px-4 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30">
-                    <option value="">All actions</option>
-                    {% for key, label in action_choices %}
-                    <option value="{{ key }}" {% if action_filter == key %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="md:col-span-2">
-                <button type="submit" class="w-full rounded-xl bg-primary text-surface py-3 text-[10px] font-bold hover:brightness-110 transition-all">
-                    Apply
-                </button>
-            </div>
-        </form>
+<section class="page-header">
+    <div>
+        <h1 class="page-title">Audit trail</h1>
+        <p class="page-subtitle">All vulnerability lifecycle and update events across the platform.</p>
     </div>
+</section>
 
-    <div class="bg-surface-container rounded-md p-4 overflow-x-auto">
-        <table class="w-full text-left">
+<form method="GET" class="toolbar">
+    {% if sort.key %}<input type="hidden" name="sort" value="{{ sort.key }}"><input type="hidden" name="dir" value="{{ sort.dir }}">{% endif %}
+    <div class="search">
+        <span class="material-symbols-outlined search-icon">search</span>
+        <input type="text" name="q" value="{{ query }}" placeholder="CVE, finding, user, actor or details…" class="search-input">
+    </div>
+    <select name="action" class="search-input sm:w-56">
+        <option value="">All actions</option>
+        {% for key, label in action_choices %}
+        <option value="{{ key }}" {% if action_filter == key %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-primary">Apply</button>
+</form>
+
+<div class="table-wrap">
+    <div class="overflow-x-auto">
+        <table class="data-table">
             <thead>
-                <tr class="text-[11px] font-bold text-outline/70 border-b border-outline-variant">
-                    <th class="px-4 py-3">Time</th>
-                    <th class="px-4 py-3">Action</th>
-                    <th class="px-4 py-3">CVE</th>
-                    <th class="px-4 py-3">Actor</th>
-                    <th class="px-4 py-3">Details</th>
+                <tr>
+                    {% include 'vuln_manager/partials/_sort_th.html' with label='Time' key='time' sort=sort.key dir=sort.dir thclass='whitespace-nowrap' %}
+                    {% include 'vuln_manager/partials/_sort_th.html' with label='Action' key='action' sort=sort.key dir=sort.dir %}
+                    {% include 'vuln_manager/partials/_sort_th.html' with label='Finding' key='finding' sort=sort.key dir=sort.dir %}
+                    {% include 'vuln_manager/partials/_sort_th.html' with label='Actor' key='actor' sort=sort.key dir=sort.dir %}
+                    <th>Details</th>
                 </tr>
             </thead>
             <tbody>
                 {% for event in events %}
-                <tr class="border-b border-outline-variant hover:bg-surface-container-high/40">
-                    <td class="px-4 py-3 text-[10px] text-on-surface-variant whitespace-nowrap">{{ event.created_at|date:"d M Y H:i:s" }}</td>
-                    <td class="px-4 py-3 text-[10px] font-bold text-on-surface">{{ event.get_action_display }}</td>
-                    <td class="px-4 py-3 text-[10px]">
-                        {% if event.vulnerability %}
-                        <a href="{% url 'vuln_detail' event.vulnerability.id %}" class="text-primary font-bold hover:underline">{{ event.vulnerability.cve_id }}</a>
-                        {% else %}
-                        <span class="text-outline">deleted_vulnerability</span>
-                        {% endif %}
+                <tr>
+                    <td class="whitespace-nowrap text-on-surface-variant text-xs">{{ event.created_at|date:"d M Y H:i:s" }}</td>
+                    <td class="whitespace-nowrap font-medium">{{ event.get_action_display }}</td>
+                    <td class="whitespace-nowrap">
+                        {% if event.vulnerability %}<a href="{% url 'vuln_detail' event.vulnerability.id %}" class="text-primary font-medium hover:underline">{{ event.vulnerability.cve_id }}</a>
+                        {% else %}<span class="text-outline">deleted</span>{% endif %}
                     </td>
-                    <td class="px-4 py-3 text-[10px] text-on-surface">
-                        {% if event.user %}{{ event.user.username }}{% elif event.actor %}{{ event.actor }}{% else %}-{% endif %}
-                    </td>
-                    <td class="px-4 py-3 text-[10px] text-on-surface-variant">
-                        {% if event.details %}
-                        <code class="break-all">{{ event.details }}</code>
-                        {% else %}
-                        -
-                        {% endif %}
-                    </td>
+                    <td class="whitespace-nowrap">{% if event.user %}{{ event.user.username }}{% elif event.actor %}{{ event.actor }}{% else %}—{% endif %}</td>
+                    <td class="text-on-surface-variant text-xs">{% if event.details %}<code class="break-all">{{ event.details }}</code>{% else %}—{% endif %}</td>
                 </tr>
                 {% empty %}
-                <tr>
-                    <td colspan="5" class="px-4 py-12 text-center text-[10px] font-bold text-outline">No audit events found.</td>
-                </tr>
+                <tr><td colspan="5">{% include 'vuln_manager/partials/_empty.html' with icon='history_toggle_off' title='No audit events' text='Lifecycle events will appear here.' %}</td></tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
-
-    {% if events.paginator.num_pages > 1 %}
-    <div class="flex items-center justify-between">
-        <p class="text-[11px] font-bold text-outline">Page {{ events.number }} of {{ events.paginator.num_pages }}</p>
-        <div class="flex gap-2">
-            {% if events.has_previous %}
-            <a href="?page={{ events.previous_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if action_filter %}&action={{ action_filter }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant"><span class="material-symbols-outlined text-sm">chevron_left</span></a>
-            {% endif %}
-            {% if events.has_next %}
-            <a href="?page={{ events.next_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if action_filter %}&action={{ action_filter }}{% endif %}" class="w-8 h-8 rounded-lg bg-surface-container-highest text-outline flex items-center justify-center hover:text-primary transition-all border border-outline-variant"><span class="material-symbols-outlined text-sm">chevron_right</span></a>
-            {% endif %}
-        </div>
-    </div>
-    {% endif %}
+    {% if events.paginator.count %}{% include 'vuln_manager/partials/_pagination.html' with page=events %}{% endif %}
 </div>
 {% endblock %}
