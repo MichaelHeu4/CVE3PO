@@ -1,258 +1,165 @@
 {% extends 'vuln_manager/base.html' %}
 {% load vuln_filters %}
 
-{% block title %}Vulnerability: {{ vuln.cve_id }}{% endblock %}
-
-{% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
+{% block title %}{{ vuln.cve_id }}{% endblock %}
+{% block header_title %}Vulnerability{% endblock %}
 
 {% block content %}
-<nav class="mb-5">
-    <ol class="flex items-center gap-2 text-[10px] font-bold text-outline">
-        <li><a href="{% url 'dashboard' %}" class="hover:text-primary transition-colors">Dashboard</a></li>
-        <li class="material-symbols-outlined text-xs">chevron_right</li>
-        <li><a href="{% url 'vuln_list' %}" class="hover:text-primary transition-colors">Vulnerabilities</a></li>
-        <li class="material-symbols-outlined text-xs">chevron_right</li>
+<nav class="mb-4">
+    <ol class="flex items-center gap-1.5 text-xs text-outline">
+        <li><a href="{% url 'vuln_list' %}" class="hover:text-primary">Vulnerabilities</a></li>
+        <li class="material-symbols-outlined text-sm">chevron_right</li>
         <li class="text-on-surface">{{ vuln.cve_id }}</li>
     </ol>
 </nav>
 
 <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
-    <!-- Main Detail -->
-    <div class="lg:col-span-8 space-y-8">
-        <div class="bg-surface-container rounded-md p-5 md:p-4 border border-outline-variant relative overflow-hidden">
-            <!-- Header with integrated Severity -->
-            <div class="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6 pb-10 border-b border-outline-variant">
+    <!-- Main -->
+    <div class="lg:col-span-8 space-y-4">
+        <div class="card p-5">
+            <div class="flex flex-col md:flex-row md:items-start justify-between gap-4 pb-4 mb-4 border-b border-outline-variant">
                 <div>
-                    <div class="flex items-center gap-3 mb-4">
-                        <span class="px-3 py-1 rounded-lg bg-primary/10 text-primary text-[10px] font-bold border border-primary/20">Security Analysis</span>
-                        <span class="w-1.5 h-1.5 rounded-full bg-outline-variant/30"></span>
-                        <span class="text-[10px] text-outline font-bold">{{ vuln.scan.get_scan_type_display }}</span>
+                    <div class="flex items-center gap-2 mb-2 text-[11px] text-outline">
+                        <span class="badge-soft">{{ vuln.scan.get_scan_type_display }}</span>
                     </div>
-                    <h1 class="font-headline font-bold text-2xl md:text-2xl text-on-surface tracking-tight mb-2">{{ vuln.cve_id }}</h1>
-                    <h4 class="text-lg md:text-xl text-primary font-bold tracking-tight">{{ vuln.name }}</h4>
+                    <h1 class="font-headline font-semibold text-2xl text-on-surface tracking-tight">{{ vuln.cve_id }}</h1>
+                    <p class="text-base text-on-surface-variant mt-1">{{ vuln.name }}</p>
                 </div>
-                <div class="flex flex-col items-end gap-3">
-                    <span class="badge severity-{{ vuln.severity|lower }} rounded-xl px-8 py-3 text-sm font-bold border border-white/10">{{ vuln.severity|upper }}</span>
-                    {% if vuln.cvss %}
-                    <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-highest border border-outline-variant">
-                        <span class="text-[11px] font-bold text-outline">CVSS Vector</span>
-                        <span class="text-[10px] font-mono font-bold text-primary">{{ vuln.cvss }}</span>
-                    </div>
-                    {% endif %}
+                <div class="flex flex-col items-start md:items-end gap-2">
+                    <span class="badge severity-{{ vuln.severity|lower }} !text-sm !px-3 !py-1">{{ vuln.severity|upper }}</span>
+                    {% if vuln.cvss %}<div class="text-[11px] text-outline">CVSS <span class="font-mono text-on-surface">{{ vuln.cvss }}</span></div>{% endif %}
                 </div>
             </div>
 
-            <!-- Status & Actions -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                <div class="bg-surface-container-low p-4 rounded-md border border-outline-variant flex items-center justify-between group">
-                    <div>
-                        <p class="text-[11px] text-outline/50 font-bold mb-2">Current Status</p>
-                        <div class="flex items-center gap-3">
-                            <span class="w-3 h-3 rounded-full {% if vuln.status == 'fixed' %}bg-primary{% elif vuln.status == 'in_progress' %}bg-tertiary{% else %}bg-outline-variant{% endif %}"></span>
-                            <p class="font-bold text-on-surface text-base">{{ vuln.get_status_display }}</p>
-                        </div>
-                    </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+                <div class="bg-surface-container-low rounded-md border border-outline-variant p-4">
+                    <p class="text-[11px] text-outline mb-2">Current status</p>
+                    <div class="status-dot text-sm"><span class="w-2.5 h-2.5 rounded-full {% if vuln.status == 'fixed' %}bg-primary{% elif vuln.status == 'in_progress' %}bg-tertiary{% else %}bg-outline{% endif %}"></span>{{ vuln.get_status_display }}</div>
                 </div>
-                <div class="bg-surface-container-low p-4 rounded-md border border-outline-variant flex flex-col justify-center">
-                    <p class="text-[11px] text-outline/50 font-bold mb-2">Update Lifecycle</p>
-                    <form action="{% url 'update_vuln_status' vuln.id %}" method="POST" class="space-y-3" id="statusUpdateForm">
+                <div class="bg-surface-container-low rounded-md border border-outline-variant p-4">
+                    <p class="text-[11px] text-outline mb-2">Update lifecycle</p>
+                    <form action="{% url 'update_vuln_status' vuln.id %}" method="POST" class="space-y-2" id="statusUpdateForm">
                         {% csrf_token %}
-                        <div class="relative">
-                        <select name="status" id="statusSelect" class="w-full bg-surface-container-highest border border-outline-variant rounded-xl px-4 py-2 text-xs font-bold text-primary focus:ring-2 focus:ring-primary/20 cursor-pointer appearance-none transition-all hover:bg-surface-container-high">
+                        <select name="status" id="statusSelect" class="search-input">
                             {% for sk, sl in vuln.STATUS_CHOICES %}
-                            <option value="{{ sk }}" {% if vuln.status == sk %}selected{% endif %}>Promote to {{ sl }}</option>
+                            <option value="{{ sk }}" {% if vuln.status == sk %}selected{% endif %}>Set to {{ sl }}</option>
                             {% endfor %}
                         </select>
-                        <span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-primary pointer-events-none text-sm">unfold_more</span>
-                        </div>
-                        <textarea name="status_reason" id="statusReason" rows="2" placeholder="Reason for status change (required for Risk Accepted / False Positive)" class="w-full bg-surface-container-highest border border-outline-variant rounded-xl px-4 py-2 text-xs text-on-surface focus:ring-2 focus:ring-primary/20"></textarea>
-                        <button type="submit" class="w-full py-2.5 rounded-xl border border-primary/20 text-primary text-[10px] font-bold hover:bg-primary/10 transition-all">
-                            Update Status
-                        </button>
+                        <textarea name="status_reason" id="statusReason" rows="2" placeholder="Reason (required for Risk Accepted / False Positive)" class="search-input h-auto py-2"></textarea>
+                        <button type="submit" class="btn btn-ghost w-full">Update status</button>
                     </form>
-                    <form action="{% url 'triage_single_vulnerability' vuln.id %}" method="POST" class="mt-3">
-                        {% csrf_token %}
-                        <button type="submit" class="w-full py-2.5 rounded-xl border border-primary/20 text-primary text-[10px] font-bold hover:bg-primary/10 transition-all">
-                            Re-Run AI Triage
-                        </button>
-                    </form>
-                    <form action="{% url 'enrich_single_vulnerability' vuln.id %}" method="POST" class="mt-3">
-                        {% csrf_token %}
-                        <button type="submit" class="w-full py-2.5 rounded-xl border border-outline-variant text-on-surface text-[10px] font-bold hover:bg-surface-container-highest transition-all">
-                            Enrich CVE Details
-                        </button>
-                    </form>
+                    <div class="grid grid-cols-2 gap-2 mt-2">
+                        <form action="{% url 'triage_single_vulnerability' vuln.id %}" method="POST">{% csrf_token %}<button type="submit" class="btn btn-subtle w-full">Re-run AI</button></form>
+                        <form action="{% url 'enrich_single_vulnerability' vuln.id %}" method="POST">{% csrf_token %}<button type="submit" class="btn btn-subtle w-full">Enrich CVE</button></form>
+                    </div>
                 </div>
             </div>
 
-            <!-- Intelligence Description -->
-            <div class="prose prose-invert max-w-none">
-                <div class="flex items-center gap-3 mb-6">
-                    <div class="h-px flex-grow bg-outline-variant/10"></div>
-                    <h5 class="font-headline font-bold text-[10px] text-outline whitespace-nowrap">Technical Details</h5>
-                    <div class="h-px flex-grow bg-outline-variant/10"></div>
-                </div>
-                <p class="text-on-surface-variant leading-relaxed text-lg font-medium selection:bg-primary/30">{{ vuln.description|linebreaksbr }}</p>
-            </div>
+            <h5 class="text-[11px] font-semibold text-outline uppercase tracking-wide mb-2">Technical details</h5>
+            <p class="text-on-surface-variant leading-relaxed text-sm">{{ vuln.description|linebreaksbr }}</p>
 
             {% if vuln.ai_result != "tbd" %}
-            <div class="mt-6 bg-surface-container-low p-5 rounded-md border border-primary/10 relative overflow-hidden">
-                <div class="absolute -right-4 -top-4 opacity-5 pointer-events-none">
-                    <span class="material-symbols-outlined text-[120px]">automation</span>
+            <div class="mt-5 bg-surface-container-low p-4 rounded-md border border-outline-variant">
+                <div class="flex items-center justify-between gap-4 mb-3">
+                    <div class="flex items-center gap-2"><span class="material-symbols-outlined text-primary text-base">robot_2</span><h5 class="text-[11px] font-semibold text-primary uppercase tracking-wide">AI triage</h5></div>
+                    <span class="badge-soft !text-primary !border-primary/30">{{ vuln.ai_result|upper }}</span>
                 </div>
-                
-                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5">
-                    <div>
-                        <div class="flex items-center gap-2 mb-2">
-                            <span class="material-symbols-outlined text-primary text-sm">robot_2</span>
-                            <h5 class="font-headline font-bold text-[10px] text-primary">AI Triage Results</h5>
-                        </div>
-                        <h3 class="text-on-surface font-bold text-2xl tracking-tight">Automated Risk Analysis</h3>
-                    </div>
-                    <div class="flex flex-col items-end">
-                        <span class="text-[11px] font-bold text-outline mb-1">SSVC Recommendation</span>
-                        <span class="px-6 py-2 rounded-xl bg-primary text-surface font-bold text-lg">{{ vuln.ai_result|upper }}</span>
-                    </div>
-                </div>
-
-                <div class="space-y-6">
-                    <div>
-                        <p class="text-[11px] font-bold text-outline mb-3">Reasoning & Analysis</p>
-                        <div class="bg-surface-container-highest/30 p-5 rounded-md border border-outline-variant">
-                            <p class="text-on-surface-variant text-sm leading-relaxed italic">"{{ vuln.ai_reason }}"</p>
-                        </div>
-                    </div>
-
-                    {% if vuln.ai_suggestion %}
-                    <div>
-                        <p class="text-[11px] font-bold text-outline mb-3">Remediation Strategy</p>
-                        <div class="flex items-start gap-4 p-5 rounded-md bg-primary/5 border border-primary/10">
-                            <span class="material-symbols-outlined text-primary">lightbulb</span>
-                            <p class="text-on-surface text-sm font-medium leading-relaxed">{{ vuln.ai_suggestion }}</p>
-                        </div>
-                    </div>
-                    {% endif %}
-                </div>
+                <p class="text-[11px] text-outline mb-1">Reasoning</p>
+                <p class="text-on-surface-variant text-sm leading-relaxed mb-3">{{ vuln.ai_reason }}</p>
+                {% if vuln.ai_suggestion %}
+                <p class="text-[11px] text-outline mb-1">Remediation</p>
+                <div class="flex items-start gap-2 text-sm text-on-surface"><span class="material-symbols-outlined text-primary text-base">lightbulb</span><span>{{ vuln.ai_suggestion }}</span></div>
+                {% endif %}
             </div>
             {% endif %}
 
             {% if vuln.nuclei_poc %}
-            <div class="mt-6">
-                <div class="flex items-center justify-between mb-4">
-                    <h5 class="font-headline font-bold text-xs text-error flex items-center gap-2">
-                        <span class="material-symbols-outlined text-sm">terminal</span> Proof of Concept
-                    </h5>
-                    <button onclick="copyPoc()" class="text-[10px] font-bold text-outline hover:text-primary transition-colors">Copy Payload</button>
+            <div class="mt-5">
+                <div class="flex items-center justify-between mb-2">
+                    <h5 class="text-xs font-semibold text-error flex items-center gap-1.5"><span class="material-symbols-outlined text-sm">terminal</span> Proof of concept</h5>
+                    <button onclick="copyPoc()" class="text-[11px] text-outline hover:text-primary">Copy</button>
                 </div>
-                <div class="bg-surface-container-lowest p-5 rounded-md border border-outline-variant group relative">
-                    <pre class="m-0 overflow-x-auto custom-scrollbar"><code id="pocText" class="text-primary-container font-mono text-sm leading-relaxed">{{ vuln.nuclei_poc }}</code></pre>
-                </div>
+                <pre class="bg-surface-container-lowest p-4 rounded-md border border-outline-variant overflow-x-auto m-0"><code id="pocText" class="font-mono text-xs text-on-surface">{{ vuln.nuclei_poc }}</code></pre>
             </div>
             {% endif %}
         </div>
     </div>
 
-    <!-- Sidebar Info -->
-    <div class="lg:col-span-4 space-y-6">
-        <!-- Target Info -->
-        <div class="bg-surface-container-high rounded-md p-5">
-            <h5 class="font-headline font-bold text-xs text-outline mb-6">Affected Assets</h5>
-            <div class="space-y-6">
-                <div class="flex items-center gap-4">
-                    <div class="w-12 h-12 rounded-md bg-surface-container-highest flex items-center justify-center text-primary">
-                        <span class="material-symbols-outlined">hub</span>
-                    </div>
-                    <div>
-                        <p class="text-[11px] text-outline">IP / Hostname</p>
-                        {% if vuln.host %}
-                        <a href="{% url 'host_detail' vuln.host.id %}" class="font-bold text-on-surface hover:text-primary transition-colors">{{ vuln.host.ip_address }}</a>
-                        {% else %}
-                        <p class="font-bold text-on-surface">Global Architecture</p>
-                        {% endif %}
-                    </div>
-                </div>
-
+    <!-- Sidebar -->
+    <div class="lg:col-span-4 space-y-4">
+        <div class="card">
+            <div class="card-head">
+                <h5 class="card-title">Affected assets</h5>
+                {% if affected_count %}<span class="badge-soft">{{ affected_count }} asset{{ affected_count|pluralize }}</span>{% endif %}
+            </div>
+            <div class="p-4 space-y-3">
                 {% if vuln.software %}
-                <div class="flex items-center gap-4">
-                    <div class="w-12 h-12 rounded-md bg-primary/10 flex items-center justify-center text-primary">
-                        <span class="material-symbols-outlined">deployed_code</span>
-                    </div>
-                    <div>
-                        <p class="text-[11px] text-outline">Affected Software</p>
-                        <a href="{% url 'software_detail' vuln.software.id %}" class="font-bold text-on-surface hover:text-primary transition-colors text-xs">{{ vuln.software.name }}</a>
-                    </div>
+                <div>
+                    <p class="text-[11px] text-outline mb-1">Affected software</p>
+                    <a href="{% url 'software_detail' vuln.software.id %}" class="font-medium text-on-surface hover:text-primary">{{ vuln.software.name }}{% if vuln.software.version %} <span class="text-outline font-normal">{{ vuln.software.version }}</span>{% endif %}</a>
                 </div>
+                {% endif %}
+                {% if affected_count %}
+                <div class="space-y-2">
+                    {% include 'vuln_manager/partials/_sw_cluster.html' with label='Critical & Exposed' risk='Critical risk' accent='error' cluster=cluster_1 %}
+                    {% include 'vuln_manager/partials/_sw_cluster.html' with label='Medium/Low & Exposed' risk='High risk' accent='tertiary' cluster=cluster_2 %}
+                    {% include 'vuln_manager/partials/_sw_cluster.html' with label='Critical & Controlled' risk='Medium risk' accent='secondary' cluster=cluster_3 %}
+                    {% include 'vuln_manager/partials/_sw_cluster.html' with label='Medium/Low & Controlled' risk='Low risk' accent='primary' cluster=cluster_4 %}
+                </div>
+                {% else %}
+                <p class="font-medium text-on-surface">Global</p>
                 {% endif %}
             </div>
         </div>
 
-        <!-- Scan Origin -->
-        <div class="bg-surface-container rounded-md p-5 border border-outline-variant">
-            <h5 class="font-headline font-bold text-xs text-outline mb-6">Scan Source</h5>
-            <p class="text-xs text-on-surface-variant mb-2">Detected via <span class="text-primary font-bold">{{ vuln.scan.get_scan_type_display }}</span></p>
-            <p class="text-[10px] text-outline tracking-tight mb-6">Imported: {{ vuln.scan.uploaded_at|date:"d M Y | H:i" }}</p>
-            
-            <form action="{% url 'delete_vulnerability' vuln.id %}" method="POST" onsubmit="return confirm('Delete finding?')">
-                {% csrf_token %}
-                <button type="submit" class="w-full py-3 rounded-xl border border-error/20 text-error text-[10px] font-bold hover:bg-error hover:text-surface transition-all">
-                    Delete Finding
-                </button>
-            </form>
+        <div class="card">
+            <div class="card-head"><h5 class="card-title">Scan source</h5></div>
+            <div class="p-4">
+                <p class="text-xs text-on-surface-variant">Detected via <span class="text-on-surface font-medium">{{ vuln.scan.get_scan_type_display }}</span></p>
+                <p class="text-[11px] text-outline mt-1 mb-3">Imported {{ vuln.scan.uploaded_at|date:"d M Y · H:i" }}</p>
+                <form action="{% url 'delete_vulnerability' vuln.id %}" method="POST" onsubmit="return confirm('Delete finding?')">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger w-full">Delete finding</button>
+                </form>
+            </div>
         </div>
+
         {% if request.user.is_staff %}
-        <div class="bg-surface-container rounded-md p-5 border border-outline-variant">
-            <h5 class="font-headline font-bold text-xs text-outline mb-6">Wrike Ticketing</h5>
-            {% if vuln.wrike_task_id %}
-                <p class="text-xs text-on-surface-variant mb-3">Task ID: <span class="text-primary font-bold">{{ vuln.wrike_task_id }}</span></p>
-                {% if vuln.wrike_task_url %}
-                <a href="{{ vuln.wrike_task_url }}" target="_blank" rel="noopener noreferrer" class="inline-block mb-4 text-[10px] text-primary hover:text-primary-container">
-                    Open Wrike Task
-                </a>
+        <div class="card">
+            <div class="card-head"><h5 class="card-title">Wrike ticketing</h5></div>
+            <div class="p-4">
+                {% if vuln.wrike_task_id %}
+                    <p class="text-xs text-on-surface-variant mb-2">Task ID: <span class="text-on-surface font-medium">{{ vuln.wrike_task_id }}</span></p>
+                    {% if vuln.wrike_task_url %}<a href="{{ vuln.wrike_task_url }}" target="_blank" rel="noopener noreferrer" class="text-xs text-primary hover:underline">Open Wrike task</a>{% endif %}
+                    <form action="{% url 'sync_wrike_ticket' vuln.id %}" method="POST" class="mt-3">{% csrf_token %}<button type="submit" class="btn btn-ghost w-full">Sync Wrike status</button></form>
+                {% elif wrike_ready %}
+                    <form action="{% url 'create_wrike_ticket' vuln.id %}" method="POST">{% csrf_token %}<button type="submit" class="btn btn-ghost w-full">Create Wrike ticket</button></form>
+                {% else %}
+                    <p class="text-[11px] text-outline">Wrike is not configured or active.</p>
                 {% endif %}
-                <form action="{% url 'sync_wrike_ticket' vuln.id %}" method="POST">
-                    {% csrf_token %}
-                    <button type="submit" class="w-full py-3 rounded-xl border border-primary/30 text-primary text-[10px] font-bold hover:bg-primary/10 transition-all">
-                        Sync Wrike Status
-                    </button>
-                </form>
-            {% elif wrike_ready %}
-                <form action="{% url 'create_wrike_ticket' vuln.id %}" method="POST">
-                    {% csrf_token %}
-                    <button type="submit" class="w-full py-3 rounded-xl border border-primary/30 text-primary text-[10px] font-bold hover:bg-primary/10 transition-all">
-                        Create Wrike Ticket
-                    </button>
-                </form>
-            {% else %}
-                <p class="text-[10px] text-outline tracking-wider">Wrike is not configured or not active.</p>
-            {% endif %}
+            </div>
         </div>
         {% endif %}
-        <div class="bg-surface-container rounded-md p-5 border border-outline-variant">
-            <h5 class="font-headline font-bold text-xs text-outline mb-6">Audit Trail</h5>
-            <div class="space-y-3 max-h-72 overflow-y-auto pr-2">
+
+        <div class="card">
+            <div class="card-head"><h5 class="card-title">Audit trail</h5></div>
+            <div class="p-4 space-y-2 max-h-72 overflow-y-auto">
                 {% for event in audit_events %}
-                <div class="rounded-xl border border-outline-variant bg-surface-container-low p-3">
-                    <p class="text-[10px] text-on-surface tracking-wider font-bold">{{ event.get_action_display }}</p>
-                    <p class="text-[11px] text-outline mt-1">{{ event.created_at|date:"d M Y H:i" }}{% if event.user %} · {{ event.user.username }}{% elif event.actor %} · {{ event.actor }}{% endif %}</p>
-                    {% if event.details %}
-                    <p class="text-[10px] text-on-surface-variant mt-2">{{ event.details }}</p>
-                    {% endif %}
+                <div class="rounded-md border border-outline-variant bg-surface-container-low p-2.5">
+                    <p class="text-xs font-medium text-on-surface">{{ event.get_action_display }}</p>
+                    <p class="text-[11px] text-outline mt-0.5">{{ event.created_at|date:"d M Y H:i" }}{% if event.user %} · {{ event.user.username }}{% elif event.actor %} · {{ event.actor }}{% endif %}</p>
+                    {% if event.details %}<p class="text-[11px] text-on-surface-variant mt-1">{{ event.details }}</p>{% endif %}
                 </div>
                 {% empty %}
-                <p class="text-[10px] text-outline tracking-wider">No audit events yet.</p>
+                <p class="text-[11px] text-outline">No audit events yet.</p>
                 {% endfor %}
             </div>
         </div>
+
         {% if vuln.supply_chain %}
-        <div class="bg-surface-container rounded-md p-5 border border-outline-variant">
-          <div class="flex items-center gap-4">
-              <div class="w-12 h-12 rounded-md bg-primary/10 flex items-center justify-center text-primary">
-                  <span class="material-symbols-outlined">conveyor_belt</span>
-              </div>
-              <div>
-                  <p class="font-bold text-on-surface transition-colors">Supply Chain</p>
-              </div>
-          </div>
+        <div class="card p-4 flex items-center gap-3">
+            <span class="material-symbols-outlined text-primary">conveyor_belt</span>
+            <p class="font-medium text-on-surface">Supply chain finding</p>
         </div>
         {% endif %}
     </div>
@@ -263,23 +170,16 @@ function updateStatusReasonRequirement() {
     const select = document.getElementById('statusSelect');
     const reason = document.getElementById('statusReason');
     if (!select || !reason) return;
-    const required = ['risk_accepted', 'false_positive'].includes(select.value);
-    reason.required = required;
+    reason.required = ['risk_accepted', 'false_positive'].includes(select.value);
 }
-
 function copyPoc() {
     const text = document.getElementById('pocText').innerText;
-    navigator.clipboard.writeText(text).then(() => {
-        alert('Tactical payload copied to clipboard.');
-    });
+    navigator.clipboard.writeText(text).then(() => { alert('Copied to clipboard.'); });
 }
-
 document.addEventListener('DOMContentLoaded', function () {
     updateStatusReasonRequirement();
     const select = document.getElementById('statusSelect');
-    if (select) {
-        select.addEventListener('change', updateStatusReasonRequirement);
-    }
+    if (select) select.addEventListener('change', updateStatusReasonRequirement);
 });
 </script>
 {% endblock %}

@@ -1,23 +1,21 @@
 {% extends 'vuln_manager/base.html' %}
 {% load vuln_filters %}
 
-{% block title %}Kanban Board{% endblock %}
+{% block title %}Board{% endblock %}
 
-{% block header_title %}CVE<span class="text-primary">3PO</span>{% endblock %}
+{% block header_title %}Board{% endblock %}
 
 {% block content %}
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 
-<section class="mb-6">
-    <h1 class="font-headline font-extrabold text-3xl text-on-surface tracking-tight">Kanban <span class="text-primary">Board</span></h1>
-    <p class="text-on-surface-variant text-sm mt-1">Manage vulnerabilities through its lifecycle phases.</p>
-    <div class="mt-5 flex flex-wrap items-center gap-2">
-        <span class="text-[11px] text-outline font-bold">Severity</span>
-        <a href="{% url 'kanban_board' %}" class="px-3 py-1 rounded-lg text-[11px] font-bold border transition-all {% if not severity_filter %}bg-surface-variant text-on-surface border-outline-variant{% else %}text-outline border-outline-variant hover:text-on-surface{% endif %}">All</a>
+<section class="mb-4">
+    <h1 class="page-title">Board</h1>
+    <p class="page-subtitle">Manage vulnerabilities through their lifecycle phases.</p>
+    <div class="mt-4 flex flex-wrap items-center gap-1.5">
+        <span class="text-[11px] text-outline mr-1">Severity</span>
+        <a href="{% url 'kanban_board' %}" class="chip h-7 {% if not severity_filter %}chip-on{% endif %}">All</a>
         {% for value, label in severity_choices %}
-        <a href="{% url 'kanban_board' %}?severity={{ value }}" class="px-3 py-1 rounded-lg text-[11px] font-bold border transition-all {% if severity_filter == value %}bg-surface-variant text-on-surface border-outline-variant{% else %}text-outline border-outline-variant hover:text-on-surface{% endif %}">
-            {{ label }}
-        </a>
+        <a href="{% url 'kanban_board' %}?severity={{ value }}" class="chip h-7 {% if severity_filter == value %}chip-on{% endif %}">{{ label }}</a>
         {% endfor %}
     </div>
 </section>
@@ -39,7 +37,7 @@
             <!-- Draggable Area -->
             <div class="flex-grow overflow-y-auto space-y-4 kanban-column custom-scrollbar px-1" id="{{ status_key }}" data-status="{{ status_key }}">
                 {% for vuln in vulns %}
-                <div class="vuln-card bg-surface-container rounded-md p-5 hover:bg-surface-container-high transition-colors cursor-grab active:cursor-grabbing relative group" 
+                <div class="vuln-card bg-surface-container border border-outline-variant rounded-md p-4 hover:bg-surface-container-high transition-colors cursor-grab active:cursor-grabbing relative group"
                      data-id="{{ vuln.id }}" data-sev-score="{{ vuln.sev_score }}">
                     
                     <!-- Severity Indicator (Vertical bar) -->
@@ -52,7 +50,7 @@
                         </a>
                     </div>
 
-                    <h6 class="font-bold text-on-surface text-sm mb-1 ms-2 leading-tight">
+                    <h6 class="font-semibold text-on-surface text-sm mb-1 ms-2 leading-tight">
                         <a href="{% url 'vuln_detail' vuln.id %}" class="hover:text-primary transition-colors">{{ vuln.cve_id }}</a>
                     </h6>
                     <p class="text-[10px] text-on-surface-variant line-clamp-2 ms-2 mb-4">{{ vuln.name }}</p>

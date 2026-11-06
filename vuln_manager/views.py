@@ -27,6 +27,7 @@ from .utils.audit import log_vulnerability_event
 from .utils.vuln_dedup import create_or_update_vulnerability
 from .utils.osv_auto import enrich_software_with_feeds
 from .utils.enrichment import get_cve_details
+from .utils.listing import apply_sort
 from .extensions import wrike as wrike_ext
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -860,7 +861,18 @@ def host_list(request):
             | Q(operating_system__icontains=query)
             | Q(criticality__icontains=query)
         )
-    hosts_query = hosts_query.order_by("ip_address")
+    hosts_query, sort = apply_sort(
+        request,
+        hosts_query,
+        allowed={
+            "host": ["ip_address", "hostname"],
+            "os": "operating_system",
+            "criticality": "criticality",
+            "last_seen": "last_scanned",
+        },
+        default_key="host",
+        default_dir="asc",
+    )
 
     # Pagination
     paginator = Paginator(hosts_query, 25)  # 25 per page
@@ -884,7 +896,7 @@ def host_list(request):
     return render(
         request,
         "vuln_manager/host_list.html",
-        {"hosts": hosts, "query": query},
+        {"hosts": hosts, "query": query, "sort": sort},
     )
 
 
@@ -997,7 +1009,18 @@ def software_list(request):
             | Q(vendor__icontains=query)
             | Q(criticality__icontains=query)
         )
-    software_query = software_query.order_by("name")
+    software_query, sort = apply_sort(
+        request,
+        software_query,
+        allowed={
+            "name": "name",
+            "criticality": "criticality",
+            "version": "version",
+            "installs": "num_hosts",
+        },
+        default_key="name",
+        default_dir="asc",
+    )
 
     paginator = Paginator(software_query, 25)
     page_number = request.GET.get("page")
@@ -1006,7 +1029,7 @@ def software_list(request):
     return render(
         request,
         "vuln_manager/software_list.html",
-        {"software": software, "query": query},
+        {"software": software, "query": query, "sort": sort},
     )
 
 
@@ -1295,37 +1318,87 @@ def host_form(request, pk=None):
 
 @login_required
 def port_list(request):
+    query = (request.GET.get("q") or "").strip()
     latest_scan_ids = Port.objects.values(
         "host").annotate(latest=Max("scan_id"))
     active_port_ids = [item["latest"]
                        for item in latest_scan_ids if item["latest"]]
-    active_ports = (
+    ports_query = (
         Port.objects.filter(scan_id__in=active_port_ids)
         .select_related("host")
-        .order_by("port_number")
     )
-    port_groups = {}
-    for port in active_ports:
+    if query:
+        ports_query = ports_query.filter(
+            Q(port_number__icontains=query)
+            | Q(service_name__icontains=query)
+            | Q(host__ip_address__icontains=query)
+            | Q(host__hostname__icontains=query)
+        )
+
+    # Group by (port, service): one block per exposed service, with its hosts.
+    groups_map = {}
+    for port in ports_query:
         key = (port.port_number, port.service_name)
-        if key not in port_groups:
-            port_groups[key] = []
-        port_groups[key].append(port.host)
-    sorted_ports = sorted(port_groups.items(), key=lambda x: x[0][0])
-    return render(request, "vuln_manager/port_list.html", {"port_groups": sorted_ports})
+        groups_map.setdefault(key, []).append(port.host)
+    groups = []
+    for (port_number, service_name), hosts in groups_map.items():
+        groups.append({
+            "port": port_number,
+            "service": service_name,
+            "hosts": sorted(hosts, key=lambda h: h.ip_address),
+            "count": len(hosts),
+        })
+    groups.sort(key=lambda g: (g["port"], g["service"] or ""))
+
+    paginator = Paginator(groups, 40)
+    page_number = request.GET.get("page")
+    port_groups = paginator.get_page(page_number)
+    return render(
+        request,
+        "vuln_manager/port_list.html",
+        {"port_groups": port_groups, "query": query},
+    )
 
 
 @login_required
 def scan_list(request):
-    scans = list(
-        Scan.objects.annotate(num_vulns=Count("vulnerabilities")).order_by(
-            "-uploaded_at"
-        )
-    )
+    query = (request.GET.get("q") or "").strip()
+    base = Scan.objects.annotate(num_vulns=Count("vulnerabilities"))
+
+    # Build the previous-same-type chain over the full chronological set so the
+    # "compare diff" link stays correct regardless of display sort/pagination.
+    prev_map = {}
     last_by_type = {}
-    for scan in reversed(scans):
-        scan.previous_same_type = last_by_type.get(scan.scan_type)
-        last_by_type[scan.scan_type] = scan
-    return render(request, "vuln_manager/scan_list.html", {"scans": scans})
+    for s in base.order_by("uploaded_at").values("id", "scan_type"):
+        prev_map[s["id"]] = last_by_type.get(s["scan_type"])
+        last_by_type[s["scan_type"]] = s["id"]
+
+    scans_query = base
+    if query:
+        scans_query = scans_query.filter(
+            Q(scan_type__icontains=query) | Q(raw_file__icontains=query)
+        )
+    scans_query, sort = apply_sort(
+        request,
+        scans_query,
+        allowed={
+            "type": "scan_type",
+            "date": "uploaded_at",
+            "findings": "num_vulns",
+        },
+        default_key="date",
+        default_dir="desc",
+    )
+
+    paginator = Paginator(scans_query, 50)
+    page = paginator.get_page(request.GET.get("page"))
+    for scan in page:
+        scan.previous_same_type = prev_map.get(scan.id)
+    return render(
+        request,
+        "vuln_manager/scan_list.html",
+        {"scans": page, "query": query, "sort": sort},
+    )
 
 
 @login_required
@@ -1523,7 +1596,20 @@ def vuln_list(request):
             | Q(software__version__icontains=query)
         ).distinct()
 
-    vulns_query = vulns_query.order_by("-severity", "cve_id")
+    vulns_query = vulns_query.annotate(sev_score=_severity_order_case())
+    vulns_query, sort = apply_sort(
+        request,
+        vulns_query,
+        allowed={
+            "cve": "cve_id",
+            "severity": ["sev_score", "cve_id"],
+            "name": "name",
+            "target": ["host__ip_address", "software__name"],
+            "status": "status",
+        },
+        default_key="severity",
+        default_dir="desc",
+    )
 
     # Pagination
     paginator = Paginator(vulns_query, 50)  # 50 per page for vulns
@@ -1552,6 +1638,7 @@ def vuln_list(request):
             "status_filter": status_filter,
             "metrics": metrics,
             "query": query,
+            "sort": sort,
         },
     )
 
@@ -1567,12 +1654,41 @@ def vuln_detail(request, pk):
         and bool(wrike_extension.api_token)
         and bool(settings_obj.wrike_folder_id)
     )
+
+    # All hosts touched by this finding: the directly linked host plus every
+    # host the affected software is installed on (deduplicated). Grouped into
+    # the same exposure x criticality clusters as the software detail page.
+    affected = {}
+    if vuln.host:
+        affected[vuln.host.id] = vuln.host
+    if vuln.software:
+        for host in vuln.software.hosts.all():
+            affected[host.id] = host
+    affected_count = len(affected)
+    cluster_1, cluster_2, cluster_3, cluster_4 = [], [], [], []
+    for host in sorted(affected.values(), key=lambda h: h.ip_address):
+        is_crit = host.criticality in ["Critical", "High"]
+        is_open = host.is_exposed
+        if is_crit and is_open:
+            cluster_1.append(host)
+        elif not is_crit and is_open:
+            cluster_2.append(host)
+        elif is_crit and not is_open:
+            cluster_3.append(host)
+        else:
+            cluster_4.append(host)
+
     return render(
         request,
         "vuln_manager/vuln_detail.html",
         {
             "vuln": vuln,
             "wrike_ready": wrike_ready,
+            "affected_count": affected_count,
+            "cluster_1": cluster_1,
+            "cluster_2": cluster_2,
+            "cluster_3": cluster_3,
+            "cluster_4": cluster_4,
             "audit_events": VulnerabilityAuditEvent.objects.filter(
                 vulnerability=vuln
             ).order_by("-created_at")[:20],
@@ -1644,13 +1760,26 @@ def ki_dashboard(request):
 
     all_vulns_query = (
         Vulnerability.objects.exclude(status="false_positive")
-        .order_by("-severity", "cve_id")
         .distinct()
     )
 
     # AI Stats
     triaged_vulns = all_vulns_query.exclude(ai_result="tbd").count()
     action_required = all_vulns_query.filter(ai_result="Act").count()
+
+    all_vulns_query = all_vulns_query.annotate(sev_score=_severity_order_case())
+    all_vulns_query, sort = apply_sort(
+        request,
+        all_vulns_query,
+        allowed={
+            "severity": ["sev_score", "cve_id"],
+            "cve": "cve_id",
+            "asset": ["host__ip_address", "software__name"],
+            "ai": "ai_result",
+        },
+        default_key="severity",
+        default_dir="desc",
+    )
     avg_proc_time_ms = (
         Vulnerability.objects.filter(ai_proc_time__gt=0).aggregate(Avg("ai_proc_time"))[
             "ai_proc_time__avg"
@@ -1679,6 +1808,7 @@ def ki_dashboard(request):
         "ai": ai,
         "ai_module_active": ai_extension.is_active,
         "selected_vuln": selected_vuln,
+        "sort": sort,
     }
     return render(request, "vuln_manager/ki_dashboard.html", context)
 
@@ -1784,13 +1914,32 @@ def toggle_extension(request, name_id):
 def user_admin(request):
     if not request.user.is_staff:
         return HttpResponseForbidden("forbidden")
-    managed_users = User.objects.all().order_by("username")
+    query = (request.GET.get("q") or "").strip()
+    managed_users = User.objects.all()
+    if query:
+        managed_users = managed_users.filter(
+            Q(username__icontains=query) | Q(email__icontains=query)
+        )
+    managed_users, sort = apply_sort(
+        request,
+        managed_users,
+        allowed={
+            "username": "username",
+            "email": "email",
+            "role": "is_staff",
+            "last_login": "last_login",
+        },
+        default_key="username",
+        default_dir="asc",
+    )
     system_settings = get_system_settings()
     return render(
         request,
         "vuln_manager/user_admin.html",
         {
             "managed_users": managed_users,
+            "query": query,
+            "sort": sort,
             "registration_disabled": system_settings.disable_register,
             "sla_critical_days": system_settings.sla_critical_days,
             "sla_high_days": system_settings.sla_high_days,
@@ -1815,7 +1964,7 @@ def audit_trail(request):
         "user",
         "vulnerability__host",
         "vulnerability__software",
-    ).order_by("-created_at")
+    )
 
     if action_filter:
         events_query = events_query.filter(action=action_filter)
@@ -1829,6 +1978,19 @@ def audit_trail(request):
             | Q(details__icontains=query)
         )
 
+    events_query, sort = apply_sort(
+        request,
+        events_query,
+        allowed={
+            "time": "created_at",
+            "action": "action",
+            "finding": "vulnerability__cve_id",
+            "actor": "actor",
+        },
+        default_key="time",
+        default_dir="desc",
+    )
+
     paginator = Paginator(events_query, 50)
     page_number = request.GET.get("page")
     events = paginator.get_page(page_number)
@@ -1841,6 +2003,7 @@ def audit_trail(request):
             "query": query,
             "action_filter": action_filter,
             "action_choices": VulnerabilityAuditEvent.ACTION_CHOICES,
+            "sort": sort,
         },
     )
 

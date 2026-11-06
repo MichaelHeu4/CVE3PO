@@ -18,6 +18,22 @@ module.exports = {
   safelist: [
     "bg-primary/10", "bg-secondary/10", "bg-tertiary/10",
     "text-primary", "text-secondary", "text-tertiary",
+    // Criticality / status color combos assembled in templates.
+    "bg-error/10", "text-error", "border-error/20",
+    "bg-tertiary/10", "text-tertiary", "border-tertiary/20",
+    "bg-primary/10", "text-primary", "border-primary/20",
+    // Component classes (kept even if a scanner edge case misses them).
+    "page-header", "page-title", "page-subtitle",
+    "btn", "btn-primary", "btn-ghost", "btn-subtle", "btn-danger",
+    "icon-btn", "icon-btn-danger",
+    "toolbar", "search", "search-input", "search-icon",
+    "chip", "chip-on",
+    "card", "card-head", "card-title", "card-note",
+    "table-wrap", "data-table", "num",
+    "th-sort", "is-active", "arrow",
+    "badge", "badge-soft", "status-dot",
+    "pagination", "page-btn", "page-btn-current",
+    "empty-state", "empty-state-icon",
   ],
   theme: {
     extend: {

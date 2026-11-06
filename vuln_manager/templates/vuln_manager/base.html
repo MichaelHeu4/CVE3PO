@@ -29,48 +29,49 @@
     <link rel="stylesheet" href="{% static 'vuln_manager/css/app.css' %}"/>
 
     <!--
-      CARBON THEME — color tokens live in tailwind/tailwind.config.js and are compiled
+      SLATE THEME — color tokens live in tailwind/tailwind.config.js and are compiled
       into vuln_manager/static/vuln_manager/css/app.css. The CSS variables below feed
       those tokens (via <alpha-value>) and drive the light/dark switch (`dark` class on <html>).
+      Neutral slate base + a single calm blue accent. Severity ramp is the only other color.
     -->
     <style>
-        /* ---- Carbon palette: light (default). Values are "R G B" channels. ---- */
+        /* ---- Slate palette: light (default). Values are "R G B" channels. ---- */
         :root {
-            --md-bg: 236 238 240;
+            --md-bg: 244 245 247;
             --md-panel: 255 255 255;
-            --md-panel-2: 246 247 248;
-            --md-high: 240 241 243;
-            --md-highest: 232 234 236;
+            --md-panel-2: 248 250 252;
+            --md-high: 241 245 249;
+            --md-highest: 226 232 240;
             --md-lowest: 255 255 255;
-            --md-variant: 238 240 242;
-            --md-text: 20 24 28;
-            --md-muted: 91 99 107;
-            --md-faint: 139 146 154;
-            --md-line: 223 226 229;
+            --md-variant: 248 250 252;
+            --md-text: 15 23 42;
+            --md-muted: 100 116 139;
+            --md-faint: 148 163 184;
+            --md-line: 226 232 240;
             --md-accent: 37 99 235;
             --md-accent-container: 37 99 235;
             --md-on-accent: 255 255 255;
-            --md-crit: 229 72 77;
-            --md-high-sev: 239 108 26;
+            --md-crit: 220 38 38;
+            --md-high-sev: 234 88 12;
         }
-        /* ---- Carbon palette: dark ---- */
+        /* ---- Slate palette: dark ---- */
         html.dark {
-            --md-bg: 13 15 18;
-            --md-panel: 22 25 29;
-            --md-panel-2: 16 19 22;
-            --md-high: 27 31 36;
-            --md-highest: 33 38 45;
-            --md-lowest: 10 11 13;
-            --md-variant: 35 40 48;
-            --md-text: 230 232 235;
-            --md-muted: 180 187 196;
-            --md-faint: 148 156 166;
-            --md-line: 60 67 77;
-            --md-accent: 91 141 255;
-            --md-accent-container: 79 140 255;
+            --md-bg: 13 17 23;
+            --md-panel: 22 27 34;
+            --md-panel-2: 17 22 28;
+            --md-high: 28 34 43;
+            --md-highest: 37 44 55;
+            --md-lowest: 10 13 18;
+            --md-variant: 30 37 47;
+            --md-text: 226 232 240;
+            --md-muted: 148 163 184;
+            --md-faint: 100 116 139;
+            --md-line: 45 53 65;
+            --md-accent: 59 130 246;
+            --md-accent-container: 59 130 246;
             --md-on-accent: 255 255 255;
-            --md-crit: 229 72 77;
-            --md-high-sev: 239 108 26;
+            --md-crit: 239 68 68;
+            --md-high-sev: 249 115 22;
         }
 
         .material-symbols-outlined {
@@ -96,8 +97,17 @@
 
         .glass-panel { background: rgb(var(--md-panel)); border: 1px solid rgb(var(--md-line)); }
 
-        /* Calmer, denser table rows */
-        table th, table td { padding-top: 0.55rem !important; padding-bottom: 0.55rem !important; }
+        /* Default table rhythm (the compact .data-table component overrides this). */
+        table th, table td { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+
+        /* Mobile nav drawer: sidebar slides in below md; backdrop closes it. */
+        .app-backdrop { position: fixed; inset: 0; z-index: 35; background: rgb(0 0 0 / .45);
+            opacity: 0; visibility: hidden; transition: opacity .2s ease; }
+        body.nav-open .app-backdrop { opacity: 1; visibility: visible; }
+        @media (max-width: 767.98px) {
+            .app-sidebar { transform: translateX(-100%); transition: transform .22s ease; }
+            body.nav-open .app-sidebar { transform: translateX(0); box-shadow: 0 10px 40px rgb(0 0 0 / .35); }
+        }
 
         /* Sidebar nav */
         .nav-item {
@@ -118,8 +128,11 @@
     </style>
 </head>
 <body class="antialiased overflow-x-hidden">
+    <!-- Backdrop for mobile drawer -->
+    <div class="app-backdrop md:hidden" data-nav-close aria-hidden="true"></div>
+
     <!-- SideNavBar -->
-    <aside class="fixed left-0 top-0 h-full w-64 flex flex-col py-4 gap-1 z-40 hidden md:flex" style="background: rgb(var(--md-panel)); border-right: 1px solid rgb(var(--md-line));">
+    <aside class="app-sidebar fixed left-0 top-0 h-full w-64 flex flex-col py-4 gap-1 z-40" style="background: rgb(var(--md-panel)); border-right: 1px solid rgb(var(--md-line));">
         <div class="flex items-center gap-2.5 px-5 py-4 mb-1">
             <span class="material-symbols-outlined text-primary text-2xl">shield</span>
             <span class="font-bold text-lg tracking-tight text-on-surface">CVE3PO</span>
@@ -198,9 +211,15 @@
     </aside>
 
     <!-- TopHeader -->
-    <header class="fixed top-0 w-full z-30 flex justify-between items-center px-6 h-14 md:pl-72" style="background: rgb(var(--md-panel)); border-bottom: 1px solid rgb(var(--md-line));">
-        <div class="font-semibold text-sm tracking-tight text-on-surface">
-            {% block header_title %}CVE3PO{% endblock %}
+    <header class="fixed top-0 w-full z-30 flex justify-between items-center px-4 sm:px-6 h-14 md:pl-72" style="background: rgb(var(--md-panel)); border-bottom: 1px solid rgb(var(--md-line));">
+        <div class="flex items-center gap-2 min-w-0">
+            <button type="button" data-nav-open aria-label="Open navigation"
+                    class="md:hidden flex items-center justify-center w-9 h-9 -ml-1.5 rounded-md text-on-surface-variant hover:text-primary hover:bg-surface-container-high transition-colors">
+                <span class="material-symbols-outlined text-xl">menu</span>
+            </button>
+            <div class="font-semibold text-sm tracking-tight text-on-surface truncate">
+                {% block header_title %}CVE3PO{% endblock %}
+            </div>
         </div>
 
         <div class="flex items-center gap-4">
@@ -239,6 +258,21 @@
                 try { localStorage.setItem('cve3po-theme', dark ? 'dark' : 'light'); } catch (e) {}
                 sync();
             });
+        })();
+
+        // Mobile nav drawer
+        (function () {
+            var body = document.body;
+            function open() { body.classList.add('nav-open'); }
+            function close() { body.classList.remove('nav-open'); }
+            document.querySelectorAll('[data-nav-open]').forEach(function (el) { el.addEventListener('click', open); });
+            document.querySelectorAll('[data-nav-close]').forEach(function (el) { el.addEventListener('click', close); });
+            // Close when a nav link is tapped (mobile) or on Escape / resize to desktop.
+            document.querySelectorAll('.app-sidebar a').forEach(function (a) {
+                a.addEventListener('click', function () { if (window.innerWidth < 768) close(); });
+            });
+            document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+            window.addEventListener('resize', function () { if (window.innerWidth >= 768) close(); });
         })();
     </script>
     {% block scripts %}{% endblock %}

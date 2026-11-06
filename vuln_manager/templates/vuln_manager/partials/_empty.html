@@ -1,0 +1,6 @@
+{% comment %}Empty-state block. Params: icon, title, text (optional).{% endcomment %}
+<div class="empty-state">
+    <div class="empty-state-icon"><span class="material-symbols-outlined">{{ icon|default:'inbox' }}</span></div>
+    <h3 class="text-on-surface font-semibold text-base">{{ title }}</h3>
+    {% if text %}<p class="text-outline text-xs mt-1">{{ text }}</p>{% endif %}
+</div>
