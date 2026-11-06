@@ -5,7 +5,7 @@ attrs==26.1.0
 azure-ai-inference>=1.0.0b9
 boltons==21.0.0
 bracex==2.6
-certifi==2026.2.25
+certifi==2026.10.19
 cffi==2.0.0
 charset-normalizer==3.4.6
 click==8.1.8
