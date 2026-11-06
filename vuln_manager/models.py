@@ -46,6 +46,11 @@ class SystemSettings(models.Model):
     ai_cve_system_prompt = models.TextField(blank=True, null=True)
     ai_software_system_prompt = models.TextField(blank=True, null=True)
 
+    # Automated enrichment scheduler (OSV/NVD/threat-intel + optional Shodan).
+    auto_enrich_interval_hours = models.PositiveIntegerField(default=24)
+    auto_enrich_last_run = models.DateTimeField(blank=True, null=True)
+    auto_enrich_last_status = models.CharField(max_length=255, blank=True, null=True)
+
 
     def __str__(self):
         return f"SystemSettings(disable_register={self.disable_register})"
@@ -62,6 +67,7 @@ class Scan(models.Model):
         ("OSV", "OSV Scan"),
         ("NVD", "NVD Scan"),
         ("WAZUH", "Wazuh Live Feed"),
+        ("SHODAN", "Shodan Lookup"),
     )
     scan_type = models.CharField(max_length=10, choices=SCAN_TYPES)
     uploaded_at = models.DateTimeField(auto_now_add=True)

@@ -1,6 +1,7 @@
 from django.core.paginator import Paginator
 from django.views.decorators.http import require_POST
 from django.shortcuts import render, redirect, get_object_or_404
+from django.db import close_old_connections
 from django.db.models import Count, Q, Max, Case, When, Value, IntegerField, Avg
 from django.db.models.functions import TruncDate
 from pathlib import Path
@@ -29,6 +30,8 @@ from .utils.osv_auto import enrich_software_with_feeds
 from .utils.enrichment import get_cve_details
 from .utils.listing import apply_sort
 from .extensions import wrike as wrike_ext
+from .extensions import shodan as shodan_ext
+from .utils import scheduler as scheduler_util
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import authenticate, login, logout
@@ -975,6 +978,9 @@ def host_detail(request, pk):
     has_agent_data = HostSoftwareRelationship.objects.filter(
         host=host, source="agent"
     ).exists()
+    shodan_available = Extension.objects.filter(
+        name_id="shodan", is_active=True
+    ).exclude(api_token__isnull=True).exclude(api_token="").exists()
 
     return render(
         request,
@@ -994,6 +1000,7 @@ def host_detail(request, pk):
             "active_tab": active_tab,
             "has_agent_data": has_agent_data,
             "criticality_choices": Host.CRITICALITY_CHOICES,
+            "shodan_available": shodan_available,
         },
     )
 
@@ -1847,6 +1854,18 @@ def extensions_view(request):
             "icon": "mail",
             "color": "primary",
         },
+        "auto_enrich": {
+            "name": "Auto Enrichment",
+            "description": "Periodically re-checks all inventoried software against OSV/NVD and refreshes CISA KEV + EPSS, so newly published CVEs are detected automatically.",
+            "icon": "autorenew",
+            "color": "tertiary",
+        },
+        "shodan": {
+            "name": "Shodan",
+            "description": "Pulls open ports/services for your hosts from Shodan. Any host found on Shodan is automatically flagged as Internet exposed.",
+            "icon": "travel_explore",
+            "color": "primary",
+        },
     }
 
     modules = []
@@ -1890,6 +1909,18 @@ def extensions_view(request):
                 "ai_software_system_prompt": (
                     system_settings.ai_software_system_prompt or ai_triage.SYSTEM_PROMPT_SOFTWARE
                     if mid == "ai_triage" else None
+                ),
+                "auto_enrich_interval_hours": (
+                    system_settings.auto_enrich_interval_hours if mid == "auto_enrich" else None
+                ),
+                "auto_enrich_last_run": (
+                    system_settings.auto_enrich_last_run if mid == "auto_enrich" else None
+                ),
+                "auto_enrich_last_status": (
+                    system_settings.auto_enrich_last_status if mid == "auto_enrich" else None
+                ),
+                "shodan_configured": (
+                    bool(ext.api_token) if mid == "shodan" else None
                 ),
                 "icon": meta["icon"],
                 "color": meta["color"],
@@ -2159,6 +2190,105 @@ def send_email_report_now(request):
     )
     email.send(fail_silently=False)
     return redirect("extensions")
+
+
+@login_required
+@require_POST
+def save_auto_enrich_config(request):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+    try:
+        interval_hours = int(request.POST.get("auto_enrich_interval_hours", "24"))
+    except ValueError:
+        return HttpResponseForbidden("invalid_interval")
+    if interval_hours < 1:
+        return HttpResponseForbidden("invalid_interval")
+    settings_obj = get_system_settings()
+    settings_obj.auto_enrich_interval_hours = interval_hours
+    settings_obj.save(update_fields=["auto_enrich_interval_hours"])
+    return redirect("extensions")
+
+
+@login_required
+@require_POST
+def run_enrichment_now(request):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+    extension, _ = Extension.objects.get_or_create(name_id="auto_enrich")
+    if not extension.is_active:
+        return HttpResponseForbidden("auto_enrich_disabled")
+
+    def _worker():
+        close_old_connections()
+        try:
+            scheduler_util.run_full_enrichment_and_record(record_status=True)
+        except Exception:
+            logger.exception("Manual enrichment run failed")
+        finally:
+            close_old_connections()
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return redirect("extensions")
+
+
+@login_required
+@require_POST
+def save_shodan_config(request):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+    api_token = (request.POST.get("shodan_api_token") or "").strip()
+    shodan_extension, _ = Extension.objects.get_or_create(name_id="shodan")
+    if api_token:
+        shodan_extension.api_token = api_token
+        shodan_extension.save(update_fields=["api_token"])
+    return redirect("extensions")
+
+
+@login_required
+@require_POST
+def shodan_scan_all(request):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+    shodan_extension, _ = Extension.objects.get_or_create(name_id="shodan")
+    if not shodan_extension.is_active or not shodan_extension.api_token:
+        return HttpResponseForbidden("shodan_not_configured")
+
+    def _worker():
+        close_old_connections()
+        try:
+            shodan_ext.refresh_all_hosts()
+        except Exception:
+            logger.exception("Shodan bulk scan failed")
+        finally:
+            close_old_connections()
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return redirect("extensions")
+
+
+@login_required
+@require_POST
+def host_shodan_lookup(request, pk):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+    host = get_object_or_404(Host, pk=pk)
+    shodan_extension, _ = Extension.objects.get_or_create(name_id="shodan")
+    if not shodan_extension.is_active or not shodan_extension.api_token:
+        return HttpResponseForbidden("shodan_not_configured")
+
+    host_id = host.id
+
+    def _worker():
+        close_old_connections()
+        try:
+            shodan_ext.enrich_host_with_shodan(host_id)
+        except Exception:
+            logger.exception("Shodan lookup failed for host %s", host_id)
+        finally:
+            close_old_connections()
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return redirect("host_detail", pk=pk)
 
 
 @login_required

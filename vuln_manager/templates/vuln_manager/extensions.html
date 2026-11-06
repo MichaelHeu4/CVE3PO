@@ -43,7 +43,7 @@
                 <div id="config-{{ mod.id }}" class="hidden mb-5 p-3 rounded-xl bg-surface-container-lowest border border-outline-variant">
                     <div class="flex items-center justify-between mb-2">
                         <p class="text-[10px] font-bold text-outline/50">
-                            {% if mod.id == "wrike" %}Wrike Configuration{% elif mod.id == "email_reporting" %}Email Reporting Configuration{% elif mod.id == "ai_triage" %}AI Triage Configuration{% else %}Access Token (X-API-Key){% endif %}
+                            {% if mod.id == "wrike" %}Wrike Configuration{% elif mod.id == "email_reporting" %}Email Reporting Configuration{% elif mod.id == "ai_triage" %}AI Triage Configuration{% elif mod.id == "auto_enrich" %}Auto Enrichment Configuration{% elif mod.id == "shodan" %}Shodan Configuration{% else %}Access Token (X-API-Key){% endif %}
                         </p>
                         <button type="button" onclick="toggleModuleConfig('{{ mod.id }}')" class="material-symbols-outlined text-xs text-outline hover:text-primary transition-colors">close</button>
                     </div>
@@ -89,6 +89,37 @@
                             </div>
                             <button class="w-full rounded-lg px-3 py-2 border border-outline-variant hover:border-primary/40 text-on-surface-variant hover:text-primary transition-all text-[10px] tracking-wider">Save AI Triage Config</button>
                         </form>
+                    {% elif mod.id == "auto_enrich" %}
+                        <form action="{% url 'save_auto_enrich_config' %}" method="POST" class="space-y-3">
+                            {% csrf_token %}
+                            <label class="text-[11px] font-bold tracking-wider text-outline/50 block">Run interval (hours)</label>
+                            <input name="auto_enrich_interval_hours" type="number" min="1" placeholder="24" value="{{ mod.auto_enrich_interval_hours|default:'24' }}" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px] text-on-surface"/>
+                            <button class="w-full rounded-lg px-3 py-2 border border-outline-variant hover:border-primary/40 text-on-surface-variant hover:text-primary transition-all text-[10px] tracking-wider">Save Interval</button>
+                        </form>
+                        <div class="mt-2 text-[10px] text-outline/70 space-y-1">
+                            <div class="flex justify-between gap-2"><span>Last run</span><span class="text-on-surface-variant">{% if mod.auto_enrich_last_run %}{{ mod.auto_enrich_last_run|date:"d M Y H:i" }}{% else %}never{% endif %}</span></div>
+                            {% if mod.auto_enrich_last_status %}<div class="flex justify-between gap-2"><span>Status</span><span class="text-on-surface-variant truncate">{{ mod.auto_enrich_last_status }}</span></div>{% endif %}
+                        </div>
+                        {% if mod.is_active %}
+                        <form action="{% url 'run_enrichment_now' %}" method="POST">
+                            {% csrf_token %}
+                            <button class="mt-2 w-full rounded-lg px-3 py-2 border border-primary/40 bg-primary/10 hover:bg-primary/20 text-primary transition-all text-[10px] tracking-wider">Run Enrichment Now</button>
+                        </form>
+                        {% endif %}
+                    {% elif mod.id == "shodan" %}
+                        <form action="{% url 'save_shodan_config' %}" method="POST" class="space-y-3">
+                            {% csrf_token %}
+                            <input name="shodan_api_token" type="password" placeholder="{% if mod.shodan_configured %}API key set — enter to replace{% else %}Shodan API Key{% endif %}" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px] text-on-surface"/>
+                            <button class="w-full rounded-lg px-3 py-2 border border-outline-variant hover:border-primary/40 text-on-surface-variant hover:text-primary transition-all text-[10px] tracking-wider">Save Shodan API Key</button>
+                        </form>
+                        <p class="mt-2 text-[10px] {% if mod.shodan_configured %}text-primary{% else %}text-outline/70{% endif %}">{% if mod.shodan_configured %}API key configured.{% else %}No API key set yet.{% endif %}</p>
+                        {% if mod.is_active and mod.shodan_configured %}
+                        <form action="{% url 'shodan_scan_all' %}" method="POST">
+                            {% csrf_token %}
+                            <button class="mt-2 w-full rounded-lg px-3 py-2 border border-primary/40 bg-primary/10 hover:bg-primary/20 text-primary transition-all text-[10px] tracking-wider">Scan All Hosts Now</button>
+                        </form>
+                        <p class="mt-1 text-[10px] text-outline/60">Hosts found on Shodan are flagged as Internet exposed automatically.</p>
+                        {% endif %}
                     {% else %}
                         <div class="flex items-center justify-between gap-2 overflow-hidden">
                             <code class="text-[10px] font-mono text-primary truncate" id="token-{{ mod.id }}">{{ mod.api_token }}</code>
