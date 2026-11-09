@@ -23,6 +23,9 @@ def _sync_inventory_payload(data):
     host_ip = data.get("host_ip")
     hostname = data.get("hostname")
     operating_system = data.get("operating_system") or data.get("os")
+    # Optional: agents may report the running kernel (Linux). Older agents that
+    # do not send it leave the stored value untouched (backwards compatible).
+    running_kernel = data.get("running_kernel") or data.get("kernel")
     software_list = data.get("software", [])
 
     if not host_ip:
@@ -37,6 +40,9 @@ def _sync_inventory_payload(data):
         if operating_system and host.operating_system != operating_system:
             host.operating_system = operating_system
             host_update_fields.append("operating_system")
+        if running_kernel and host.running_kernel != running_kernel:
+            host.running_kernel = running_kernel
+            host_update_fields.append("running_kernel")
         if host_update_fields:
             host.save(update_fields=host_update_fields)
 

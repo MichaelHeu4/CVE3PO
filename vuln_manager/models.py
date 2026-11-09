@@ -51,6 +51,14 @@ class SystemSettings(models.Model):
     auto_enrich_last_run = models.DateTimeField(blank=True, null=True)
     auto_enrich_last_status = models.CharField(max_length=255, blank=True, null=True)
 
+    # Auto-delete-fixed scheduler: remove vulnerabilities that have been fixed
+    # for longer than the retention window. The cleanup runs on a daily cadence.
+    auto_delete_fixed_days = models.PositiveIntegerField(default=90)
+    auto_delete_fixed_last_run = models.DateTimeField(blank=True, null=True)
+    auto_delete_fixed_last_status = models.CharField(
+        max_length=255, blank=True, null=True
+    )
+
 
     def __str__(self):
         return f"SystemSettings(disable_register={self.disable_register})"
@@ -92,6 +100,9 @@ class Host(models.Model):
     ip_address = models.GenericIPAddressField(unique=True)
     hostname = models.CharField(max_length=255, blank=True, null=True)
     operating_system = models.CharField(max_length=255, blank=True, null=True)
+    # Running kernel release reported by the agent on Linux hosts (e.g.
+    # "6.8.0-45-generic"). Optional for backwards compatibility with older agents.
+    running_kernel = models.CharField(max_length=255, blank=True, null=True)
     last_scanned = models.DateTimeField(auto_now=True)
     is_exposed = models.BooleanField(default=False)
     criticality = models.CharField(
@@ -252,6 +263,9 @@ class Vulnerability(models.Model):
     fingerprint = models.CharField(max_length=64, blank=True, null=True, db_index=True)
     first_seen = models.DateTimeField(default=timezone.now)
     last_seen = models.DateTimeField(default=timezone.now)
+    # Set when the status transitions to "fixed", cleared when it leaves "fixed".
+    # Drives the Auto-Delete-Fixed retention module.
+    fixed_at = models.DateTimeField(blank=True, null=True)
     detection_count = models.PositiveIntegerField(default=1)
     wrike_task_id = models.CharField(max_length=50, blank=True, null=True)
     wrike_task_url = models.URLField(blank=True, null=True)
@@ -268,6 +282,8 @@ class Vulnerability(models.Model):
             models.Index(
                 fields=["severity", "first_seen"], name="vuln_sev_firstseen_idx"
             ),
+            # Retention cleanup filters on (status, fixed_at).
+            models.Index(fields=["status", "fixed_at"], name="vuln_status_fixedat_idx"),
         ]
 
     def __str__(self):

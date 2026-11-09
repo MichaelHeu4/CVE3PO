@@ -43,7 +43,7 @@
                 <div id="config-{{ mod.id }}" class="hidden mb-5 p-3 rounded-xl bg-surface-container-lowest border border-outline-variant">
                     <div class="flex items-center justify-between mb-2">
                         <p class="text-[10px] font-bold text-outline/50">
-                            {% if mod.id == "wrike" %}Wrike Configuration{% elif mod.id == "email_reporting" %}Email Reporting Configuration{% elif mod.id == "ai_triage" %}AI Triage Configuration{% elif mod.id == "auto_enrich" %}Auto Enrichment Configuration{% elif mod.id == "shodan" %}Shodan Configuration{% else %}Access Token (X-API-Key){% endif %}
+                            {% if mod.id == "wrike" %}Wrike Configuration{% elif mod.id == "email_reporting" %}Email Reporting Configuration{% elif mod.id == "ai_triage" %}AI Triage Configuration{% elif mod.id == "auto_enrich" %}Auto Enrichment Configuration{% elif mod.id == "auto_delete_fixed" %}Auto Delete Fixed Configuration{% elif mod.id == "shodan" %}Shodan Configuration{% else %}Access Token (X-API-Key){% endif %}
                         </p>
                         <button type="button" onclick="toggleModuleConfig('{{ mod.id }}')" class="material-symbols-outlined text-xs text-outline hover:text-primary transition-colors">close</button>
                     </div>
@@ -104,6 +104,24 @@
                         <form action="{% url 'run_enrichment_now' %}" method="POST">
                             {% csrf_token %}
                             <button class="mt-2 w-full rounded-lg px-3 py-2 border border-primary/40 bg-primary/10 hover:bg-primary/20 text-primary transition-all text-[10px] tracking-wider">Run Enrichment Now</button>
+                        </form>
+                        {% endif %}
+                    {% elif mod.id == "auto_delete_fixed" %}
+                        <form action="{% url 'save_auto_delete_config' %}" method="POST" class="space-y-3">
+                            {% csrf_token %}
+                            <label class="text-[11px] font-bold tracking-wider text-outline/50 block">Retention period (days)</label>
+                            <input name="auto_delete_fixed_days" type="number" min="1" placeholder="90" value="{{ mod.auto_delete_fixed_days|default:'90' }}" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px] text-on-surface"/>
+                            <p class="text-[10px] text-outline/60">Vulnerabilities fixed longer ago than this are deleted automatically (checked daily).</p>
+                            <button class="w-full rounded-lg px-3 py-2 border border-outline-variant hover:border-primary/40 text-on-surface-variant hover:text-primary transition-all text-[10px] tracking-wider">Save Retention</button>
+                        </form>
+                        <div class="mt-2 text-[10px] text-outline/70 space-y-1">
+                            <div class="flex justify-between gap-2"><span>Last run</span><span class="text-on-surface-variant">{% if mod.auto_delete_fixed_last_run %}{{ mod.auto_delete_fixed_last_run|date:"d M Y H:i" }}{% else %}never{% endif %}</span></div>
+                            {% if mod.auto_delete_fixed_last_status %}<div class="flex justify-between gap-2"><span>Status</span><span class="text-on-surface-variant truncate">{{ mod.auto_delete_fixed_last_status }}</span></div>{% endif %}
+                        </div>
+                        {% if mod.is_active %}
+                        <form action="{% url 'run_fixed_cleanup_now' %}" method="POST" onsubmit="return confirm('Delete all vulnerabilities fixed longer than the retention period now?')">
+                            {% csrf_token %}
+                            <button class="mt-2 w-full rounded-lg px-3 py-2 border border-primary/40 bg-primary/10 hover:bg-primary/20 text-primary transition-all text-[10px] tracking-wider">Run Cleanup Now</button>
                         </form>
                         {% endif %}
                     {% elif mod.id == "shodan" %}

@@ -20,52 +20,37 @@
     </div>
 </section>
 
-<div class="flex gap-4 overflow-x-auto pb-8 snap-x">
-    {% for status_key, vulns in board.items %}
+<div id="kanban-board" class="flex gap-4 overflow-x-auto pb-8 snap-x"
+     data-severity="{{ severity_filter|default:'' }}">
+    {% for column in columns %}
     <div class="flex-shrink-0 w-80 snap-start">
         <div class="bg-surface-container-low rounded-md p-4 flex flex-col h-[75vh]">
             <!-- Column Header -->
             <div class="px-4 py-4 mb-4 flex items-center justify-between">
                 <h6 class="font-headline font-bold text-xs text-outline">
-                    {{ status_key|replace_underscore|title }}
+                    {{ column.key|replace_underscore|title }}
                 </h6>
-                <span class="w-6 h-6 rounded-full bg-surface-container-highest flex items-center justify-center text-[10px] font-bold text-primary vuln-count" id="count-{{ status_key }}">
-                    {{ vulns|length }}
+                <span class="w-6 h-6 rounded-full bg-surface-container-highest flex items-center justify-center text-[10px] font-bold text-primary vuln-count"
+                      id="count-{{ column.key }}" data-total="{{ column.count }}">
+                    {{ column.count }}
                 </span>
             </div>
 
             <!-- Draggable Area -->
-            <div class="flex-grow overflow-y-auto space-y-4 kanban-column custom-scrollbar px-1" id="{{ status_key }}" data-status="{{ status_key }}">
-                {% for vuln in vulns %}
-                <div class="vuln-card bg-surface-container border border-outline-variant rounded-md p-4 hover:bg-surface-container-high transition-colors cursor-grab active:cursor-grabbing relative group"
-                     data-id="{{ vuln.id }}" data-sev-score="{{ vuln.sev_score }}">
-                    
-                    <!-- Severity Indicator (Vertical bar) -->
-                    <div class="absolute left-0 top-6 bottom-6 w-1 rounded-r-full severity-{{ vuln.severity|lower }}"></div>
-
-                    <div class="flex justify-between items-start mb-3 ms-2">
-                        <span class="text-[11px] font-bold text-outline">{{ vuln.severity|upper }}</span>
-                        <a href="{% url 'vuln_detail' vuln.id %}" class="opacity-0 group-hover:opacity-100 text-primary transition-opacity">
-                            <span class="material-symbols-outlined text-sm">open_in_new</span>
-                        </a>
-                    </div>
-
-                    <h6 class="font-semibold text-on-surface text-sm mb-1 ms-2 leading-tight">
-                        <a href="{% url 'vuln_detail' vuln.id %}" class="hover:text-primary transition-colors">{{ vuln.cve_id }}</a>
-                    </h6>
-                    <p class="text-[10px] text-on-surface-variant line-clamp-2 ms-2 mb-4">{{ vuln.name }}</p>
-
-                    <div class="flex items-center gap-2 mt-auto pt-3 border-t border-outline-variant ms-2">
-                        <div class="w-5 h-5 rounded-lg bg-surface-container-highest flex items-center justify-center">
-                            <span class="material-symbols-outlined text-[10px] text-outline">dns</span>
-                        </div>
-                        <span class="text-[11px] font-bold text-outline tracking-wider truncate">
-                            {% if vuln.host %}{{ vuln.host.ip_address }}{% else %}{{ vuln.software.name }}{% endif %}
-                        </span>
-                    </div>
-                </div>
-                {% endfor %}
+            <div class="flex-grow overflow-y-auto space-y-4 kanban-column custom-scrollbar px-1"
+                 id="{{ column.key }}" data-status="{{ column.key }}">
+                {% if column.eager %}
+                    {% include "vuln_manager/partials/_kanban_cards.html" with vulns=column.cards %}
+                {% endif %}
             </div>
+
+            <!-- Load more / lazy load trigger -->
+            <button type="button"
+                    class="kanban-load-more mt-3 w-full h-8 rounded-md text-[11px] font-bold text-primary bg-surface-container hover:bg-surface-container-high transition-colors {% if not column.has_more %}hidden{% endif %}"
+                    data-status="{{ column.key }}"
+                    data-next-page="{{ column.next_page }}">
+                {% if column.eager %}Load more{% else %}Load {{ column.count }}{% endif %}
+            </button>
         </div>
     </div>
     {% endfor %}
@@ -75,8 +60,8 @@
     .kanban-column::-webkit-scrollbar { width: 4px; }
     .kanban-column::-webkit-scrollbar-track { background: transparent; }
     .kanban-column::-webkit-scrollbar-thumb { background: rgba(163, 170, 196, 0.1); border-radius: 10px; }
-    
-    .bg-light-primary { 
+
+    .bg-light-primary {
         background-color: rgb(var(--md-accent) / .06) !important;
         outline: 2px dashed rgb(var(--md-accent));
         outline-offset: -4px;
@@ -86,56 +71,99 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        const board = document.getElementById('kanban-board');
+        const severity = board.getAttribute('data-severity') || '';
+
         if (typeof Sortable === 'undefined') {
             console.error('Kanban: SortableJS failed to load (CDN blocked?). Drag & drop disabled.');
-            return;
+        } else {
+            const columns = document.querySelectorAll('.kanban-column');
+            columns.forEach(column => {
+                new Sortable(column, {
+                    group: 'vulnerabilities',
+                    animation: 250,
+                    ghostClass: 'bg-light-primary',
+                    onEnd: function(evt) {
+                        const vulnId = evt.item.getAttribute('data-id');
+                        const newStatus = evt.to.getAttribute('data-status');
+                        const oldIndex = evt.oldIndex;
+                        const newIndex = evt.newIndex;
+                        const fromEl = evt.from;
+                        const toEl = evt.to;
+                        const card = evt.item;
+
+                        // IMPORTANT: never call prompt()/alert() or start the fetch
+                        // synchronously here. SortableJS is still holding the drag
+                        // pointer-capture when onEnd runs; a blocking dialog on this
+                        // stack wedges that state and freezes the whole tab. Defer to
+                        // the next tick so Sortable can release the drag first.
+                        setTimeout(function() {
+                            updateStatus(vulnId, newStatus)
+                                .then(() => {
+                                    if (toEl !== fromEl) {
+                                        adjustTotal(fromEl.getAttribute('data-status'), -1);
+                                        adjustTotal(toEl.getAttribute('data-status'), 1);
+                                    }
+                                    sortColumn(toEl);
+                                })
+                                .catch((err) => {
+                                    // Revert the card to where it was dragged from.
+                                    const restoreIndex = Math.min(oldIndex, fromEl.children.length);
+                                    const referenceNode = fromEl.children[restoreIndex] || null;
+                                    fromEl.insertBefore(card, referenceNode);
+                                    if (toEl !== fromEl && newIndex >= 0) {
+                                        sortColumn(toEl);
+                                    }
+                                    const msg = (err && err.message) ? err.message : 'unknown error';
+                                    // 'reason_required' = user cancelled the reason prompt; not an error.
+                                    if (msg === 'reason_required') return;
+                                    console.error('Kanban: status update failed —', msg);
+                                    alert('Status update failed: ' + msg);
+                                });
+                        }, 0);
+                    }
+                });
+            });
         }
 
-        const columns = document.querySelectorAll('.kanban-column');
+        // Lazy load / "load more" per column.
+        document.querySelectorAll('.kanban-load-more').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const status = btn.getAttribute('data-status');
+                const page = btn.getAttribute('data-next-page') || '1';
+                const column = document.getElementById(status);
 
-        columns.forEach(column => {
-            new Sortable(column, {
-                group: 'vulnerabilities',
-                animation: 250,
-                ghostClass: 'bg-light-primary',
-                onEnd: function(evt) {
-                    const vulnId = evt.item.getAttribute('data-id');
-                    const newStatus = evt.to.getAttribute('data-status');
-                    const oldStatus = evt.from.getAttribute('data-status');
-                    const oldIndex = evt.oldIndex;
-                    const newIndex = evt.newIndex;
-                    const fromEl = evt.from;
-                    const toEl = evt.to;
-                    const card = evt.item;
+                btn.disabled = true;
+                const originalText = btn.textContent;
+                btn.textContent = 'Loading…';
 
-                    // IMPORTANT: never call prompt()/alert() or start the fetch
-                    // synchronously here. SortableJS is still holding the drag
-                    // pointer-capture when onEnd runs; a blocking dialog on this
-                    // stack wedges that state and freezes the whole tab. Defer to
-                    // the next tick so Sortable can release the drag first.
-                    setTimeout(function() {
-                        updateStatus(vulnId, newStatus)
-                            .then(() => {
-                                updateCounts();
-                                sortColumn(toEl);
-                            })
-                            .catch((err) => {
-                                // Revert the card to where it was dragged from.
-                                const restoreIndex = Math.min(oldIndex, fromEl.children.length);
-                                const referenceNode = fromEl.children[restoreIndex] || null;
-                                fromEl.insertBefore(card, referenceNode);
-                                updateCounts();
-                                if (toEl !== fromEl && newIndex >= 0) {
-                                    sortColumn(toEl);
-                                }
-                                const msg = (err && err.message) ? err.message : 'unknown error';
-                                // 'reason_required' = user cancelled the reason prompt; not an error.
-                                if (msg === 'reason_required') return;
-                                console.error('Kanban: status update failed —', msg);
-                                alert('Status update failed: ' + msg);
-                            });
-                    }, 0);
-                }
+                const params = new URLSearchParams({ page: page });
+                if (severity) params.set('severity', severity);
+
+                fetch(`/board/column/${status}/?${params.toString()}`, {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                    .then(response => {
+                        if (!response.ok) throw new Error('HTTP ' + response.status);
+                        const hasNext = response.headers.get('X-Has-Next') === '1';
+                        const nextPage = response.headers.get('X-Next-Page') || '';
+                        return response.text().then(html => ({ html, hasNext, nextPage }));
+                    })
+                    .then(({ html, hasNext, nextPage }) => {
+                        column.insertAdjacentHTML('beforeend', html);
+                        if (hasNext) {
+                            btn.setAttribute('data-next-page', nextPage);
+                            btn.textContent = 'Load more';
+                            btn.disabled = false;
+                        } else {
+                            btn.remove();
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Kanban: load more failed —', err);
+                        btn.textContent = originalText;
+                        btn.disabled = false;
+                    });
             });
         });
 
@@ -180,12 +208,15 @@
             });
         }
 
-        function updateCounts() {
-            document.querySelectorAll('.kanban-column').forEach(col => {
-                const status = col.getAttribute('data-status');
-                const count = col.querySelectorAll('.vuln-card').length;
-                document.getElementById(`count-${status}`).innerText = count;
-            });
+        // Counts reflect the DB total per column (not just loaded cards), so
+        // adjust the stored total by the delta instead of counting the DOM.
+        function adjustTotal(status, delta) {
+            const badge = document.getElementById(`count-${status}`);
+            if (!badge) return;
+            const total = (parseInt(badge.getAttribute('data-total')) || 0) + delta;
+            const clamped = Math.max(total, 0);
+            badge.setAttribute('data-total', clamped);
+            badge.innerText = clamped;
         }
     });
 </script>

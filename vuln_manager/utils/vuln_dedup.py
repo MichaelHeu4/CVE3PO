@@ -90,6 +90,9 @@ def create_or_update_vulnerability(
         if vuln.status in {"fixed", "false_positive", "risk_accepted"}:
             vuln.status = "open"
             update_fields.append("status")
+            if vuln.fixed_at is not None:
+                vuln.fixed_at = None
+                update_fields.append("fixed_at")
             log_vulnerability_event(
                 vuln,
                 "reopened",

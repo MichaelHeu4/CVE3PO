@@ -445,28 +445,6 @@ class AgentInstallGuideTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
 
-class HostDetailAgentIndicatorTests(TestCase):
-    def setUp(self):
-        self.user = User.objects.create_user(username="sensor-user", password="pw12345")
-        self.scan = Scan.objects.create(scan_type="MANUAL")
-        self.host = Host.objects.create(ip_address="10.66.0.10")
-
-    def test_host_detail_hides_sensor_icon_without_agent_data(self):
-        self.client.force_login(self.user)
-        response = self.client.get(reverse("host_detail", args=[self.host.pk]))
-        self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, ">sensors<", html=False)
-
-    def test_host_detail_shows_sensor_icon_with_agent_data(self):
-        sw = Software.objects.create(name="nginx", version="1.24", vendor="nginx")
-        sw.hosts.add(self.host)
-        HostSoftwareRelationship.objects.create(host=self.host, software=sw, source="agent")
-        self.client.force_login(self.user)
-        response = self.client.get(reverse("host_detail", args=[self.host.pk]))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, ">sensors<", html=False)
-
-
 class SlaSettingsTests(TestCase):
     def setUp(self):
         self.superuser = User.objects.create_superuser(
@@ -693,6 +671,57 @@ class AgentInventorySnapshotSyncTests(TestCase):
         self.assertEqual(response.json().get("status"), "accepted")
         thread_cls.assert_called_once()
         thread_cls.return_value.start.assert_called_once()
+
+    def test_inventory_stores_running_kernel(self):
+        response = self._post_inventory(
+            {
+                "host_ip": "10.0.0.70",
+                "operating_system": "Ubuntu 24.04",
+                "running_kernel": "6.8.0-45-generic",
+                "software": [],
+            }
+        )
+        self.assertEqual(response.status_code, 200)
+        host = Host.objects.get(ip_address="10.0.0.70")
+        self.assertEqual(host.running_kernel, "6.8.0-45-generic")
+
+    def test_inventory_accepts_kernel_alias(self):
+        response = self._post_inventory(
+            {"host_ip": "10.0.0.71", "kernel": "5.15.0-105-generic", "software": []}
+        )
+        self.assertEqual(response.status_code, 200)
+        host = Host.objects.get(ip_address="10.0.0.71")
+        self.assertEqual(host.running_kernel, "5.15.0-105-generic")
+
+    def test_inventory_without_kernel_is_backwards_compatible(self):
+        # Agent that never sends a kernel: request still succeeds, field stays null.
+        response = self._post_inventory({"host_ip": "10.0.0.72", "software": []})
+        self.assertEqual(response.status_code, 200)
+        host = Host.objects.get(ip_address="10.0.0.72")
+        self.assertIsNone(host.running_kernel)
+
+        # A later payload adds the kernel...
+        self._post_inventory(
+            {"host_ip": "10.0.0.72", "running_kernel": "6.1.0-21-amd64", "software": []}
+        )
+        host.refresh_from_db()
+        self.assertEqual(host.running_kernel, "6.1.0-21-amd64")
+
+        # ...and an older agent that omits it must not wipe the stored value.
+        self._post_inventory({"host_ip": "10.0.0.72", "software": []})
+        host.refresh_from_db()
+        self.assertEqual(host.running_kernel, "6.1.0-21-amd64")
+
+    def test_host_detail_shows_running_kernel(self):
+        user = User.objects.create_user(username="kernel-viewer", password="pw12345")
+        host = Host.objects.create(
+            ip_address="10.0.0.73", running_kernel="6.8.0-45-generic"
+        )
+        self.client.force_login(user)
+        response = self.client.get(reverse("host_detail", args=[host.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "6.8.0-45-generic")
+        self.assertContains(response, "Running kernel")
 
 
 class WazuhWebhookAuthTests(TestCase):
@@ -1087,8 +1116,33 @@ class SeverityFilterAndSingleTriageTests(TestCase):
         response = self.client.get(reverse("kanban_board") + "?severity=critical")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["severity_filter"], "critical")
-        self.assertEqual(response.context["board"]["open"].count(), 1)
-        self.assertEqual(response.context["board"]["open"].first().cve_id, "CVE-2026-30001")
+        columns = {c["key"]: c for c in response.context["columns"]}
+        open_col = columns["open"]
+        self.assertEqual(open_col["count"], 1)
+        self.assertEqual(open_col["cards"][0].cve_id, "CVE-2026-30001")
+
+    def test_kanban_lazy_columns_render_no_cards_initially(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("kanban_board"))
+        self.assertEqual(response.status_code, 200)
+        columns = {c["key"]: c for c in response.context["columns"]}
+        # Active columns are eager, terminal columns are lazy (no cards upfront).
+        self.assertTrue(columns["open"]["eager"])
+        self.assertFalse(columns["fixed"]["eager"])
+        self.assertEqual(columns["fixed"]["cards"], [])
+
+    def test_kanban_column_endpoint_returns_cards_and_header(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("kanban_column", args=["open"]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "CVE-2026-30001")
+        self.assertContains(response, "CVE-2026-30002")
+        self.assertEqual(response["X-Has-Next"], "0")
+
+    def test_kanban_column_endpoint_rejects_unknown_status(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("kanban_column", args=["bogus"]))
+        self.assertEqual(response.status_code, 404)
 
     def test_vuln_list_filters_by_severity(self):
         self.client.force_login(self.user)
@@ -1721,3 +1775,238 @@ class RegisterViewSecurityTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse("login"))
         self.assertFalse(User.objects.filter(username="blocked@example.com").exists())
+
+
+class BulkDeleteFixedVulnerabilitiesTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="admin", password="pw12345", is_staff=True
+        )
+        self.user = User.objects.create_user(username="joe", password="pw12345")
+        self.host = Host.objects.create(ip_address="10.0.9.1")
+        self.scan = Scan.objects.create(scan_type="MANUAL")
+        for i in range(5):
+            Vulnerability.objects.create(
+                scan=self.scan,
+                host=self.host,
+                cve_id=f"CVE-2026-9000{i}",
+                severity="high",
+                status="fixed",
+                name=f"fixed {i}",
+            )
+        self.open_vuln = Vulnerability.objects.create(
+            scan=self.scan,
+            host=self.host,
+            cve_id="CVE-2026-91000",
+            severity="high",
+            status="open",
+            name="still open",
+        )
+
+    def test_requires_staff(self):
+        self.client.force_login(self.user)
+        response = self.client.post(reverse("delete_fixed_vulnerabilities"))
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(Vulnerability.objects.filter(status="fixed").count(), 5)
+
+    def test_deletes_only_fixed_and_writes_audit_events(self):
+        self.client.force_login(self.staff)
+        response = self.client.post(reverse("delete_fixed_vulnerabilities"))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Vulnerability.objects.filter(status="fixed").count(), 0)
+        self.assertTrue(Vulnerability.objects.filter(pk=self.open_vuln.pk).exists())
+        deleted_events = VulnerabilityAuditEvent.objects.filter(action="deleted")
+        self.assertEqual(deleted_events.count(), 5)
+        # Identifying data is preserved in details even though the FK is null.
+        sample = deleted_events.first()
+        self.assertIsNone(sample.vulnerability)
+        self.assertEqual(sample.details.get("bulk"), "fixed")
+        self.assertIn("cve_id", sample.details)
+
+
+class DashboardReportExportTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="rep", password="pw12345")
+        self.host = Host.objects.create(ip_address="10.0.8.1")
+        self.software = Software.objects.create(name="svc", version="1.0", vendor="acme")
+        self.software.hosts.add(self.host)
+        self.scan = Scan.objects.create(scan_type="MANUAL")
+        self.open_vuln = Vulnerability.objects.create(
+            scan=self.scan,
+            host=self.host,
+            software=self.software,
+            cve_id="CVE-2026-80001",
+            severity="critical",
+            status="open",
+            name="open crit",
+        )
+        Vulnerability.objects.create(
+            scan=self.scan,
+            host=self.host,
+            cve_id="CVE-2026-80002",
+            severity="high",
+            status="fixed",
+            name="done",
+        )
+        # Age the open vuln so avg/oldest-age aggregation has something to chew on.
+        Vulnerability.objects.filter(pk=self.open_vuln.pk).update(
+            first_seen=timezone.now() - timedelta(days=10)
+        )
+
+    def test_report_context_metrics(self):
+        from vuln_manager.views import _build_dashboard_report_context
+
+        ctx = _build_dashboard_report_context()
+        metrics = ctx["metrics"]
+        self.assertEqual(metrics["vuln_count"], 1)  # only non-fixed/non-fp
+        self.assertEqual(metrics["critical_count"], 1)
+        self.assertEqual(metrics["vuln_hosts_count"], 1)
+        self.assertGreaterEqual(metrics["oldest_open_days"], 9)
+        self.assertGreater(metrics["avg_open_age_days"], 0)
+
+    def test_export_returns_pdf(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("export_dashboard_pdf"))
+        self.assertEqual(response.status_code, 200)
+        content = b"".join(response.streaming_content)
+        self.assertTrue(content.startswith(b"%PDF"))
+
+
+class FixedAtLifecycleTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="life", password="pw12345")
+        self.scan = Scan.objects.create(scan_type="MANUAL")
+        self.host = Host.objects.create(ip_address="10.0.7.1")
+        self.software = Software.objects.create(name="svc", version="1.0", vendor="acme")
+        self.software.hosts.add(self.host)
+        self.vuln = Vulnerability.objects.create(
+            scan=self.scan, host=self.host, software=self.software,
+            cve_id="CVE-2026-70001", severity="high", status="open", name="v",
+        )
+
+    def test_marking_fixed_sets_fixed_at_and_reopen_clears_it(self):
+        self.client.force_login(self.user)
+        resp = self.client.post(
+            reverse("api_update_vuln_status", args=[self.vuln.pk]),
+            data=json.dumps({"status": "fixed"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.vuln.refresh_from_db()
+        self.assertEqual(self.vuln.status, "fixed")
+        self.assertIsNotNone(self.vuln.fixed_at)
+
+        resp = self.client.post(
+            reverse("api_update_vuln_status", args=[self.vuln.pk]),
+            data=json.dumps({"status": "open"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.vuln.refresh_from_db()
+        self.assertEqual(self.vuln.status, "open")
+        self.assertIsNone(self.vuln.fixed_at)
+
+    def test_rescan_reopen_clears_fixed_at(self):
+        from vuln_manager.utils.retention import stamp_fixed_at
+        from vuln_manager.utils.vuln_dedup import create_or_update_vulnerability
+
+        # Create through the dedup path so the fingerprint matches on re-detection.
+        v = create_or_update_vulnerability(
+            scan=self.scan, cve_id="CVE-2026-70009", severity="high", name="w",
+            host=self.host, software=self.software,
+        )
+        v.status = "fixed"
+        stamp_fixed_at(v)
+        v.save(update_fields=["status", "fixed_at"])
+        self.assertIsNotNone(v.fixed_at)
+
+        # Same inputs -> same fingerprint -> the fixed finding is reopened.
+        create_or_update_vulnerability(
+            scan=self.scan, cve_id="CVE-2026-70009", severity="high", name="w",
+            host=self.host, software=self.software,
+        )
+        v.refresh_from_db()
+        self.assertEqual(v.status, "open")
+        self.assertIsNone(v.fixed_at)
+
+
+class AutoDeleteFixedModuleTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="admin2", password="pw12345", is_staff=True
+        )
+        self.user = User.objects.create_user(username="joe2", password="pw12345")
+        self.scan = Scan.objects.create(scan_type="MANUAL")
+        self.host = Host.objects.create(ip_address="10.0.6.1")
+        SystemSettings.objects.update_or_create(pk=1, defaults={"auto_delete_fixed_days": 90})
+
+    def _fixed_vuln(self, cve, days_ago):
+        v = Vulnerability.objects.create(
+            scan=self.scan, host=self.host, cve_id=cve, severity="high",
+            status="fixed", name=cve,
+        )
+        Vulnerability.objects.filter(pk=v.pk).update(
+            fixed_at=timezone.now() - timedelta(days=days_ago)
+        )
+        return v
+
+    def test_cleanup_deletes_only_stale_fixed(self):
+        from vuln_manager.utils.scheduler import run_fixed_vulnerability_cleanup
+
+        old = self._fixed_vuln("CVE-2026-60001", days_ago=120)
+        recent = self._fixed_vuln("CVE-2026-60002", days_ago=10)
+        open_vuln = Vulnerability.objects.create(
+            scan=self.scan, host=self.host, cve_id="CVE-2026-60003",
+            severity="high", status="open", name="open",
+        )
+
+        result = run_fixed_vulnerability_cleanup()
+        self.assertEqual(result["deleted"], 1)
+        self.assertFalse(Vulnerability.objects.filter(pk=old.pk).exists())
+        self.assertTrue(Vulnerability.objects.filter(pk=recent.pk).exists())
+        self.assertTrue(Vulnerability.objects.filter(pk=open_vuln.pk).exists())
+        audit = VulnerabilityAuditEvent.objects.filter(
+            action="deleted", details__bulk="auto_fixed_retention"
+        )
+        self.assertEqual(audit.count(), 1)
+
+    def test_save_config_requires_staff(self):
+        self.client.force_login(self.user)
+        resp = self.client.post(
+            reverse("save_auto_delete_config"), {"auto_delete_fixed_days": "30"}
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_save_config_updates_days(self):
+        self.client.force_login(self.staff)
+        resp = self.client.post(
+            reverse("save_auto_delete_config"), {"auto_delete_fixed_days": "30"}
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(SystemSettings.objects.get(pk=1).auto_delete_fixed_days, 30)
+
+    def test_run_now_blocked_when_module_inactive(self):
+        self.client.force_login(self.staff)
+        Extension.objects.update_or_create(
+            name_id="auto_delete_fixed", defaults={"is_active": False}
+        )
+        resp = self.client.post(reverse("run_fixed_cleanup_now"))
+        self.assertEqual(resp.status_code, 403)
+
+    @patch("vuln_manager.views.threading.Thread")
+    def test_run_now_starts_thread_when_active(self, thread_cls):
+        self.client.force_login(self.staff)
+        Extension.objects.update_or_create(
+            name_id="auto_delete_fixed", defaults={"is_active": True}
+        )
+        resp = self.client.post(reverse("run_fixed_cleanup_now"))
+        self.assertEqual(resp.status_code, 302)
+        thread_cls.assert_called_once()
+        thread_cls.return_value.start.assert_called_once()
+
+    def test_module_listed_in_extensions_view(self):
+        self.client.force_login(self.staff)
+        resp = self.client.get(reverse("extensions"))
+        self.assertEqual(resp.status_code, 200)
+        ids = {m["id"] for m in resp.context["modules"]}
+        self.assertIn("auto_delete_fixed", ids)

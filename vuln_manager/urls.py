@@ -81,6 +81,11 @@ urlpatterns = [
     ),
     path("board/", views.kanban_board, name="kanban_board"),
     path(
+        "board/column/<str:status_key>/",
+        views.kanban_column,
+        name="kanban_column",
+    ),
+    path(
         "vulnerabilities/delete-fixed/",
         views.delete_fixed_vulnerabilities,
         name="delete_fixed_vulnerabilities",
@@ -156,6 +161,16 @@ urlpatterns = [
         "modules/auto-enrich/run/",
         views.run_enrichment_now,
         name="run_enrichment_now",
+    ),
+    path(
+        "modules/auto-delete/config/",
+        views.save_auto_delete_config,
+        name="save_auto_delete_config",
+    ),
+    path(
+        "modules/auto-delete/run/",
+        views.run_fixed_cleanup_now,
+        name="run_fixed_cleanup_now",
     ),
     path("modules/shodan/config/", views.save_shodan_config, name="save_shodan_config"),
     path("modules/shodan/scan-all/", views.shodan_scan_all, name="shodan_scan_all"),
