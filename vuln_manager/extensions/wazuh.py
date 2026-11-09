@@ -13,6 +13,7 @@ from vuln_manager.models import (
 )
 from vuln_manager.utils.audit import log_vulnerability_event
 from vuln_manager.utils.vuln_dedup import create_or_update_vulnerability
+from vuln_manager.utils.retention import stamp_fixed_at
 
 logger = logging.getLogger(__name__)
 
@@ -195,7 +196,8 @@ def _handle_alert(data):
             if vuln.status != "fixed":
                 old_status = vuln.status
                 vuln.status = "fixed"
-                vuln.save(update_fields=["status"])
+                stamp_fixed_at(vuln)
+                vuln.save(update_fields=["status", "fixed_at"])
                 log_vulnerability_event(
                     vuln,
                     "status_changed",

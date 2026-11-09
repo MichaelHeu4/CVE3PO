@@ -201,6 +201,7 @@
                 <div class="flex justify-between"><span class="text-outline">Last scanned</span><span class="text-on-surface">{{ host.last_scanned|date:"d M Y" }}</span></div>
                 <div class="flex justify-between"><span class="text-outline">Inventory items</span><span class="text-on-surface">{{ installed_software.paginator.count }}</span></div>
                 <div class="flex justify-between"><span class="text-outline">Operating system</span><span class="text-on-surface">{{ host.operating_system|default:"N/A" }}</span></div>
+                {% if host.running_kernel %}<div class="flex justify-between gap-2"><span class="text-outline">Running kernel</span><span class="text-on-surface font-mono text-[11px] truncate" title="{{ host.running_kernel }}">{{ host.running_kernel }}</span></div>{% endif %}
                 <div class="flex justify-between"><span class="text-outline">Exposure</span><span class="{% if host.is_exposed %}text-error{% else %}text-on-surface{% endif %}">{% if host.is_exposed %}Internet facing{% else %}Internal{% endif %}</span></div>
             </div>
         </div>

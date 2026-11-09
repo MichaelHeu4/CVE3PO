@@ -20,6 +20,10 @@ struct AgentPayload {
     host_ip: String,
     hostname: String,
     operating_system: String,
+    // Only sent on Linux; omitted otherwise so older servers/payloads are
+    // unaffected and the field stays backwards compatible.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    running_kernel: Option<String>,
     software: Vec<SoftwareEntry>,
 }
 
@@ -44,11 +48,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         .map(|v| v.eq_ignore_ascii_case("1") || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
 
+    let running_kernel = get_setting("RUNNING_KERNEL", &file_config)
+        .filter(|v| !v.trim().is_empty())
+        .or_else(detect_running_kernel);
     let software = collect_software()?;
     let payload = AgentPayload {
         host_ip,
         hostname,
         operating_system,
+        running_kernel,
         software,
     };
 
@@ -238,6 +246,24 @@ fn detect_operating_system() -> String {
         }
     }
     "Windows".to_string()
+}
+
+#[cfg(target_os = "linux")]
+fn detect_running_kernel() -> Option<String> {
+    // Standard sysfs file with the running kernel release, e.g. "6.8.0-45-generic".
+    if let Ok(content) = fs::read_to_string("/proc/sys/kernel/osrelease") {
+        let trimmed = content.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    capture_output("uname", &["-r"])
+}
+
+#[cfg(not(target_os = "linux"))]
+fn detect_running_kernel() -> Option<String> {
+    // Running kernel is only reported for Linux hosts.
+    None
 }
 
 fn collect_software() -> Result<Vec<SoftwareEntry>, Box<dyn Error>> {

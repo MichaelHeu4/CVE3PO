@@ -124,6 +124,54 @@ def run_full_enrichment_and_record(record_status=True):
     return result
 
 
+def run_fixed_vulnerability_cleanup():
+    """Delete vulnerabilities fixed longer ago than the retention window.
+
+    Only rows with ``status="fixed"`` and a ``fixed_at`` older than the configured
+    number of days are removed. Safe to call from any thread.
+    """
+    from django.utils import timezone
+    from datetime import timedelta
+
+    from vuln_manager.models import SystemSettings, Vulnerability
+    from vuln_manager.utils.retention import bulk_delete_fixed_vulnerabilities
+
+    settings_obj, _ = SystemSettings.objects.get_or_create(pk=1)
+    days = max(1, settings_obj.auto_delete_fixed_days or 90)
+    threshold = timezone.now() - timedelta(days=days)
+
+    stale_fixed = Vulnerability.objects.filter(
+        status="fixed", fixed_at__isnull=False, fixed_at__lt=threshold
+    )
+    deleted = bulk_delete_fixed_vulnerabilities(
+        stale_fixed, actor="auto_delete_fixed", tag="auto_fixed_retention"
+    )
+    logger.info("Auto-delete-fixed removed %s vulnerabilities (>%s days)", deleted, days)
+    return {"deleted": deleted, "days": days}
+
+
+def run_fixed_cleanup_and_record(record_status=True):
+    """Run the retention cleanup and stamp SystemSettings with the result.
+
+    Used by the "Run cleanup now" button and the scheduler tick.
+    """
+    from django.utils import timezone
+
+    from vuln_manager.models import SystemSettings
+
+    result = run_fixed_vulnerability_cleanup()
+    if record_status:
+        try:
+            status = f"ok: {result['deleted']} deleted (>{result['days']}d)"
+            SystemSettings.objects.filter(pk=1).update(
+                auto_delete_fixed_last_run=timezone.now(),
+                auto_delete_fixed_last_status=status[:255],
+            )
+        except Exception:
+            logger.exception("Failed to record auto-delete-fixed status")
+    return result
+
+
 def _tick():
     from django.db import connections
     from django.db.models import Q
@@ -156,6 +204,43 @@ def _tick():
         connections.close_all()
 
 
+def _tick_fixed_cleanup():
+    """Daily-cadence claim+run for the Auto-Delete-Fixed module.
+
+    Independent of the enrichment tick: it has its own extension flag and its own
+    atomic claim on ``auto_delete_fixed_last_run`` so the cleanup runs once per
+    day across all gunicorn workers.
+    """
+    from django.db import connections
+    from django.db.models import Q
+    from django.utils import timezone
+    from datetime import timedelta
+
+    from vuln_manager.models import Extension, SystemSettings
+
+    try:
+        if not Extension.objects.filter(
+            name_id="auto_delete_fixed", is_active=True
+        ).exists():
+            return
+
+        SystemSettings.objects.get_or_create(pk=1)
+        threshold = timezone.now() - timedelta(hours=24)
+
+        claimed = SystemSettings.objects.filter(pk=1).filter(
+            Q(auto_delete_fixed_last_run__isnull=True)
+            | Q(auto_delete_fixed_last_run__lt=threshold)
+        ).update(auto_delete_fixed_last_run=timezone.now())
+
+        if not claimed:
+            return
+
+        logger.info("Scheduled fixed-vulnerability cleanup claimed; executing")
+        run_fixed_cleanup_and_record(record_status=True)
+    finally:
+        connections.close_all()
+
+
 def _scheduler_loop():
     time.sleep(_STARTUP_DELAY_SECONDS)
     while True:
@@ -163,6 +248,10 @@ def _scheduler_loop():
             _tick()
         except Exception:
             logger.exception("Scheduler tick raised")
+        try:
+            _tick_fixed_cleanup()
+        except Exception:
+            logger.exception("Fixed-cleanup tick raised")
         time.sleep(_CHECK_INTERVAL_SECONDS)
 
 

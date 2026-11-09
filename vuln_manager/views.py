@@ -1,8 +1,23 @@
 from django.core.paginator import Paginator
 from django.views.decorators.http import require_POST
 from django.shortcuts import render, redirect, get_object_or_404
-from django.db import close_old_connections
-from django.db.models import Count, Q, Max, Case, When, Value, IntegerField, Avg
+from django.db import close_old_connections, transaction
+from django.db.models import (
+    Count,
+    Q,
+    Max,
+    Min,
+    Case,
+    When,
+    Value,
+    IntegerField,
+    Avg,
+    Exists,
+    OuterRef,
+    F,
+    ExpressionWrapper,
+    DurationField,
+)
 from django.db.models.functions import TruncDate
 from pathlib import Path
 from .models import (
@@ -26,6 +41,7 @@ from .parser import cyclonedx
 from .utils import ai_triage
 from .utils.audit import log_vulnerability_event
 from .utils.vuln_dedup import create_or_update_vulnerability
+from .utils.retention import stamp_fixed_at, bulk_delete_fixed_vulnerabilities
 from .utils.osv_auto import enrich_software_with_feeds
 from .utils.enrichment import get_cve_details
 from .utils.listing import apply_sort
@@ -232,17 +248,23 @@ def _get_sla_thresholds():
 def _build_dashboard_report_context():
     all_vulns = Vulnerability.objects.exclude(
         status__in=["fixed", "false_positive"])
-    critical_count = all_vulns.filter(severity="critical").count()
-    high_count = all_vulns.filter(severity="high").count()
-    host_count = Host.objects.count()
-    vuln_hosts_count = (
-        Host.objects.filter(
-            Q(vulnerabilities__in=all_vulns)
-            | Q(software_inventory__vulnerabilities__in=all_vulns)
-        )
-        .distinct()
-        .count()
+    # Evaluated several times below; aggregate once so the open-vuln table is
+    # scanned a single time instead of once per metric.
+    open_vuln_counts = all_vulns.aggregate(
+        total=Count("id"),
+        critical=Count("id", filter=Q(severity="critical")),
+        high=Count("id", filter=Q(severity="high")),
     )
+    open_vuln_count = open_vuln_counts["total"]
+    critical_count = open_vuln_counts["critical"]
+    high_count = open_vuln_counts["high"]
+    host_count = Host.objects.count()
+    # Two correlated EXISTS subqueries replace an OR-join + DISTINCT over the
+    # whole host x vuln x software graph, which blew up on large datasets.
+    vuln_hosts_count = Host.objects.filter(
+        Exists(all_vulns.filter(host_id=OuterRef("pk")))
+        | Exists(all_vulns.filter(software__hosts__id=OuterRef("pk")))
+    ).count()
     avg_proc_time_ms = (
         Vulnerability.objects.filter(ai_proc_time__gt=0).aggregate(Avg("ai_proc_time"))[
             "ai_proc_time__avg"
@@ -257,15 +279,24 @@ def _build_dashboard_report_context():
     )
     exposure_rate = round((vuln_hosts_count / host_count)
                           * 100, 1) if host_count else 0
-    avg_open_age_days = 0
-    open_ages = [
-        max((now() - opened_at).days, 0)
-        for opened_at in all_vulns.values_list("first_seen", flat=True)
-        if opened_at
-    ]
-    if open_ages:
-        avg_open_age_days = round(sum(open_ages) / len(open_ages), 1)
-    oldest_open_days = max(open_ages) if open_ages else 0
+    # Compute avg/oldest open age in the DB instead of pulling every open
+    # vulnerability's first_seen into Python and looping.
+    reference_now = now()
+    age_expr = ExpressionWrapper(
+        reference_now - F("first_seen"), output_field=DurationField()
+    )
+    age_stats = all_vulns.filter(first_seen__isnull=False).aggregate(
+        avg_age=Avg(age_expr),
+        oldest_first_seen=Min("first_seen"),
+    )
+    avg_age = age_stats["avg_age"]
+    avg_open_age_days = (
+        round(max(avg_age.total_seconds(), 0) / 86400, 1) if avg_age else 0
+    )
+    oldest_first_seen = age_stats["oldest_first_seen"]
+    oldest_open_days = (
+        max((reference_now - oldest_first_seen).days, 0) if oldest_first_seen else 0
+    )
     sla_critical_days, sla_high_days = _get_sla_thresholds()
     sla_breach_count = all_vulns.filter(
         Q(severity="critical", first_seen__lt=now() -
@@ -304,7 +335,7 @@ def _build_dashboard_report_context():
         "report_date": now(),
         "metrics": {
             "host_count": host_count,
-            "vuln_count": all_vulns.count(),
+            "vuln_count": open_vuln_count,
             "critical_count": critical_count,
             "high_count": high_count,
             "vuln_hosts_count": vuln_hosts_count,
@@ -1278,16 +1309,7 @@ def delete_fixed_vulnerabilities(request):
     if not request.user.is_staff:
         return HttpResponseForbidden("forbidden")
 
-    fixed_vulns = list(Vulnerability.objects.filter(status="fixed"))
-    for vuln in fixed_vulns:
-        log_vulnerability_event(
-            vuln,
-            "deleted",
-            user=request.user,
-            details={"cve_id": vuln.cve_id, "name": vuln.name, "bulk": "fixed"},
-        )
-
-    Vulnerability.objects.filter(status="fixed").delete()
+    bulk_delete_fixed_vulnerabilities(user=request.user, tag="fixed")
     return redirect("/vulnerabilities/?status=resolved")
 
 
@@ -1399,8 +1421,15 @@ def scan_list(request):
 
     paginator = Paginator(scans_query, 50)
     page = paginator.get_page(request.GET.get("page"))
+    # Resolve the previous-scan ids for the current page to real Scan objects in
+    # a single query so the template/consumers get an object (with .pk), not a
+    # bare id.
+    prev_ids = {
+        pid for pid in (prev_map.get(scan.id) for scan in page) if pid
+    }
+    prev_scans = Scan.objects.in_bulk(prev_ids)
     for scan in page:
-        scan.previous_same_type = prev_map.get(scan.id)
+        scan.previous_same_type = prev_scans.get(prev_map.get(scan.id))
     return render(
         request,
         "vuln_manager/scan_list.html",
@@ -1486,36 +1515,94 @@ def scan_diff(request, pk):
     return render(request, "vuln_manager/scan_diff.html", context)
 
 
-@login_required
-def kanban_board(request):
-    vulns = Vulnerability.objects.select_related("host").annotate(
+# Kanban board column config. Terminal states (fixed/risk_accepted/
+# false_positive) are usually the largest and least relevant for daily work, so
+# they are loaded lazily (0 cards until the user clicks "Load"). Only the two
+# active columns are rendered eagerly. This keeps the initial DOM small instead
+# of rendering a card per vulnerability and running the browser out of memory.
+KANBAN_COLUMN_ORDER = ["open", "in_progress",
+                       "fixed", "risk_accepted", "false_positive"]
+KANBAN_EAGER_COLUMNS = {"open", "in_progress"}
+KANBAN_PAGE_SIZE = 50
+
+
+def _kanban_base_queryset(request):
+    vulns = Vulnerability.objects.select_related("host", "software").annotate(
         sev_score=_severity_order_case()
     )
     severity_filter = _normalized_severity(request)
     if severity_filter:
         vulns = vulns.filter(severity=severity_filter)
-    board_data = {
-        "open": vulns.filter(status="open").order_by("-sev_score", "cve_id"),
-        "in_progress": vulns.filter(status="in_progress").order_by(
-            "-sev_score", "cve_id"
-        ),
-        "fixed": vulns.filter(status="fixed").order_by("-sev_score", "cve_id"),
-        "risk_accepted": vulns.filter(status="risk_accepted").order_by(
-            "-sev_score", "cve_id"
-        ),
-        "false_positive": vulns.filter(status="false_positive").order_by(
-            "-sev_score", "cve_id"
-        ),
+    return vulns, severity_filter
+
+
+@login_required
+def kanban_board(request):
+    vulns, severity_filter = _kanban_base_queryset(request)
+
+    # One grouped query for every column's total instead of five COUNT queries.
+    counts = {
+        row["status"]: row["c"]
+        for row in vulns.values("status").annotate(c=Count("id"))
     }
+
+    columns = []
+    for status_key in KANBAN_COLUMN_ORDER:
+        total = counts.get(status_key, 0)
+        eager = status_key in KANBAN_EAGER_COLUMNS
+        cards = []
+        if eager:
+            cards = list(
+                vulns.filter(status=status_key).order_by("-sev_score", "cve_id")[
+                    :KANBAN_PAGE_SIZE
+                ]
+            )
+        columns.append(
+            {
+                "key": status_key,
+                "count": total,
+                "cards": cards,
+                "eager": eager,
+                "has_more": total > len(cards),
+                "next_page": 2 if eager else 1,
+            }
+        )
+
     return render(
         request,
         "vuln_manager/kanban_board.html",
         {
-            "board": board_data,
+            "columns": columns,
             "severity_filter": severity_filter,
             "severity_choices": Vulnerability.SEVERITY_CHOICES,
+            "page_size": KANBAN_PAGE_SIZE,
         },
     )
+
+
+@login_required
+def kanban_column(request, status_key):
+    """Return one page of card HTML for a single board column (lazy load)."""
+    if status_key not in KANBAN_COLUMN_ORDER:
+        return HttpResponseNotFound()
+
+    vulns, _ = _kanban_base_queryset(request)
+    qs = vulns.filter(status=status_key).order_by("-sev_score", "cve_id")
+
+    paginator = Paginator(qs, KANBAN_PAGE_SIZE)
+    page_obj = paginator.get_page(request.GET.get("page"))
+
+    html = render_to_string(
+        "vuln_manager/partials/_kanban_cards.html",
+        {"vulns": page_obj.object_list},
+        request=request,
+    )
+    response = HttpResponse(html)
+    response["X-Has-Next"] = "1" if page_obj.has_next() else "0"
+    response["X-Next-Page"] = str(
+        page_obj.next_page_number() if page_obj.has_next() else ""
+    )
+    return response
 
 
 @login_required
@@ -1552,6 +1639,7 @@ def update_vuln_status(request, pk):
                 )
             old_status = vuln.status
             vuln.status = new_status
+            stamp_fixed_at(vuln)
             vuln.save()
             if old_status != new_status:
                 details = {"from_status": old_status, "to_status": new_status}
@@ -1866,6 +1954,12 @@ def extensions_view(request):
             "icon": "travel_explore",
             "color": "primary",
         },
+        "auto_delete_fixed": {
+            "name": "Auto Delete Fixed",
+            "description": "Automatically deletes vulnerabilities that have been fixed for longer than the configured retention period, keeping the database lean. Runs daily.",
+            "icon": "auto_delete",
+            "color": "tertiary",
+        },
     }
 
     modules = []
@@ -1921,6 +2015,18 @@ def extensions_view(request):
                 ),
                 "shodan_configured": (
                     bool(ext.api_token) if mid == "shodan" else None
+                ),
+                "auto_delete_fixed_days": (
+                    system_settings.auto_delete_fixed_days
+                    if mid == "auto_delete_fixed" else None
+                ),
+                "auto_delete_fixed_last_run": (
+                    system_settings.auto_delete_fixed_last_run
+                    if mid == "auto_delete_fixed" else None
+                ),
+                "auto_delete_fixed_last_status": (
+                    system_settings.auto_delete_fixed_last_status
+                    if mid == "auto_delete_fixed" else None
                 ),
                 "icon": meta["icon"],
                 "color": meta["color"],
@@ -2233,6 +2339,45 @@ def run_enrichment_now(request):
 
 @login_required
 @require_POST
+def save_auto_delete_config(request):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+    try:
+        days = int(request.POST.get("auto_delete_fixed_days", "90"))
+    except ValueError:
+        return HttpResponseForbidden("invalid_days")
+    if days < 1:
+        return HttpResponseForbidden("invalid_days")
+    settings_obj = get_system_settings()
+    settings_obj.auto_delete_fixed_days = days
+    settings_obj.save(update_fields=["auto_delete_fixed_days"])
+    return redirect("extensions")
+
+
+@login_required
+@require_POST
+def run_fixed_cleanup_now(request):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+    extension, _ = Extension.objects.get_or_create(name_id="auto_delete_fixed")
+    if not extension.is_active:
+        return HttpResponseForbidden("auto_delete_disabled")
+
+    def _worker():
+        close_old_connections()
+        try:
+            scheduler_util.run_fixed_cleanup_and_record(record_status=True)
+        except Exception:
+            logger.exception("Manual fixed-cleanup run failed")
+        finally:
+            close_old_connections()
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return redirect("extensions")
+
+
+@login_required
+@require_POST
 def save_shodan_config(request):
     if not request.user.is_staff:
         return HttpResponseForbidden("forbidden")
@@ -2343,7 +2488,8 @@ def sync_wrike_ticket(request, pk):
             if vuln.status != "fixed":
                 old_status = vuln.status
                 vuln.status = "fixed"
-                vuln.save(update_fields=["status"])
+                stamp_fixed_at(vuln)
+                vuln.save(update_fields=["status", "fixed_at"])
                 log_vulnerability_event(
                     vuln,
                     "ticket_synced",

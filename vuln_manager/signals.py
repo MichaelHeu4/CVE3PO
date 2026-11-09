@@ -8,6 +8,7 @@ from django.dispatch import receiver
 from vuln_manager.models import Host, Software, Vulnerability
 from vuln_manager.utils.osv_auto import enrich_software_with_feeds
 from vuln_manager.utils.audit import log_vulnerability_event
+from vuln_manager.utils.retention import stamp_fixed_at
 
 # Bound how many enrichment threads run at once. A Wazuh batch can create many
 # new Software rows in one request; without a cap each would spawn its own
@@ -50,7 +51,8 @@ def mark_software_vulnerabilities_fixed(sender, instance, **kwargs):
     for vuln in active_vulns:
         old_status = vuln.status
         vuln.status = "fixed"
-        vuln.save(update_fields=["status"])
+        stamp_fixed_at(vuln)
+        vuln.save(update_fields=["status", "fixed_at"])
         log_vulnerability_event(
             vuln,
             "status_changed",
