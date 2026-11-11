@@ -2081,6 +2081,48 @@ class ResolveHostIdentityTests(TestCase):
         host.refresh_from_db()
         self.assertEqual(host.machine_id, "mid-late")
 
+    def test_shared_docker_ip_does_not_collapse_distinct_machines(self):
+        # Two different servers that both run Docker share the same bridge IPs
+        # (docker0 is 172.17.0.1, a compose bridge is 172.18.0.1 on each host).
+        host_a, c1 = resolve_host(
+            ip_address="10.20.0.11",
+            ip_addresses=["10.20.0.11", "172.17.0.1", "172.18.0.1"],
+            machine_id="machine-id-aaaa",
+            hostname="host-a",
+            source="agent",
+        )
+        host_b, c2 = resolve_host(
+            ip_address="10.20.0.12",
+            ip_addresses=["10.20.0.12", "172.17.0.1", "172.18.0.1"],
+            machine_id="machine-id-bbbb",
+            hostname="host-b",
+            source="agent",
+        )
+        self.assertTrue(c1)
+        self.assertTrue(c2)
+        self.assertNotEqual(host_a.pk, host_b.pk)
+        self.assertEqual(Host.objects.count(), 2)
+
+        # Each real NIC IP belongs to its own host.
+        self.assertEqual(
+            HostAddress.objects.get(ip_address="10.20.0.11").host_id, host_a.pk
+        )
+        self.assertEqual(
+            HostAddress.objects.get(ip_address="10.20.0.12").host_id, host_b.pk
+        )
+        # The shared docker IP stays with the first host; it is never stolen.
+        self.assertEqual(
+            HostAddress.objects.get(ip_address="172.17.0.1").host_id, host_a.pk
+        )
+
+    def test_shared_ip_resolution_still_works_without_machine_id(self):
+        # A source with no machine_id (e.g. Wazuh) still correlates by a known
+        # IP when that IP belongs to a host whose machine_id is unknown.
+        host, _ = resolve_host(ip_address="10.5.0.10", source="wazuh")
+        host2, created = resolve_host(ip_address="10.5.0.10", source="shodan")
+        self.assertFalse(created)
+        self.assertEqual(host.pk, host2.pk)
+
 
 class MergeHostsTests(TestCase):
     def test_merge_repoints_related_data_and_addresses(self):
