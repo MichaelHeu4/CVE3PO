@@ -21,6 +21,7 @@ import ipaddress
 import logging
 
 from django.db import transaction
+from django.db.models import Q
 
 from vuln_manager.models import Host, HostAddress
 
@@ -71,7 +72,16 @@ def _register_address(host, ip, source, trust_reassign):
     if created:
         return
     if addr.host_id != host.id:
-        if trust_reassign:
+        # Never move an IP away from a host that is a *different* identified
+        # machine: that IP is shared, not identifying (e.g. the Docker bridges
+        # 172.17.0.1 / 172.18.0.1, which are identical on every Docker host).
+        owner = addr.host
+        both_identified = bool(
+            owner.machine_id
+            and host.machine_id
+            and owner.machine_id != host.machine_id
+        )
+        if trust_reassign and not both_identified:
             addr.host = host
             addr.source = source
             addr.save(update_fields=["host", "source", "last_seen"])
@@ -110,18 +120,32 @@ def resolve_host(
         if host:
             matched_by = "machine_id"
 
+    # A supplied machine_id is authoritative: when it matches no host, this is a
+    # distinct machine, so it must NOT be collapsed into an existing host by a
+    # shared IP (Docker bridges are identical across hosts) or a reused hostname
+    # that already belongs to a *different* identified machine.
     if host is None and candidates:
-        addr = (
+        for addr in (
             HostAddress.objects.filter(ip_address__in=candidates)
             .select_related("host")
-            .first()
-        )
-        if addr:
-            host = addr.host
+            .order_by("pk")
+        ):
+            owner = addr.host
+            if (
+                machine_id
+                and owner.machine_id
+                and owner.machine_id != machine_id
+            ):
+                continue  # IP owned by another known machine → shared, skip it
+            host = owner
             matched_by = "ip"
+            break
 
     if host is None and hostname:
-        host = Host.objects.filter(hostname__iexact=hostname).first()
+        qs = Host.objects.filter(hostname__iexact=hostname)
+        if machine_id:
+            qs = qs.filter(Q(machine_id__isnull=True) | Q(machine_id=machine_id))
+        host = qs.first()
         if host:
             matched_by = "hostname"
 

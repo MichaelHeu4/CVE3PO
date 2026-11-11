@@ -207,18 +207,57 @@ fn _normalize_ip(raw: &str) -> Option<String> {
     }
 }
 
+// Interface name prefixes whose IPs do NOT identify the host: container and
+// virtual bridges (Docker's docker0 is always 172.17.0.1 and its compose
+// bridges br-<hash> reuse the same ranges on every host), VPN/overlay and
+// virtual NICs. Reporting these would merge unrelated servers into one asset.
+#[cfg(not(target_os = "windows"))]
+const VIRTUAL_IFACE_PREFIXES: &[&str] = &[
+    "lo", "docker", "br-", "veth", "virbr", "vnet", "tun", "tap", "kube",
+    "cni", "flannel", "cali", "cilium", "vxlan", "wg", "tailscale", "zt",
+    "ifb", "dummy", "nordlynx", "wt",
+];
+
+#[cfg(not(target_os = "windows"))]
+fn _is_virtual_iface(name: &str) -> bool {
+    let n = name.trim();
+    VIRTUAL_IFACE_PREFIXES
+        .iter()
+        .any(|p| n == *p || n.starts_with(p))
+}
+
 #[cfg(not(target_os = "windows"))]
 fn detect_all_ips(primary: &str) -> Vec<String> {
-    // `hostname -I` lists every assigned IP (space-separated) on Linux.
+    // Enumerate addresses *with* their interface so container/virtual bridges
+    // can be filtered out. `ip -o addr` prints one address per line:
+    //   "2: ens18    inet 172.22.39.19/24 brd ... scope global ens18\  ..."
     let mut ips: Vec<String> = Vec::new();
     if let Some(name) = _normalize_ip(primary) {
         ips.push(name);
     }
-    if let Some(out) = capture_output("hostname", &["-I"]) {
-        for token in out.split_whitespace() {
-            if let Some(ip) = _normalize_ip(token) {
-                if !ips.contains(&ip) {
-                    ips.push(ip);
+    if let Some(out) = capture_output("ip", &["-o", "addr", "show"]) {
+        for line in out.lines() {
+            let mut fields = line.split_whitespace();
+            let _index = fields.next();
+            let iface = match fields.next() {
+                Some(name) => name,
+                None => continue,
+            };
+            if _is_virtual_iface(iface) {
+                continue;
+            }
+            // Find the "inet"/"inet6" keyword, then take the CIDR that follows.
+            let mut tokens = line.split_whitespace();
+            while let Some(tok) = tokens.next() {
+                if tok == "inet" || tok == "inet6" {
+                    if let Some(cidr) = tokens.next() {
+                        let addr = cidr.split('/').next().unwrap_or(cidr);
+                        if let Some(ip) = _normalize_ip(addr) {
+                            if !ips.contains(&ip) {
+                                ips.push(ip);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -232,8 +271,12 @@ fn detect_all_ips(primary: &str) -> Vec<String> {
     if let Some(name) = _normalize_ip(primary) {
         ips.push(name);
     }
+    // Exclude loopback/link-local addresses and virtual adapters (Hyper-V,
+    // WSL, Docker's vEthernet/NAT switches) so only identifying NIC IPs are
+    // reported — the Windows counterpart to the Linux interface filter.
     let script = "Get-NetIPAddress -AddressFamily IPv4,IPv6 | \
-                  Where-Object { $_.IPAddress -notmatch '^(127\\.|::1|169\\.254\\.|fe80)' } | \
+                  Where-Object { $_.IPAddress -notmatch '^(127\\.|::1|169\\.254\\.|fe80)' \
+                  -and $_.InterfaceAlias -notmatch 'Loopback|vEthernet|Hyper-V|WSL|Default Switch|Docker|VirtualBox|VMware' } | \
                   Select-Object -ExpandProperty IPAddress";
     if let Some(out) = capture_output(
         "powershell",
