@@ -14,6 +14,7 @@ from vuln_manager.models import (
 from vuln_manager.utils.audit import log_vulnerability_event
 from vuln_manager.utils.vuln_dedup import create_or_update_vulnerability
 from vuln_manager.utils.retention import stamp_fixed_at
+from vuln_manager.utils.identity import resolve_host
 
 logger = logging.getLogger(__name__)
 
@@ -138,12 +139,17 @@ def _handle_alert(data):
 
     host = None
     if agent_ip:
-        host, _ = Host.objects.get_or_create(ip_address=agent_ip)
+        # Wazuh's agent.ip may be a different interface than the one the agent
+        # reported, so resolve by identity/known-IP/hostname instead of keying
+        # straight on this IP — otherwise the same server becomes a 2nd asset.
+        host, _ = resolve_host(
+            ip_address=agent_ip, hostname=agent_name, source="wazuh"
+        )
         if agent_name and not host.hostname:
             host.hostname = agent_name
-            host.save()
+            host.save(update_fields=["hostname"])
     elif agent_name:
-        host = Host.objects.filter(hostname=agent_name).first()
+        host = Host.objects.filter(hostname__iexact=agent_name).first()
 
     if host and software:
         if not software.hosts.filter(pk=host.pk).exists():

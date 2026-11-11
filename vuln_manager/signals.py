@@ -5,7 +5,7 @@ from django.db.models import Count
 from django.db.models.signals import post_save, pre_delete, post_delete
 from django.dispatch import receiver
 
-from vuln_manager.models import Host, Software, Vulnerability
+from vuln_manager.models import Host, HostAddress, Software, Vulnerability
 from vuln_manager.utils.osv_auto import enrich_software_with_feeds
 from vuln_manager.utils.audit import log_vulnerability_event
 from vuln_manager.utils.retention import stamp_fixed_at
@@ -37,6 +37,24 @@ def trigger_osv_auto_lookup(sender, instance, created, **kwargs):
         threading.Thread(target=_worker, daemon=True).start()
 
     transaction.on_commit(_run_lookup)
+
+
+@receiver(post_save, sender=Host)
+def ensure_primary_host_address(sender, instance, **kwargs):
+    """Mirror a Host's primary IP into HostAddress so IP-based identity
+    resolution also finds hosts created outside the resolver (manual add,
+    fixtures). Idempotent and never steals an IP already owned elsewhere."""
+    if not instance.ip_address:
+        return
+    if HostAddress.objects.filter(ip_address=instance.ip_address).exists():
+        return
+    try:
+        HostAddress.objects.create(
+            host=instance, ip_address=instance.ip_address, source="manual"
+        )
+    except Exception:
+        # A concurrent writer may have registered the same IP; ignore the race.
+        pass
 
 
 @receiver(pre_delete, sender=Software)

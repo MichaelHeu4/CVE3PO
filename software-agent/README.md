@@ -13,6 +13,14 @@ Wichtige Keys:
 - `SOFTWARE_API_AUTH` = `bearer` (default) oder `x-api-key`
 - `SOFTWARE_API_BEARER_TOKEN` (oder `SOFTWARE_API_KEY`)
 - `HOST_IP` (optional)
+- `MACHINE_ID` (optional) – überschreibt die automatisch erkannte, stabile
+  Maschinen-ID (Linux `/etc/machine-id`, Windows `MachineGuid`). Sie ist der
+  primäre Schlüssel, über den der Server einen Server mit mehreren IPs als **ein**
+  Asset zusammenhält. Normalerweise Auto-Erkennung aktiv lassen.
+- `IP_ADDRESSES` (optional, komma-separiert) – überschreibt die automatisch
+  erkannte Liste aller lokalen IPs (`hostname -I` bzw. `Get-NetIPAddress`). Durch
+  das Vorab-Registrieren aller IPs landen spätere Wazuh-/Shodan-Alerts auf einer
+  dieser IPs beim selben Asset.
 - `DRY_RUN=true` (optional)
 
 ## Install (Linux, systemd timer)
