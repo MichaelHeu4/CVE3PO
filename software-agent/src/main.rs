@@ -24,6 +24,15 @@ struct AgentPayload {
     // unaffected and the field stays backwards compatible.
     #[serde(skip_serializing_if = "Option::is_none")]
     running_kernel: Option<String>,
+    // Stable, address-independent machine identity (Linux /etc/machine-id,
+    // Windows MachineGuid). The server uses it as the primary correlation key so
+    // a multi-homed server stays ONE asset. Omitted when it cannot be read.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    machine_id: Option<String>,
+    // Every local IP of this host. Pre-registering the full set means a later
+    // Wazuh/Shodan alert on any of these IPs maps back to this same asset.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    ip_addresses: Vec<String>,
     software: Vec<SoftwareEntry>,
 }
 
@@ -51,12 +60,26 @@ fn main() -> Result<(), Box<dyn Error>> {
     let running_kernel = get_setting("RUNNING_KERNEL", &file_config)
         .filter(|v| !v.trim().is_empty())
         .or_else(detect_running_kernel);
+    let machine_id = get_setting("MACHINE_ID", &file_config)
+        .filter(|v| !v.trim().is_empty())
+        .or_else(detect_machine_id);
+    let ip_addresses = get_setting("IP_ADDRESSES", &file_config)
+        .map(|v| {
+            v.split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<String>>()
+        })
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| detect_all_ips(&host_ip));
     let software = collect_software()?;
     let payload = AgentPayload {
         host_ip,
         hostname,
         operating_system,
         running_kernel,
+        machine_id,
+        ip_addresses,
         software,
     };
 
@@ -140,6 +163,93 @@ fn detect_host_ip() -> Result<String, Box<dyn Error>> {
         IpAddr::V4(ip) => Ok(ip.to_string()),
         IpAddr::V6(ip) => Ok(ip.to_string()),
     }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn detect_machine_id() -> Option<String> {
+    // systemd machine-id is the standard stable host identifier; dbus keeps a
+    // copy on hosts without systemd.
+    for path in ["/etc/machine-id", "/var/lib/dbus/machine-id"] {
+        if let Ok(content) = fs::read_to_string(path) {
+            let trimmed = content.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn detect_machine_id() -> Option<String> {
+    // MachineGuid under Cryptography is stable for the Windows install.
+    let script = "(Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Cryptography').MachineGuid";
+    let value = capture_output(
+        "powershell",
+        &["-NoProfile", "-NonInteractive", "-Command", script],
+    )?;
+    let trimmed = value.lines().next()?.trim().to_string();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
+    }
+}
+
+fn _normalize_ip(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    match trimmed.parse::<IpAddr>() {
+        Ok(ip) if !ip.is_loopback() && !ip.is_unspecified() => Some(ip.to_string()),
+        _ => None,
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn detect_all_ips(primary: &str) -> Vec<String> {
+    // `hostname -I` lists every assigned IP (space-separated) on Linux.
+    let mut ips: Vec<String> = Vec::new();
+    if let Some(name) = _normalize_ip(primary) {
+        ips.push(name);
+    }
+    if let Some(out) = capture_output("hostname", &["-I"]) {
+        for token in out.split_whitespace() {
+            if let Some(ip) = _normalize_ip(token) {
+                if !ips.contains(&ip) {
+                    ips.push(ip);
+                }
+            }
+        }
+    }
+    ips
+}
+
+#[cfg(target_os = "windows")]
+fn detect_all_ips(primary: &str) -> Vec<String> {
+    let mut ips: Vec<String> = Vec::new();
+    if let Some(name) = _normalize_ip(primary) {
+        ips.push(name);
+    }
+    let script = "Get-NetIPAddress -AddressFamily IPv4,IPv6 | \
+                  Where-Object { $_.IPAddress -notmatch '^(127\\.|::1|169\\.254\\.|fe80)' } | \
+                  Select-Object -ExpandProperty IPAddress";
+    if let Some(out) = capture_output(
+        "powershell",
+        &["-NoProfile", "-NonInteractive", "-Command", script],
+    ) {
+        for line in out.lines() {
+            // Strip a possible IPv6 zone index (e.g. fe80::1%12).
+            let token = line.split('%').next().unwrap_or(line);
+            if let Some(ip) = _normalize_ip(token) {
+                if !ips.contains(&ip) {
+                    ips.push(ip);
+                }
+            }
+        }
+    }
+    ips
 }
 
 fn capture_output(program: &str, args: &[&str]) -> Option<String> {

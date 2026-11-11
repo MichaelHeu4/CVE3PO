@@ -6,9 +6,9 @@ import logging
 from vuln_manager.models import (
     HostSoftwareRelationship,
     Extension,
-    Host,
     Software,
 )
+from vuln_manager.utils.identity import resolve_host
 import json
 from django.views.decorators.http import require_POST
 import threading
@@ -26,13 +26,25 @@ def _sync_inventory_payload(data):
     # Optional: agents may report the running kernel (Linux). Older agents that
     # do not send it leave the stored value untouched (backwards compatible).
     running_kernel = data.get("running_kernel") or data.get("kernel")
+    # Stable identity + the full set of local IPs. Older agents omit both; the
+    # resolver then falls back to IP/hostname matching (backwards compatible).
+    machine_id = data.get("machine_id")
+    ip_addresses = data.get("ip_addresses") or data.get("local_ips") or []
     software_list = data.get("software", [])
 
     if not host_ip:
         raise ValueError("host_ip is required")
 
     with transaction.atomic():
-        host, _ = Host.objects.get_or_create(ip_address=host_ip)
+        # Resolve by stable identity (machine_id) before IP so a multi-homed
+        # server stays ONE asset, and register every reported IP against it.
+        host, _ = resolve_host(
+            ip_address=host_ip,
+            machine_id=machine_id,
+            hostname=hostname,
+            ip_addresses=ip_addresses,
+            source="agent",
+        )
         host_update_fields = []
         if hostname and not host.hostname:
             host.hostname = hostname

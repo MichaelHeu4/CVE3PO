@@ -14,13 +14,16 @@ from django.utils import timezone
 from vuln_manager.models import (
     Extension,
     Host,
+    HostAddress,
     HostSoftwareRelationship,
+    Port,
     Scan,
     Software,
     Vulnerability,
     VulnerabilityAuditEvent,
     SystemSettings,
 )
+from vuln_manager.utils.identity import resolve_host, merge_hosts
 from vuln_manager.utils.osv_auto import (
     _extract_nvd_cvss_and_severity,
     enrich_software_with_osv,
@@ -2010,3 +2013,124 @@ class AutoDeleteFixedModuleTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         ids = {m["id"] for m in resp.context["modules"]}
         self.assertIn("auto_delete_fixed", ids)
+
+
+class ResolveHostIdentityTests(TestCase):
+    """Asset identity resolution: one server stays one asset across IPs/sources."""
+
+    def test_machine_id_match_reuses_host_across_different_ip(self):
+        host, created = resolve_host(
+            ip_address="10.0.0.10", machine_id="mid-abc", source="agent"
+        )
+        self.assertTrue(created)
+
+        # Same machine, a different IP (e.g. a Wazuh alert on another interface).
+        host2, created2 = resolve_host(
+            ip_address="10.0.1.10", machine_id="mid-abc", source="wazuh"
+        )
+        self.assertFalse(created2)
+        self.assertEqual(host.pk, host2.pk)
+        self.assertEqual(Host.objects.count(), 1)
+        # Both IPs are now registered against the single asset.
+        self.assertTrue(HostAddress.objects.filter(ip_address="10.0.0.10").exists())
+        self.assertTrue(HostAddress.objects.filter(ip_address="10.0.1.10").exists())
+
+    def test_known_secondary_ip_resolves_to_same_host(self):
+        # Agent pre-registers all local IPs for the server.
+        host, _ = resolve_host(
+            ip_address="10.0.0.20",
+            ip_addresses=["10.0.0.20", "10.0.2.20", "203.0.113.5"],
+            machine_id="mid-xyz",
+            source="agent",
+        )
+        # A later Shodan/Wazuh alert knows only the public IP, no machine_id.
+        host2, created2 = resolve_host(ip_address="203.0.113.5", source="shodan")
+        self.assertFalse(created2)
+        self.assertEqual(host.pk, host2.pk)
+        self.assertEqual(Host.objects.count(), 1)
+
+    def test_hostname_match_attaches_new_ip(self):
+        host, _ = resolve_host(
+            ip_address="10.0.0.30", hostname="web-01", source="agent"
+        )
+        host2, created2 = resolve_host(
+            ip_address="10.0.9.30", hostname="WEB-01", source="wazuh"
+        )
+        self.assertFalse(created2)
+        self.assertEqual(host.pk, host2.pk)
+        self.assertTrue(HostAddress.objects.filter(ip_address="10.0.9.30").exists())
+
+    def test_distinct_servers_stay_separate(self):
+        resolve_host(ip_address="10.0.0.40", machine_id="mid-1", source="agent")
+        resolve_host(ip_address="10.0.0.41", machine_id="mid-2", source="agent")
+        self.assertEqual(Host.objects.count(), 2)
+
+    def test_loopback_is_ignored(self):
+        host, _ = resolve_host(
+            ip_address="10.0.0.50",
+            ip_addresses=["127.0.0.1", "10.0.0.50"],
+            source="agent",
+        )
+        self.assertFalse(HostAddress.objects.filter(ip_address="127.0.0.1").exists())
+        self.assertTrue(HostAddress.objects.filter(ip_address="10.0.0.50").exists())
+
+    def test_machine_id_backfilled_onto_ip_matched_host(self):
+        host, _ = resolve_host(ip_address="10.0.0.60", source="wazuh")
+        self.assertIsNone(host.machine_id)
+        resolve_host(ip_address="10.0.0.60", machine_id="mid-late", source="agent")
+        host.refresh_from_db()
+        self.assertEqual(host.machine_id, "mid-late")
+
+
+class MergeHostsTests(TestCase):
+    def test_merge_repoints_related_data_and_addresses(self):
+        primary = Host.objects.create(ip_address="10.1.0.10", hostname="srv")
+        other = Host.objects.create(
+            ip_address="10.1.1.10", operating_system="Debian 12", machine_id="m-2"
+        )
+        # The post_save signal already mirrors each host's primary IP into
+        # HostAddress, so primary has 10.1.0.10 and other has 10.1.1.10.
+
+        scan = Scan.objects.create(scan_type="WAZUH")
+        vuln = Vulnerability.objects.create(
+            host=other, scan=scan, cve_id="CVE-2026-0001", severity="high", name="v"
+        )
+        port = Port.objects.create(
+            host=other, port_number=443, service_name="https", state="open"
+        )
+        sw = Software.objects.create(name="nginx", version="1.0")
+        sw.hosts.add(other)
+        HostSoftwareRelationship.objects.create(host=other, software=sw, source="agent")
+
+        other_pk = other.pk
+        merge_hosts(primary, other)
+
+        self.assertEqual(Host.objects.count(), 1)
+        vuln.refresh_from_db()
+        port.refresh_from_db()
+        self.assertEqual(vuln.host_id, primary.pk)
+        self.assertEqual(port.host_id, primary.pk)
+        self.assertTrue(sw.hosts.filter(pk=primary.pk).exists())
+        self.assertTrue(
+            HostSoftwareRelationship.objects.filter(host=primary, software=sw).exists()
+        )
+        # Both hosts' addresses now belong to the survivor.
+        self.assertEqual(HostAddress.objects.filter(host=primary).count(), 2)
+        self.assertFalse(HostAddress.objects.filter(host_id=other_pk).exists())
+        primary.refresh_from_db()
+        # Attributes the primary lacked are carried over from the merged host.
+        self.assertEqual(primary.operating_system, "Debian 12")
+        self.assertEqual(primary.machine_id, "m-2")
+
+    def test_merge_dedups_shared_software_relationship(self):
+        primary = Host.objects.create(ip_address="10.2.0.10")
+        other = Host.objects.create(ip_address="10.2.1.10")
+        sw = Software.objects.create(name="openssl", version="3.0")
+        HostSoftwareRelationship.objects.create(host=primary, software=sw, source="agent")
+        HostSoftwareRelationship.objects.create(host=other, software=sw, source="scanner")
+
+        merge_hosts(primary, other)
+
+        self.assertEqual(
+            HostSoftwareRelationship.objects.filter(software=sw).count(), 1
+        )

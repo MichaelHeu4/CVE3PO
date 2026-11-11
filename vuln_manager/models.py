@@ -98,6 +98,14 @@ class Host(models.Model):
         ("Low", "Low"),
     )
     ip_address = models.GenericIPAddressField(unique=True)
+    # Stable, address-independent identity reported by the agent (Linux
+    # /etc/machine-id or DMI UUID, Windows MachineGuid). It is the strongest
+    # correlation key: a multi-homed server keeps ONE asset even when different
+    # sources (agent, Wazuh, Shodan) observe it under different IPs. Optional and
+    # unique — NULL for hosts discovered by sources that cannot report it.
+    machine_id = models.CharField(
+        max_length=255, unique=True, null=True, blank=True
+    )
     hostname = models.CharField(max_length=255, blank=True, null=True)
     operating_system = models.CharField(max_length=255, blank=True, null=True)
     # Running kernel release reported by the agent on Linux hosts (e.g.
@@ -119,6 +127,36 @@ class Host(models.Model):
 
     def __str__(self):
         return self.hostname or self.ip_address
+
+
+class HostAddress(models.Model):
+    """
+    An IP address observed for a Host. A server may expose several interfaces
+    (and different sources may each see a different one), so addresses are a
+    child collection of the Host rather than the Host's identity. The IP is
+    globally unique: it belongs to at most one Host at a time, which is what lets
+    the resolver map any later observation of that IP back to the same asset.
+    """
+
+    SOURCE_CHOICES = (
+        ("agent", "Agent"),
+        ("wazuh", "Wazuh"),
+        ("shodan", "Shodan"),
+        ("nmap", "Nmap Scan"),
+        ("manual", "Manual Entry"),
+    )
+    host = models.ForeignKey(
+        Host, on_delete=models.CASCADE, related_name="addresses"
+    )
+    ip_address = models.GenericIPAddressField(unique=True)
+    source = models.CharField(
+        max_length=20, choices=SOURCE_CHOICES, default="manual"
+    )
+    first_seen = models.DateTimeField(auto_now_add=True)
+    last_seen = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.ip_address} ({self.host})"
 
 
 class Software(models.Model):

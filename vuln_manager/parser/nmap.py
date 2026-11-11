@@ -1,6 +1,7 @@
 import defusedxml.ElementTree as ET
 
-from vuln_manager.models import Host, Port
+from vuln_manager.models import Port
+from vuln_manager.utils.identity import resolve_host
 
 
 def parse_nmap_xml(file_path, scan_obj):
@@ -14,10 +15,12 @@ def parse_nmap_xml(file_path, scan_obj):
         hostname_elem = host.find("hostnames/hostname")
         hostname = hostname_elem.get("name") if hostname_elem is not None else ""
 
-        host_obj, _ = Host.objects.get_or_create(ip_address=ip)
-        if hostname:
+        host_obj, _ = resolve_host(
+            ip_address=ip, hostname=hostname or None, source="nmap"
+        )
+        if hostname and not host_obj.hostname:
             host_obj.hostname = hostname
-            host_obj.save()
+            host_obj.save(update_fields=["hostname"])
 
         for port in host.findall("ports/port"):
             port_id = port.get("portid")
