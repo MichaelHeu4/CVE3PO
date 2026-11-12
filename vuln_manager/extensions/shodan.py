@@ -71,7 +71,7 @@ def _service_label(service_entry):
 
 def enrich_host_with_shodan(host_id, api_key=None):
     """
-    Pull ports/services for one host from Shodan.
+    Pull ports/services for every known IP of one host from Shodan.
 
     On a hit the host's ports are upserted under a dedicated SHODAN scan and
     the host's Internet Exposure flag (is_exposed) is forced to True.
@@ -85,15 +85,30 @@ def enrich_host_with_shodan(host_id, api_key=None):
     if not key:
         return {"status": "no_key"}
 
-    data = lookup_host(host.ip_address, key)
-    if data is None:
-        return {"status": "not_found", "ip": host.ip_address}
+    # The primary IP is also normally mirrored in addresses. Keep it as a
+    # fallback for older hosts and query each address only once.
+    ips = list(dict.fromkeys([
+        host.ip_address,
+        *host.addresses.order_by("pk").values_list("ip_address", flat=True),
+    ]))
+    found_ips = []
+    services = []
+    for index, ip in enumerate(ips):
+        if index:
+            time.sleep(_BULK_DELAY_SECONDS)
+        data = lookup_host(ip, key)
+        if data is None:
+            continue
+        found_ips.append(ip)
+        services.extend(data.get("data", []) or [])
+
+    if not found_ips:
+        return {"status": "not_found", "ip": host.ip_address, "checked_ips": ips}
 
     scan_obj, _ = Scan.objects.get_or_create(
         scan_type="SHODAN", defaults={"raw_file": None}
     )
 
-    services = data.get("data", []) or []
     seen_ports = set()
     created = 0
     for service_entry in services:
@@ -129,6 +144,8 @@ def enrich_host_with_shodan(host_id, api_key=None):
     return {
         "status": "found",
         "ip": host.ip_address,
+        "checked_ips": ips,
+        "found_ips": found_ips,
         "ports": sorted(seen_ports),
         "ports_created": created,
         "newly_exposed": newly_exposed,
