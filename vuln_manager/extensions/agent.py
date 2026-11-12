@@ -45,7 +45,9 @@ def _sync_inventory_payload(data):
             ip_addresses=ip_addresses,
             source="agent",
         )
-        host_update_fields = []
+        # Refresh the host's Last seen even when the reported inventory and
+        # metadata are unchanged. auto_now only runs for listed update_fields.
+        host_update_fields = ["last_scanned"]
         if hostname and not host.hostname:
             host.hostname = hostname
             host_update_fields.append("hostname")
@@ -55,8 +57,7 @@ def _sync_inventory_payload(data):
         if running_kernel and host.running_kernel != running_kernel:
             host.running_kernel = running_kernel
             host_update_fields.append("running_kernel")
-        if host_update_fields:
-            host.save(update_fields=host_update_fields)
+        host.save(update_fields=host_update_fields)
 
         existing_agent_sw_ids = set(
             HostSoftwareRelationship.objects.filter(host=host, source="agent").values_list(

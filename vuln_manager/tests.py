@@ -600,6 +600,28 @@ class AgentInventorySnapshotSyncTests(TestCase):
         response = self._post_inventory({"software": []})
         self.assertEqual(response.status_code, 400)
 
+    def test_inventory_refreshes_last_seen_on_every_update(self):
+        payload = {
+            "host_ip": "10.0.0.80",
+            "hostname": "agent-last-seen",
+            "operating_system": "Ubuntu 24.04",
+            "software": [],
+        }
+        for operating_system in ("Ubuntu 24.04", "Ubuntu 24.04", "Ubuntu 26.04"):
+            with self.subTest(operating_system=operating_system):
+                host, _ = Host.objects.get_or_create(ip_address=payload["host_ip"])
+                old_seen = timezone.now() - timedelta(days=2)
+                Host.objects.filter(pk=host.pk).update(last_scanned=old_seen)
+                payload["operating_system"] = operating_system
+                before_update = timezone.now()
+
+                response = self._post_inventory(payload)
+
+                self.assertEqual(response.status_code, 200)
+                host.refresh_from_db()
+                self.assertGreaterEqual(host.last_scanned, before_update)
+                self.assertLessEqual(host.last_scanned, timezone.now())
+
     def test_inventory_returns_404_when_agent_extension_inactive(self):
         self.extension.is_active = False
         self.extension.save(update_fields=["is_active"])
