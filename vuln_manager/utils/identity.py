@@ -253,6 +253,8 @@ def merge_hosts(primary, *others):
         other_kernel = other.running_kernel
         other_exposed = other.is_exposed
         other_criticality = other.criticality
+        other_criticality_source = other.criticality_source
+        other_criticality_synced_at = other.criticality_synced_at
 
         other.delete()
 
@@ -272,7 +274,20 @@ def merge_hosts(primary, *others):
         if other_exposed and not primary.is_exposed:
             primary.is_exposed = True
             primary_fields.append("is_exposed")
-        if survivors_by_criticality.get(
+        # A NetBox-owned criticality is authoritative and survives the merge;
+        # otherwise keep the higher of the two manual values.
+        primary_is_netbox = primary.criticality_source == "netbox"
+        other_is_netbox = other_criticality_source == "netbox"
+        if other_is_netbox and not primary_is_netbox:
+            primary.criticality = other_criticality
+            primary.criticality_source = "netbox"
+            primary.criticality_synced_at = other_criticality_synced_at
+            primary_fields += [
+                "criticality",
+                "criticality_source",
+                "criticality_synced_at",
+            ]
+        elif not primary_is_netbox and survivors_by_criticality.get(
             other_criticality or "", 0
         ) > survivors_by_criticality.get(primary.criticality or "", 0):
             primary.criticality = other_criticality

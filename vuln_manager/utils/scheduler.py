@@ -241,6 +241,41 @@ def _tick_fixed_cleanup():
         connections.close_all()
 
 
+def _tick_netbox_sync():
+    """Claim+run the NetBox criticality sync on its own configurable interval.
+
+    Uses an atomic claim on ``netbox_last_run`` (like the other ticks) so only
+    one gunicorn worker runs the sync per interval.
+    """
+    from django.db import connections
+    from django.db.models import Q
+    from django.utils import timezone
+    from datetime import timedelta
+
+    from vuln_manager.extensions import netbox as netbox_ext
+    from vuln_manager.models import SystemSettings
+
+    try:
+        if not netbox_ext.is_active():
+            return
+        settings_obj, _ = SystemSettings.objects.get_or_create(pk=1)
+        if not netbox_ext.is_configured(settings_obj):
+            return
+        interval_hours = max(1, settings_obj.netbox_sync_interval_hours or 6)
+        threshold = timezone.now() - timedelta(hours=interval_hours)
+
+        claimed = SystemSettings.objects.filter(pk=1).filter(
+            Q(netbox_last_run__isnull=True) | Q(netbox_last_run__lt=threshold)
+        ).update(netbox_last_run=timezone.now())
+        if not claimed:
+            return
+
+        logger.info("Scheduled NetBox criticality sync claimed; executing")
+        netbox_ext.sync_and_record()
+    finally:
+        connections.close_all()
+
+
 def _scheduler_loop():
     time.sleep(_STARTUP_DELAY_SECONDS)
     while True:
@@ -252,6 +287,10 @@ def _scheduler_loop():
             _tick_fixed_cleanup()
         except Exception:
             logger.exception("Fixed-cleanup tick raised")
+        try:
+            _tick_netbox_sync()
+        except Exception:
+            logger.exception("NetBox sync tick raised")
         time.sleep(_CHECK_INTERVAL_SECONDS)
 
 

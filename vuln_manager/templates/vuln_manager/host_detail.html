@@ -162,6 +162,12 @@
         <div class="card">
             <div class="card-head"><h5 class="card-title">Asset value</h5></div>
             <div class="p-4">
+                {% if criticality_locked %}
+                <select class="search-input" disabled title="Managed by NetBox">
+                    <option>{{ host.criticality|default:"Not defined" }}</option>
+                </select>
+                <p class="text-[11px] text-outline mt-2 flex items-center gap-1"><span class="material-symbols-outlined text-sm">lock</span>Synced from NetBox{% if host.criticality_synced_at %} · {{ host.criticality_synced_at|date:"d M Y H:i" }}{% endif %} — change it there.</p>
+                {% else %}
                 <form action="{% url 'update_host_criticality' host.id %}" method="POST">
                     {% csrf_token %}
                     <select name="criticality" onchange="this.form.submit()" class="search-input">
@@ -169,6 +175,7 @@
                         {% for val, label in criticality_choices %}<option value="{{ val }}" {% if host.criticality == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
                     </select>
                 </form>
+                {% endif %}
                 <p class="text-[11px] text-outline mt-2">Affects remediation prioritization and SLA tracking.</p>
             </div>
         </div>

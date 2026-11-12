@@ -22,10 +22,11 @@
                 </div>
                 <div>
                     <label class="block text-xs font-medium text-on-surface-variant mb-1.5">Criticality</label>
-                    <select name="criticality" class="search-input">
+                    <select name="criticality" class="search-input" {% if criticality_locked %}disabled title="Managed by NetBox"{% endif %}>
                         <option value="">Not defined</option>
                         {% for val, label in criticality_choices %}<option value="{{ val }}" {% if host_obj.criticality == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
                     </select>
+                    {% if criticality_locked %}<p class="text-[11px] text-outline mt-1">Synced from NetBox — change it there.</p>{% endif %}
                 </div>
             </div>
             <div>

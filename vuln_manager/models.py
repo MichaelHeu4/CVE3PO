@@ -59,6 +59,27 @@ class SystemSettings(models.Model):
         max_length=255, blank=True, null=True
     )
 
+    # NetBox module: one-way sync of server criticality (NetBox -> CVE3PO).
+    # The source is either a custom field on devices/VMs or a tag prefix.
+    netbox_url = models.URLField(blank=True, null=True)
+    netbox_api_token = models.CharField(max_length=255, blank=True, null=True)
+    netbox_verify_ssl = models.BooleanField(default=True)
+    netbox_source_type = models.CharField(
+        max_length=20,
+        default="custom_field",
+        choices=(("custom_field", "Custom field"), ("tag", "Tag")),
+    )
+    # Custom field name (source_type=custom_field) or tag prefix (source_type=tag).
+    netbox_source_name = models.CharField(
+        max_length=100, default="criticality"
+    )
+    # Optional "netbox value=Critical" lines/comma list; empty = match the
+    # CVE3PO levels case-insensitively.
+    netbox_value_mapping = models.TextField(blank=True, null=True)
+    netbox_sync_interval_hours = models.PositiveIntegerField(default=6)
+    netbox_last_run = models.DateTimeField(blank=True, null=True)
+    netbox_last_status = models.CharField(max_length=255, blank=True, null=True)
+
 
     def __str__(self):
         return f"SystemSettings(disable_register={self.disable_register})"
@@ -116,6 +137,14 @@ class Host(models.Model):
     criticality = models.CharField(
         max_length=15, null=True, choices=CRITICALITY_CHOICES
     )
+    # Where the current criticality came from. "netbox" means the NetBox module
+    # owns it: manual edits are locked and software propagation is skipped
+    # while the module is active.
+    criticality_source = models.CharField(
+        max_length=20, default="manual",
+        choices=(("manual", "Manual"), ("netbox", "NetBox")),
+    )
+    criticality_synced_at = models.DateTimeField(blank=True, null=True)
 
     class Meta:
         # The dashboard's cluster counts filter on (criticality, is_exposed).

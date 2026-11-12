@@ -174,6 +174,9 @@ urlpatterns = [
     ),
     path("modules/shodan/config/", views.save_shodan_config, name="save_shodan_config"),
     path("modules/shodan/scan-all/", views.shodan_scan_all, name="shodan_scan_all"),
+    path("modules/netbox/config/", views.save_netbox_config, name="save_netbox_config"),
+    path("modules/netbox/test/", views.netbox_test_connection, name="netbox_test_connection"),
+    path("modules/netbox/sync/", views.netbox_sync_now, name="netbox_sync_now"),
     path(
         "hosts/<int:pk>/shodan/",
         views.host_shodan_lookup,

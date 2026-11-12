@@ -47,6 +47,7 @@ from .utils.enrichment import get_cve_details
 from .utils.listing import apply_sort
 from .extensions import wrike as wrike_ext
 from .extensions import shodan as shodan_ext
+from .extensions import netbox as netbox_ext
 from .utils import scheduler as scheduler_util
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -223,6 +224,9 @@ def logout_view(request):
 
 
 def recalculate_host_criticality(host):
+    # NetBox-owned criticality must not be raised by software propagation.
+    if netbox_ext.manages_host(host):
+        return
     max_weight = CRITICALITY_WEIGHTS.get(host.criticality, 0)
     for sw in host.software_inventory.all():
         sw_weight = CRITICALITY_WEIGHTS.get(sw.criticality, 0)
@@ -1031,6 +1035,7 @@ def host_detail(request, pk):
             "active_tab": active_tab,
             "has_agent_data": has_agent_data,
             "criticality_choices": Host.CRITICALITY_CHOICES,
+            "criticality_locked": netbox_ext.manages_host(host),
             "shodan_available": shodan_available,
         },
     )
@@ -1221,8 +1226,11 @@ def remove_host_from_software(request, software_pk, host_pk):
 def update_host_criticality(request, pk):
     if request.method == "POST":
         host = get_object_or_404(Host, pk=pk)
+        if netbox_ext.manages_host(host):
+            return HttpResponseForbidden("criticality_managed_by_netbox")
         criticality = request.POST.get("criticality")
         host.criticality = criticality if criticality != "" else None
+        host.criticality_source = "manual"
         host.save()
         recalculate_host_criticality(host)
     return redirect("host_detail", pk=pk)
@@ -1333,7 +1341,10 @@ def host_form(request, pk=None):
 
         host_obj.hostname = hostname
         host_obj.operating_system = operating_system
-        host_obj.criticality = criticality
+        # NetBox-owned criticality is read-only here; keep the synced value.
+        if not netbox_ext.manages_host(host_obj):
+            host_obj.criticality = criticality or None
+            host_obj.criticality_source = "manual"
         host_obj.is_exposed = is_exposed
         host_obj.save()
         return redirect("host_list")
@@ -1341,6 +1352,7 @@ def host_form(request, pk=None):
     context = {
         "host_obj": host_obj,
         "criticality_choices": Host.CRITICALITY_CHOICES,
+        "criticality_locked": bool(host_obj and netbox_ext.manages_host(host_obj)),
     }
     return render(request, "vuln_manager/host_form.html", context)
 
@@ -1954,6 +1966,12 @@ def extensions_view(request):
             "icon": "travel_explore",
             "color": "primary",
         },
+        "netbox": {
+            "name": "NetBox",
+            "description": "Syncs server criticality from NetBox (custom field or tag on devices/VMs) onto matching hosts. NetBox is the source of truth: synced values are locked in CVE3PO.",
+            "icon": "dns",
+            "color": "primary",
+        },
         "auto_delete_fixed": {
             "name": "Auto Delete Fixed",
             "description": "Automatically deletes vulnerabilities that have been fixed for longer than the configured retention period, keeping the database lean. Runs daily.",
@@ -2015,6 +2033,25 @@ def extensions_view(request):
                 ),
                 "shodan_configured": (
                     bool(ext.api_token) if mid == "shodan" else None
+                ),
+                "netbox": (
+                    {
+                        "url": system_settings.netbox_url,
+                        "token_set": bool(system_settings.netbox_api_token),
+                        "verify_ssl": system_settings.netbox_verify_ssl,
+                        "source_type": system_settings.netbox_source_type,
+                        "source_name": system_settings.netbox_source_name,
+                        "value_mapping": system_settings.netbox_value_mapping,
+                        "interval_hours": system_settings.netbox_sync_interval_hours,
+                        "last_run": system_settings.netbox_last_run,
+                        "last_status": system_settings.netbox_last_status,
+                        "configured": netbox_ext.is_configured(system_settings),
+                        "managed_hosts": Host.objects.filter(
+                            criticality_source="netbox"
+                        ).count(),
+                    }
+                    if mid == "netbox" and request.user.is_staff
+                    else None
                 ),
                 "auto_delete_fixed_days": (
                     system_settings.auto_delete_fixed_days
@@ -2404,6 +2441,90 @@ def shodan_scan_all(request):
             shodan_ext.refresh_all_hosts()
         except Exception:
             logger.exception("Shodan bulk scan failed")
+        finally:
+            close_old_connections()
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return redirect("extensions")
+
+
+@login_required
+@require_POST
+def save_netbox_config(request):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+    settings_obj = get_system_settings()
+
+    url = (request.POST.get("netbox_url") or "").strip()
+    if url and not url.lower().startswith(("http://", "https://")):
+        return HttpResponseForbidden("invalid_url")
+    source_type = request.POST.get("netbox_source_type") or "custom_field"
+    if source_type not in ("custom_field", "tag"):
+        return HttpResponseForbidden("invalid_source_type")
+    source_name = (request.POST.get("netbox_source_name") or "").strip()
+    if not source_name:
+        return HttpResponseForbidden("invalid_source_name")
+    try:
+        interval = int(request.POST.get("netbox_sync_interval_hours", "6"))
+    except ValueError:
+        return HttpResponseForbidden("invalid_interval")
+    if interval < 1:
+        return HttpResponseForbidden("invalid_interval")
+
+    settings_obj.netbox_url = url or None
+    settings_obj.netbox_verify_ssl = request.POST.get("netbox_verify_ssl") == "1"
+    settings_obj.netbox_source_type = source_type
+    settings_obj.netbox_source_name = source_name[:100]
+    settings_obj.netbox_value_mapping = (
+        request.POST.get("netbox_value_mapping") or ""
+    ).strip() or None
+    settings_obj.netbox_sync_interval_hours = interval
+    fields = [
+        "netbox_url",
+        "netbox_verify_ssl",
+        "netbox_source_type",
+        "netbox_source_name",
+        "netbox_value_mapping",
+        "netbox_sync_interval_hours",
+    ]
+    token = (request.POST.get("netbox_api_token") or "").strip()
+    if token:
+        settings_obj.netbox_api_token = token
+        fields.append("netbox_api_token")
+    settings_obj.save(update_fields=fields)
+    return redirect("extensions")
+
+
+@login_required
+@require_POST
+def netbox_test_connection(request):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+    settings_obj = get_system_settings()
+    try:
+        version = netbox_ext.check_connection(settings_obj)
+        status = f"connection ok: NetBox {version}"
+    except netbox_ext.NetboxError as exc:
+        status = f"connection failed: {exc}"
+    settings_obj.netbox_last_status = status[:255]
+    settings_obj.save(update_fields=["netbox_last_status"])
+    return redirect("extensions")
+
+
+@login_required
+@require_POST
+def netbox_sync_now(request):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+    if not netbox_ext.is_active() or not netbox_ext.is_configured():
+        return HttpResponseForbidden("netbox_not_configured")
+
+    def _worker():
+        close_old_connections()
+        try:
+            netbox_ext.sync_and_record()
+        except Exception:
+            logger.exception("Manual NetBox sync failed")
         finally:
             close_old_connections()
 

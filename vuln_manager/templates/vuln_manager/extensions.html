@@ -43,7 +43,7 @@
                 <div id="config-{{ mod.id }}" class="hidden mb-5 p-3 rounded-xl bg-surface-container-lowest border border-outline-variant">
                     <div class="flex items-center justify-between mb-2">
                         <p class="text-[10px] font-bold text-outline/50">
-                            {% if mod.id == "wrike" %}Wrike Configuration{% elif mod.id == "email_reporting" %}Email Reporting Configuration{% elif mod.id == "ai_triage" %}AI Triage Configuration{% elif mod.id == "auto_enrich" %}Auto Enrichment Configuration{% elif mod.id == "auto_delete_fixed" %}Auto Delete Fixed Configuration{% elif mod.id == "shodan" %}Shodan Configuration{% else %}Access Token (X-API-Key){% endif %}
+                            {% if mod.id == "wrike" %}Wrike Configuration{% elif mod.id == "email_reporting" %}Email Reporting Configuration{% elif mod.id == "ai_triage" %}AI Triage Configuration{% elif mod.id == "auto_enrich" %}Auto Enrichment Configuration{% elif mod.id == "auto_delete_fixed" %}Auto Delete Fixed Configuration{% elif mod.id == "shodan" %}Shodan Configuration{% elif mod.id == "netbox" %}NetBox Configuration{% else %}Access Token (X-API-Key){% endif %}
                         </p>
                         <button type="button" onclick="toggleModuleConfig('{{ mod.id }}')" class="material-symbols-outlined text-xs text-outline hover:text-primary transition-colors">close</button>
                     </div>
@@ -138,6 +138,49 @@
                         </form>
                         <p class="mt-1 text-[10px] text-outline/60">Hosts found on Shodan are flagged as Internet exposed automatically.</p>
                         {% endif %}
+                    {% elif mod.id == "netbox" %}
+                        {% with nb=mod.netbox %}
+                        <form action="{% url 'save_netbox_config' %}" method="POST" class="space-y-3">
+                            {% csrf_token %}
+                            <label class="text-[11px] font-bold tracking-wider text-outline/50 block">NetBox URL</label>
+                            <input name="netbox_url" type="url" placeholder="https://netbox.example.com" value="{{ nb.url|default:'' }}" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px] text-on-surface"/>
+                            <input name="netbox_api_token" type="password" autocomplete="off" placeholder="{% if nb.token_set %}API token set — enter to replace{% else %}NetBox API Token (read-only is enough){% endif %}" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px] text-on-surface"/>
+                            <label class="flex items-center gap-2 text-[11px] text-on-surface-variant">
+                                <input type="checkbox" name="netbox_verify_ssl" value="1" {% if nb.verify_ssl %}checked{% endif %}/>
+                                Verify SSL certificate
+                            </label>
+                            <label class="text-[11px] font-bold tracking-wider text-outline/50 block">Criticality source</label>
+                            <select name="netbox_source_type" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px] text-on-surface">
+                                <option value="custom_field" {% if nb.source_type == "custom_field" %}selected{% endif %}>Custom field (name)</option>
+                                <option value="tag" {% if nb.source_type == "tag" %}selected{% endif %}>Tag (prefix)</option>
+                            </select>
+                            <input name="netbox_source_name" type="text" required placeholder="criticality  /  crit-" value="{{ nb.source_name|default:'' }}" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px] text-on-surface"/>
+                            <p class="text-[10px] text-outline/60">Custom field: the field name on devices/VMs. Tag: a prefix, e.g. <code>crit-</code> turns tag <code>crit-high</code> into "high".</p>
+                            <label class="text-[11px] font-bold tracking-wider text-outline/50 block">Value mapping (optional)</label>
+                            <textarea name="netbox_value_mapping" rows="3" placeholder="kritisch=Critical, hoch=High, mittel=Medium, niedrig=Low" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px] text-on-surface font-mono">{{ nb.value_mapping|default:'' }}</textarea>
+                            <p class="text-[10px] text-outline/60">Critical / High / Medium / Low are always recognised (case-insensitive).</p>
+                            <label class="text-[11px] font-bold tracking-wider text-outline/50 block">Sync interval (hours)</label>
+                            <input name="netbox_sync_interval_hours" type="number" min="1" placeholder="6" value="{{ nb.interval_hours|default:'6' }}" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px] text-on-surface"/>
+                            <button class="w-full rounded-lg px-3 py-2 border border-outline-variant hover:border-primary/40 text-on-surface-variant hover:text-primary transition-all text-[10px] tracking-wider">Save NetBox Config</button>
+                        </form>
+                        <div class="mt-2 text-[10px] text-outline/70 space-y-1">
+                            <div class="flex justify-between gap-2"><span>Last sync</span><span class="text-on-surface-variant">{% if nb.last_run %}{{ nb.last_run|date:"d M Y H:i" }}{% else %}never{% endif %}</span></div>
+                            <div class="flex justify-between gap-2"><span>Hosts managed by NetBox</span><span class="text-on-surface-variant">{{ nb.managed_hosts }}</span></div>
+                            {% if nb.last_status %}<div class="flex justify-between gap-2"><span>Status</span><span class="text-on-surface-variant truncate" title="{{ nb.last_status }}">{{ nb.last_status }}</span></div>{% endif %}
+                        </div>
+                        {% if nb.configured %}
+                        <form action="{% url 'netbox_test_connection' %}" method="POST">
+                            {% csrf_token %}
+                            <button class="mt-2 w-full rounded-lg px-3 py-2 border border-outline-variant hover:border-primary/40 text-on-surface-variant hover:text-primary transition-all text-[10px] tracking-wider">Test Connection</button>
+                        </form>
+                        {% if mod.is_active %}
+                        <form action="{% url 'netbox_sync_now' %}" method="POST">
+                            {% csrf_token %}
+                            <button class="mt-2 w-full rounded-lg px-3 py-2 border border-primary/40 bg-primary/10 hover:bg-primary/20 text-primary transition-all text-[10px] tracking-wider">Sync Now</button>
+                        </form>
+                        {% endif %}
+                        {% endif %}
+                        {% endwith %}
                     {% else %}
                         <div class="flex items-center justify-between gap-2 overflow-hidden">
                             <code class="text-[10px] font-mono text-primary truncate" id="token-{{ mod.id }}">{{ mod.api_token }}</code>
