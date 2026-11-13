@@ -37,7 +37,11 @@ def run_full_enrichment():
     host exposure/ports from Shodan. Safe to call from any thread.
     """
     from vuln_manager.models import Extension, Software, Vulnerability
-    from vuln_manager.utils.enrichment import get_epss_score, sync_cisa_kev_to_db
+    from vuln_manager.utils.enrichment import (
+        get_epss_score, sync_cisa_kev_to_db,
+        get_cve_enrichment, apply_cve_enrichment,
+    )
+    from django.db.models import Q
     from vuln_manager.utils.osv_auto import enrich_software_with_feeds
 
     logger.info("Full enrichment cycle started")
@@ -69,6 +73,18 @@ def run_full_enrichment():
     # 3) Ensure EPSS scores exist for every CVE we track.
     for cve_id in Vulnerability.objects.values_list("cve_id", flat=True).distinct():
         if cve_id and cve_id.startswith("CVE-"):
+            # Also repair old imports and findings with no associated software.
+            # Fetch once per CVE, not once per host/package occurrence.
+            missing = Vulnerability.objects.filter(cve_id=cve_id).filter(
+                Q(severity="info") | Q(cvss__isnull=True) | Q(cvss="")
+            )
+            if missing.exists():
+                try:
+                    details = get_cve_enrichment(cve_id)
+                    for vuln in missing:
+                        apply_cve_enrichment(vuln, details, actor="auto_enrich")
+                except Exception:
+                    logger.exception("Rating enrichment failed for %s", cve_id)
             try:
                 get_epss_score(cve_id)
             except Exception:

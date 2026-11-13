@@ -43,7 +43,7 @@ from .utils.audit import log_vulnerability_event
 from .utils.vuln_dedup import create_or_update_vulnerability
 from .utils.retention import stamp_fixed_at, bulk_delete_fixed_vulnerabilities
 from .utils.osv_auto import enrich_software_with_feeds
-from .utils.enrichment import get_cve_details
+from .utils.enrichment import get_cve_enrichment, apply_cve_enrichment
 from .utils.listing import apply_sort
 from .extensions import wrike as wrike_ext
 from .extensions import shodan as shodan_ext
@@ -2756,23 +2756,6 @@ def triage_single_software(request, pk):
 @require_POST
 def enrich_single_vulnerability(request, pk):
     vuln = get_object_or_404(Vulnerability, pk=pk)
-    cvss, description = get_cve_details(vuln.cve_id)
-
-    updated_fields = []
-    if cvss and vuln.cvss != cvss:
-        vuln.cvss = cvss
-        updated_fields.append("cvss")
-    if description and vuln.description != description:
-        vuln.description = description
-        updated_fields.append("description")
-
-    if updated_fields:
-        vuln.save(update_fields=updated_fields)
-        log_vulnerability_event(
-            vuln,
-            "updated",
-            user=request.user,
-            details={"source": "manual_enrich", "fields": updated_fields},
-        )
+    apply_cve_enrichment(vuln, get_cve_enrichment(vuln.cve_id), user=request.user)
 
     return redirect("vuln_detail", pk=pk)

@@ -9,7 +9,8 @@ from vuln_manager.models import Scan, Software, Vulnerability
 from vuln_manager.parser.osvscanner import (
     extract_cve_id,
     extract_poc_from_description,
-    extract_severity,
+    resolve_osv_metadata,
+    normalize_severity_from_score,
 )
 from vuln_manager.utils.audit import log_vulnerability_event
 from vuln_manager.utils.vuln_dedup import create_or_update_vulnerability
@@ -219,23 +220,26 @@ def _extract_nvd_cvss_and_severity(cve):
         entries = metrics.get(metric_name, [])
         if not entries:
             continue
-        metric = entries[0]
-        cvss_data = metric.get("cvssData", {})
+        for metric in entries:
+            cvss_data = metric.get("cvssData", {})
+            vector = cvss_data.get("vectorString")
+            base_score = cvss_data.get("baseScore")
+            severity_raw = cvss_data.get("baseSeverity") or metric.get("baseSeverity")
+            if isinstance(severity_raw, str):
+                normalized = severity_raw.lower()
+                if normalized in {"critical", "high", "medium", "low"}:
+                    return vector, normalized
+                if normalized == "none":
+                    return vector, "info"
+            if base_score is not None:
+                try:
+                    score = float(base_score)
+                except (TypeError, ValueError):
+                    continue
+                if 0 <= score <= 10:
+                    return vector, normalize_severity_from_score(score)
 
-        vector = cvss_data.get("vectorString")
-        base_score = cvss_data.get("baseScore")
-        severity_raw = cvss_data.get(
-            "baseSeverity") or metric.get("baseSeverity")
-
-        if severity_raw:
-            normalized = severity_raw.lower()
-            if normalized in {"critical", "high", "medium", "low"}:
-                return vector, normalized
-
-        if base_score is not None:
-            return vector, normalize_severity_from_score(float(base_score))
-
-    return None, "info"
+    return None, None
 
 
 def _normalize_and_parse_version(v_str):
@@ -366,6 +370,7 @@ def enrich_software_with_feeds(software_id):
     )
     ecosystems = _candidate_ecosystems(software)
 
+    rating_cache = {}
     for ecosystem in ecosystems:
         try:
             vulns = _query_osv(software.name, software.version, ecosystem)
@@ -382,20 +387,9 @@ def enrich_software_with_feeds(software_id):
             cve_id = extract_cve_id(vuln)
             seen_cve_ids.add(cve_id)
             description = vuln.get("details", "No description provided.")
-            summary = vuln.get("summary", "No summary provided.")
-
-            if "No summary provided." in summary and cve_id.startswith("CVE-"):
-                nvd_cve = query_nvd_by_cve_id(cve_id)
-                if nvd_cve:
-                    nvd_desc = extract_nvd_description(nvd_cve)
-                    if nvd_desc and nvd_desc != "No description provided.":
-                        summary = (
-                            nvd_desc[:100] +
-                            "..." if len(nvd_desc) > 100 else nvd_desc
-                        )
+            cvss_score, severity, summary = resolve_osv_metadata(vuln, cve_id, rating_cache)
 
             description, poc = extract_poc_from_description(description)
-            cvss_score, severity = extract_severity(vuln)
 
             create_or_update_vulnerability(
                 scan=scan_obj,
@@ -430,6 +424,11 @@ def enrich_software_with_feeds(software_id):
             seen_cve_ids.add(cve_id)
             description = extract_nvd_description(cve)
             cvss_score, severity = _extract_nvd_cvss_and_severity(cve)
+            if severity is None:
+                from vuln_manager.utils.enrichment import get_cve_enrichment
+                if cve_id not in rating_cache:
+                    rating_cache[cve_id] = get_cve_enrichment(cve_id)
+                cvss_score, _, severity = rating_cache[cve_id]
 
             create_or_update_vulnerability(
                 scan=nvd_scan_obj,

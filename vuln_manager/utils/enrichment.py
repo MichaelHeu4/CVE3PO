@@ -105,11 +105,19 @@ def is_cisa_kev(cve_id):
     return cve_upper in {entry.upper() for entry in _kev_cache if entry}
             
 def get_cve_details(cve_id):
+    cvss, description, _ = get_cve_enrichment(cve_id)
+    return cvss, description
+
+
+def get_cve_enrichment(cve_id):
     """
-    Holt CVSS und Beschreibung von der CIRCL CVE API (Fallback auf NVD-ähnliche Daten).
+    Return (CVSS vector, description, severity), with None for unavailable data.
+    Read CVE JSON manufacturer ratings too: new CVEs may not have CVSS yet.
     """
     if not cve_id or not cve_id.startswith("CVE-"):
-        return None, None
+        return None, None, None
+
+    cvss = description = severity = None
         
     try:
         url = f"https://cve.circl.lu/api/cve/{cve_id}"
@@ -119,11 +127,87 @@ def get_cve_details(cve_id):
             if data:
                 cvss = _extract_cvss_vector(data)
                 description = _extract_description(data)
-                return cvss, description
+                severity = _extract_severity(data, cvss)
     except Exception:
         logger.exception("Error fetching CVE details for %s", cve_id)
         
-    return None, None
+    if severity is None:
+        from vuln_manager.utils.osv_auto import (
+            query_nvd_by_cve_id, _extract_nvd_cvss_and_severity,
+            extract_nvd_description,
+        )
+        record = query_nvd_by_cve_id(cve_id)
+        if record:
+            nvd_cvss, severity = _extract_nvd_cvss_and_severity(record)
+            cvss = nvd_cvss or cvss
+            nvd_description = extract_nvd_description(record)
+            if not description and nvd_description != "No description provided.":
+                description = nvd_description
+    return cvss, description, severity
+
+
+def _extract_severity(data, vector=None):
+    from vuln_manager.parser.osvscanner import (
+        extract_cvss_base_score, normalize_severity_from_score,
+    )
+    score = extract_cvss_base_score(vector)
+    if score is not None:
+        return normalize_severity_from_score(score)
+
+    def search(node):
+        if isinstance(node, dict):
+            for key in ("cvssV4_0", "cvssV3_1", "cvssV3_0", "cvssV2_0", "cvssData"):
+                metric = node.get(key)
+                if isinstance(metric, dict):
+                    try:
+                        score = float(metric["baseScore"])
+                        if 0 <= score <= 10:
+                            return normalize_severity_from_score(score)
+                    except (KeyError, TypeError, ValueError):
+                        pass
+            for key in ("baseSeverity", "severity"):
+                value = node.get(key)
+                if isinstance(value, str) and value.lower() in {
+                    "critical", "high", "medium", "low", "none",
+                }:
+                    return "info" if value.lower() == "none" else value.lower()
+            # CVE JSON 5: CNA may publish a textual rating without any CVSS.
+            other = node.get("other")
+            if isinstance(other, dict) and other.get("type") == "Textual description of severity":
+                value = (other.get("content") or {}).get("text")
+                if isinstance(value, str) and value.strip().lower() in {"critical", "high", "medium", "low"}:
+                    return value.strip().lower()
+            for value in node.values():
+                found = search(value)
+                if found is not None:
+                    return found
+        elif isinstance(node, list):
+            for value in node:
+                found = search(value)
+                if found is not None:
+                    return found
+        return None
+
+    return search(data)
+
+
+def apply_cve_enrichment(vuln, details, *, user=None, actor=None):
+    """Update existing findings without replacing known ratings with missing data."""
+    from vuln_manager.utils.audit import log_vulnerability_event
+
+    cvss, description, severity = details
+    fields = []
+    for field, value in (("cvss", cvss), ("description", description), ("severity", severity)):
+        if value is not None and value != "" and getattr(vuln, field) != value:
+            setattr(vuln, field, value)
+            fields.append(field)
+    if fields:
+        vuln.save(update_fields=fields)
+        log_vulnerability_event(
+            vuln, "updated", user=user, actor=actor,
+            details={"source": actor or "manual_enrich", "fields": fields},
+        )
+    return fields
 
 
 def _extract_description(data):

@@ -1030,17 +1030,19 @@ class ManualVulnerabilityEnrichmentTests(TestCase):
             cvss="",
         )
 
-    @patch("vuln_manager.views.get_cve_details")
+    @patch("vuln_manager.views.get_cve_enrichment")
     def test_enrich_single_vulnerability_updates_cvss_and_description(self, cve_details_mock):
         cve_details_mock.return_value = (
             "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
             "Updated description from external source",
+            "critical",
         )
         self.client.force_login(self.user)
         response = self.client.post(reverse("enrich_single_vulnerability", args=[self.vuln.pk]))
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse("vuln_detail", args=[self.vuln.pk]))
         self.vuln.refresh_from_db()
+        self.assertEqual(self.vuln.severity, "critical")
         self.assertEqual(
             self.vuln.cvss, "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
         )
@@ -1052,7 +1054,7 @@ class ManualVulnerabilityEnrichmentTests(TestCase):
         ).latest("created_at")
         self.assertEqual(event.details.get("source"), "manual_enrich")
 
-    @patch("vuln_manager.views.get_cve_details", return_value=(None, None))
+    @patch("vuln_manager.views.get_cve_enrichment", return_value=(None, None, None))
     def test_enrich_single_vulnerability_without_data_keeps_existing_values(
         self, _cve_details_mock
     ):
@@ -1065,6 +1067,7 @@ class ManualVulnerabilityEnrichmentTests(TestCase):
         self.vuln.refresh_from_db()
         self.assertEqual(self.vuln.cvss, "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:L")
         self.assertEqual(self.vuln.description, "Existing text")
+        self.assertEqual(self.vuln.severity, "medium")
 
 
 class SeverityFilterAndSingleTriageTests(TestCase):

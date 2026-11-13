@@ -1,4 +1,6 @@
-from .enrichment import get_epss_score, is_cisa_kev, get_cve_details
+from .enrichment import (
+    get_epss_score, is_cisa_kev, get_cve_enrichment, apply_cve_enrichment,
+)
 from vuln_manager.models import Extension, SystemSettings, Vulnerability, Software
 import os
 import json
@@ -296,30 +298,22 @@ def triage(vuln: Vulnerability):
     is_kev = is_cisa_kev(vuln.cve_id)
 
     # JIT Enrichment für fehlende CVSS oder Beschreibung
-    needs_update = False
     current_cvss = vuln.cvss
     current_desc = vuln.description
 
     if (
         not current_cvss
+        or vuln.severity == "info"
         or not current_desc
         or len(current_desc) < 20
         or "No description" in current_desc
     ):
-        ext_cvss, ext_desc = get_cve_details(vuln.cve_id)
-        if ext_cvss and not current_cvss:
-            vuln.cvss = ext_cvss
-            needs_update = True
-        if ext_desc and (
-            not current_desc
-            or len(current_desc) < 20
-            or "No description" in current_desc
-        ):
-            vuln.description = ext_desc
-            needs_update = True
-
-    if needs_update:
-        vuln.save()
+        ext_cvss, ext_desc, severity = get_cve_enrichment(vuln.cve_id)
+        if current_desc and len(current_desc) >= 20 and "No description" not in current_desc:
+            ext_desc = None
+        apply_cve_enrichment(
+            vuln, (ext_cvss, ext_desc, severity), actor="ai_triage:enrichment",
+        )
     host = vuln.most_critical_host
     host_name = "Unknown Asset"
     host_criticality = "Low"

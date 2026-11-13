@@ -55,7 +55,7 @@ def extract_severity(vuln):
 
     # 2. Fallback: database_specific.severity
     database_specific = vuln.get("database_specific", {})
-    sev_raw = database_specific.get("severity", "UNKNOWN").lower()
+    sev_raw = str(database_specific.get("severity") or "UNKNOWN").lower()
 
     if sev_raw == "critical":
         return (None, "critical")
@@ -66,7 +66,24 @@ def extract_severity(vuln):
     if sev_raw == "low":
         return (None, "low")
 
-    return (None, "info")
+    return (None, None)
+
+
+def resolve_osv_metadata(vuln, cve_id, cache):
+    """Fill missing OSV ratings from CVE data, once per CVE in this run."""
+    from vuln_manager.utils.enrichment import get_cve_enrichment
+
+    vector, severity = extract_severity(vuln)
+    summary = vuln.get("summary") or "No summary provided."
+    if cve_id.startswith("CVE-") and (severity is None or summary == "No summary provided."):
+        if cve_id not in cache:
+            cache[cve_id] = get_cve_enrichment(cve_id)
+        fetched_vector, description, fetched_severity = cache[cve_id]
+        if severity is None:
+            vector, severity = fetched_vector, fetched_severity
+        if summary == "No summary provided." and description:
+            summary = description[:100] + "..." if len(description) > 100 else description
+    return vector, severity, summary
 
 
 CVE_REGEX = re.compile(r"CVE-\d{4}-\d{4,}", re.IGNORECASE)
@@ -115,7 +132,6 @@ def extract_poc_from_description(description):
 
 
 def parse_osv_json(file_path, scan_obj, software_obj=None):
-    from vuln_manager.utils.osv_auto import query_nvd_by_cve_id, extract_nvd_description
     with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
@@ -133,21 +149,13 @@ def parse_osv_json(file_path, scan_obj, software_obj=None):
     if data.get("schema_version") and data.get("id"):
         vulnerabilities.append(data)
 
+    rating_cache = {}
     for vuln in vulnerabilities:
         cve_id = extract_cve_id(vuln)
         description = vuln.get("details", "No description provided.")
-        summary = vuln.get("summary", "No summary provided.")
-
-        if summary == "No summary provided." and cve_id.startswith("CVE-"):
-            nvd_cve = query_nvd_by_cve_id(cve_id)
-            if nvd_cve:
-                nvd_desc = extract_nvd_description(nvd_cve)
-                if nvd_desc and nvd_desc != "No description provided.":
-                    summary = nvd_desc[:100] + "..." if len(nvd_desc) > 100 else nvd_desc
+        cvss_score, severity, summary = resolve_osv_metadata(vuln, cve_id, rating_cache)
 
         description, poc = extract_poc_from_description(description)
-
-        cvss_score, severity = extract_severity(vuln)
 
         create_or_update_vulnerability(
             scan=scan_obj,
