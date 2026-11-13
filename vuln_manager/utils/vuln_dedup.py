@@ -64,7 +64,7 @@ def create_or_update_vulnerability(
         vuln.scan = scan
         update_fields.append("scan")
 
-        if vuln.severity != severity:
+        if severity is not None and vuln.severity != severity:
             vuln.severity = severity
             update_fields.append("severity")
         if vuln.name != name:
@@ -73,7 +73,7 @@ def create_or_update_vulnerability(
         if vuln.description != description:
             vuln.description = description
             update_fields.append("description")
-        if vuln.cvss != cvss:
+        if cvss is not None and vuln.cvss != cvss:
             vuln.cvss = cvss
             update_fields.append("cvss")
         if vuln.nuclei_poc != nuclei_poc:
@@ -116,7 +116,7 @@ def create_or_update_vulnerability(
         software=software,
         port=port,
         cve_id=cve_id,
-        severity=severity,
+        severity=severity or "info",
         name=name,
         description=description,
         cvss=cvss,
