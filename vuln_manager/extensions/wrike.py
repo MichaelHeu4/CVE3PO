@@ -1,3 +1,4 @@
+import html
 import logging
 
 import requests
@@ -9,17 +10,44 @@ logger = logging.getLogger(__name__)
 WRIKE_API_BASE = "https://app-eu.wrike.com/api/v4"
 
 
+def _escape(value, default="N/A"):
+    # Werte stammen aus Scanner-Daten und dürfen kein HTML in das Ticket einschleusen.
+    if value is None or str(value).strip() == "":
+        return default
+    return html.escape(str(value).strip())
+
+
 def build_wrike_description(vuln):
-    host = vuln.host.ip_address if vuln.host else "N/A"
-    software = vuln.software.name if vuln.software else "N/A"
-    return (
-        f"CVE: {vuln.cve_id}\n"
-        f"Severity: {vuln.severity}\n"
-        f"Status: {vuln.status}\n"
-        f"Host: {host}\n"
-        f"Software: {software}\n\n"
-        f"{vuln.description or 'No description provided.'}"
+    host = vuln.host
+    host_txt = _escape(host.ip_address) if host else "N/A"
+    if host and host.hostname:
+        host_txt = f"{host_txt} ({_escape(host.hostname)})"
+    software = vuln.software
+    software_txt = (
+        _escape(f"{software.name} {software.version or ''}".strip())
+        if software
+        else "N/A"
     )
+    description = _escape(vuln.description, "Keine Beschreibung vorhanden.").replace(
+        "\n", "<br>"
+    )
+    parts = [
+        f"<h3>CVE-Finding: {_escape(vuln.cve_id)}</h3>",
+        "<p>Erstellt aus CVE3PO</p>",
+        "<table>",
+        f"<tr><td><b>Severity</b></td><td>{_escape(vuln.severity)}</td></tr>",
+        f"<tr><td><b>Status</b></td><td>{_escape(vuln.status)}</td></tr>",
+        f"<tr><td><b>CVSS</b></td><td>{_escape(vuln.cvss)}</td></tr>",
+        f"<tr><td><b>Host</b></td><td>{host_txt}</td></tr>",
+        f"<tr><td><b>Software</b></td><td>{software_txt}</td></tr>",
+        "</table>",
+        "<h3>Beschreibung</h3>",
+        f"<p>{description}</p>",
+    ]
+    if vuln.ai_suggestion and vuln.ai_suggestion.strip():
+        suggestion = _escape(vuln.ai_suggestion).replace("\n", "<br>")
+        parts += ["<h3>Empfehlung</h3>", f"<p>{suggestion}</p>"]
+    return "".join(parts)
 
 
 def create_task(vuln, api_token, folder_id):
