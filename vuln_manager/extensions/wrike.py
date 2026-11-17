@@ -4,7 +4,9 @@ import requests
 
 
 logger = logging.getLogger(__name__)
-WRIKE_API_BASE = "https://www.wrike.com/api/v4"
+# Wrike-Accounts sind an ein Rechenzentrum gebunden. Der EU-Account liegt auf
+# app-eu.wrike.com; ein Token von dort wird auf www.wrike.com abgelehnt (401).
+WRIKE_API_BASE = "https://app-eu.wrike.com/api/v4"
 
 
 def build_wrike_description(vuln):
