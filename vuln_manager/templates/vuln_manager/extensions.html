@@ -43,11 +43,32 @@
                 <div id="config-{{ mod.id }}" class="hidden mb-5 p-3 rounded-xl bg-surface-container-lowest border border-outline-variant">
                     <div class="flex items-center justify-between mb-2">
                         <p class="text-[10px] font-bold text-outline/50">
-                            {% if mod.id == "wrike" %}Wrike Configuration{% elif mod.id == "email_reporting" %}Email Reporting Configuration{% elif mod.id == "ai_triage" %}AI Triage Configuration{% elif mod.id == "auto_enrich" %}Auto Enrichment Configuration{% elif mod.id == "auto_delete_fixed" %}Auto Delete Fixed Configuration{% elif mod.id == "shodan" %}Shodan Configuration{% elif mod.id == "netbox" %}NetBox Configuration{% else %}Access Token (X-API-Key){% endif %}
+                            {% if mod.id == "cti" %}CTI Feed Configuration{% elif mod.id == "wrike" %}Wrike Configuration{% elif mod.id == "email_reporting" %}Email Reporting Configuration{% elif mod.id == "ai_triage" %}AI Triage Configuration{% elif mod.id == "auto_enrich" %}Auto Enrichment Configuration{% elif mod.id == "auto_delete_fixed" %}Auto Delete Fixed Configuration{% elif mod.id == "shodan" %}Shodan Configuration{% elif mod.id == "netbox" %}NetBox Configuration{% else %}Access Token (X-API-Key){% endif %}
                         </p>
                         <button type="button" onclick="toggleModuleConfig('{{ mod.id }}')" class="material-symbols-outlined text-xs text-outline hover:text-primary transition-colors">close</button>
                     </div>
-                    {% if mod.id == "wrike" %}
+                    {% if mod.id == "cti" %}
+                        <p class="text-xs text-outline mb-3">Add public HTTPS RSS or Atom feeds. Disabling the module pauses all imports and CTI notifications.</p>
+                        {% for feed in mod.feeds %}
+                        <div class="border-b border-outline-variant py-2 space-y-2">
+                            <form action="{% url 'cti_feed_edit' feed.pk %}" method="post" class="space-y-2">{% csrf_token %}
+                                <input name="name" value="{{ feed.name }}" maxlength="100" required class="search-input" aria-label="Feed name">
+                                <input name="url" type="url" value="{{ feed.url }}" required class="search-input" aria-label="Feed URL">
+                                <button class="btn btn-ghost">Save feed</button>
+                            </form>
+                            <p class="text-xs">{% if feed.enabled %}Enabled{% else %}Disabled{% endif %} · Last success: {{ feed.last_success|default:'Never' }}</p>{% if feed.last_error %}<p class="text-xs text-error">{{ feed.last_error }}</p>{% endif %}
+                            <form action="{% url 'cti_toggle_feed' feed.pk %}" method="post" class="inline">{% csrf_token %}<input type="hidden" name="from_modules" value="1"><button class="btn btn-ghost">{% if feed.enabled %}Disable{% else %}Enable{% endif %}</button></form>
+                            {% if mod.is_active %}<form action="{% url 'cti_refresh_feed' feed.pk %}" method="post" class="inline">{% csrf_token %}<input type="hidden" name="from_modules" value="1"><button class="btn btn-ghost">Refresh</button></form>{% endif %}
+                            <form action="{% url 'cti_feed_delete' feed.pk %}" method="post" class="inline" onsubmit="return confirm('Delete this feed?');">{% csrf_token %}<button class="btn btn-danger">Delete</button></form>
+                        </div>
+                        {% empty %}<p class="text-xs">No feeds configured.</p>{% endfor %}
+                        <form action="{% url 'cti_feed_add' %}" method="post" class="space-y-2 mt-3">{% csrf_token %}
+                            <input name="name" maxlength="100" placeholder="Feed name" required class="search-input">
+                            <input name="url" type="url" placeholder="https://example.com/feed.xml" required class="search-input">
+                            <button class="btn btn-primary">Add feed</button>
+                        </form>
+                        {% if mod.is_active %}<a href="{% url 'cti_inbox' %}" class="text-primary text-xs">Open CTI Inbox</a>{% endif %}
+                    {% elif mod.id == "wrike" %}
                         <form action="{% url 'save_wrike_config' %}" method="POST" class="space-y-3">
                             {% csrf_token %}
                             <input name="wrike_api_token" type="password" placeholder="Wrike API Token (optional to update)" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px] text-on-surface"/>

@@ -31,7 +31,7 @@ from .models import (
     Software,
     Extension,
     SystemSettings,
-    CisaKevEntry, EpssEntry, FeedRun,
+    CisaKevEntry, EpssEntry, FeedRun, CTIFeed,
 )
 from .parser import nmap
 from .parser import nuclei
@@ -1976,6 +1976,12 @@ def ki_dashboard(request):
 def extensions_view(request):
     # Metadata for active modules
     module_metadata = {
+        "cti": {
+            "name": "CTI Inbox",
+            "description": "Imports configured public RSS/Atom feeds and suggests inventory matches.",
+            "icon": "rss_feed",
+            "color": "primary",
+        },
         "agent_api": {
             "name": "CVE3PO Agent",
             "description": "Activates the CVE3PO Agent API and lets you use the CVE3PO Agent to retrieve the SBOM of Server",
@@ -2043,6 +2049,7 @@ def extensions_view(request):
                 "description": meta["description"],
                 "is_active": ext.is_active,
                 "api_token": ext.api_token if request.user.is_staff else None,
+                "feeds": list(CTIFeed.objects.order_by("name")) if mid == "cti" and request.user.is_staff else [],
                 "wrike_folder_id": (
                     system_settings.wrike_folder_id if mid == "wrike" else None
                 ),

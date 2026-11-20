@@ -62,9 +62,9 @@
                 <p class="text-sm">CISA KEV: {% if kev %}<strong>Listed</strong>{% else %}Not listed in the local catalogue{% endif %}</p>
                 <p class="text-sm">EPSS: {% if epss %}{{ epss.score|floatformat:4 }} (percentile {{ epss.percentile|default_if_none:"—" }}) · updated {{ epss.last_updated|date:"d M Y H:i" }}{% else %}Not available{% endif %}</p>
             </div>
-            <div class="bg-surface-container-low rounded-md border border-outline-variant p-4 mb-5">
-                <h5 class="card-title mb-3">Ownership and remediation</h5>
-                <form action="{% url 'update_vulnerability_work' vuln.id %}" method="post" class="space-y-2">{% csrf_token %}
+            <details class="bg-surface-container-low rounded-md border border-outline-variant p-4 mb-5">
+                <summary class="card-title cursor-pointer">Ownership and remediation</summary>
+                <form action="{% url 'update_vulnerability_work' vuln.id %}" method="post" class="space-y-2 mt-3">{% csrf_token %}
                     <label class="text-xs">Assignee</label><select name="assignee" class="search-input"><option value="">Unassigned</option>{% for user in users %}<option value="{{ user.pk }}" {% if vuln.assignee_id == user.pk %}selected{% endif %}>{{ user.username }}</option>{% endfor %}</select>
                     <label class="text-xs">Responsible team</label><input name="owner_team" value="{{ vuln.owner_team }}" class="search-input">
                     <label class="text-xs">Due date</label><input type="date" name="due_date" value="{{ vuln.due_date|date:'Y-m-d' }}" class="search-input">
@@ -75,7 +75,7 @@
                     <button type="submit" class="btn btn-ghost">Save work details</button>
                 </form>
                 {% if vuln.exception_reason %}<p class="text-xs mt-3">Exception: {{ vuln.exception_reason }} · reviewer {{ vuln.exception_reviewer|default:"unknown" }} · review {{ vuln.exception_expires|date:"d M Y"|default:"not set" }}</p>{% endif %}
-            </div>
+            </details>
             <h5 class="text-[11px] font-semibold text-outline uppercase tracking-wide mb-2">Technical details</h5>
             <p class="text-on-surface-variant leading-relaxed text-sm">{{ vuln.description|linebreaksbr }}</p>
 

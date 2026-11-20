@@ -3,9 +3,11 @@ import hashlib
 import html
 import logging
 import re
+import ipaddress
+import socket
 from datetime import timedelta
 from email.utils import parsedate_to_datetime
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urljoin, urlsplit, urlunsplit
 from datetime import timezone as datetime_timezone
 
 import requests
@@ -14,7 +16,7 @@ from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.html import strip_tags
-from vuln_manager.models import CTIFeed, CTIItem, CTIMatch, NotificationEvent, Software, Vulnerability
+from vuln_manager.models import CTIFeed, CTIItem, CTIMatch, Extension, NotificationEvent, Software, Vulnerability
 
 logger = logging.getLogger(__name__)
 FEEDS = {
@@ -22,7 +24,28 @@ FEEDS = {
     "Heise Security News": "https://www.heise.de/security/rss/news-atom.xml",
 }
 MAX_BYTES = 2 * 1024 * 1024
+MAX_REDIRECTS = 3
 CVE_RE = re.compile(r"\bCVE-\d{4}-\d{4,}\b", re.I)
+
+
+def validate_feed_url(url, *, resolve=True):
+    """Accept public HTTPS feeds, rejecting local/private destinations at each hop."""
+    try:
+        parsed = urlsplit(url)
+        if (parsed.scheme != "https" or not parsed.hostname or parsed.username is not None
+                or parsed.password is not None or parsed.port not in (None, 443)):
+            raise ValueError("Feed URL must use HTTPS on port 443 without credentials")
+        if resolve:
+            addresses = socket.getaddrinfo(parsed.hostname, 443, type=socket.SOCK_STREAM)
+            if not addresses or any(not ipaddress.ip_address(info[4][0]).is_global for info in addresses):
+                raise ValueError("Feed URL must resolve to public addresses")
+    except (ValueError, socket.gaierror) as exc:
+        raise ValueError(f"Invalid public feed URL: {exc}") from exc
+    return url
+
+
+def cti_enabled():
+    return Extension.objects.filter(name_id="cti", is_active=True).exists()
 
 
 def parse_date(value):
@@ -48,19 +71,23 @@ def _text(node, *names):
 def parse_feed(data):
     root = ET.fromstring(data)
     atom = "{http://www.w3.org/2005/Atom}"
-    entries = root.findall(atom + "entry") or root.findall(".//item")
+    rss1 = "{http://purl.org/rss/1.0/}"
+    if root.tag not in {atom + "feed", "rss", "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}RDF"}:
+        raise ValueError("Unsupported feed format")
+    entries = root.findall(atom + "entry") or root.findall(".//item") or root.findall(".//" + rss1 + "item")
     for entry in entries:
         links = entry.findall(atom + "link")
         link_node = next((node for node in links if node.get("rel", "alternate") == "alternate"), None)
-        link = link_node.get("href", "") if link_node is not None else _text(entry, "link")
+        link = link_node.get("href", "") if link_node is not None else _text(entry, "link", rss1 + "link")
         parsed = urlsplit(link)
-        if parsed.scheme != "https" or not (parsed.hostname == "heise.de" or (parsed.hostname or "").endswith(".heise.de")):
+        if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username is not None or parsed.password is not None:
             continue
-        link = urlunsplit((parsed.scheme, parsed.netloc.lower(), parsed.path, "", ""))
+        query = "" if parsed.hostname == "heise.de" or parsed.hostname.endswith(".heise.de") else parsed.query
+        link = urlunsplit((parsed.scheme, parsed.netloc.lower(), parsed.path, query, ""))
         if len(link) > 1000:
             continue
-        title = html.unescape(strip_tags(_text(entry, atom + "title", "title")))[:500]
-        summary = html.unescape(strip_tags(_text(entry, atom + "summary", "description")))[:4000]
+        title = html.unescape(strip_tags(_text(entry, atom + "title", "title", rss1 + "title")))[:500]
+        summary = html.unescape(strip_tags(_text(entry, atom + "summary", "description", rss1 + "description")))[:4000]
         if not title:
             continue
         yield {
@@ -100,9 +127,22 @@ def suggest_matches(item):
 
 
 def fetch_feed(feed):
-    if FEEDS.get(feed.name) != feed.url:
-        raise ValueError("Unrecognized feed URL")
-    response = requests.get(feed.url, timeout=20, stream=True, allow_redirects=False, headers={"User-Agent": "CVE3PO CTI feed reader"})
+    url = feed.url
+    for redirect_count in range(MAX_REDIRECTS + 1):
+        validate_feed_url(url)
+        response = requests.get(url, timeout=20, stream=True, allow_redirects=False, headers={"User-Agent": "CVE3PO CTI feed reader"})
+        if response.status_code not in (301, 302, 303, 307, 308):
+            break
+        try:
+            location = response.headers.get("Location")
+            if not location:
+                raise ValueError("Feed redirect has no Location header")
+            if redirect_count == MAX_REDIRECTS:
+                raise ValueError("Too many feed redirects")
+            url = urljoin(url, location)
+            validate_feed_url(url)
+        finally:
+            response.close()
     try:
         response.raise_for_status()
         if response.status_code != 200:
@@ -123,6 +163,8 @@ def fetch_feed(feed):
 
 
 def run_feeds():
+    if not cti_enabled():
+        return
     now = timezone.now()
     polled = False
     for feed in CTIFeed.objects.filter(enabled=True):
