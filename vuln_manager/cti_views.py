@@ -5,7 +5,7 @@ from django.http import HttpResponse, HttpResponseForbidden, HttpResponseNotFoun
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from vuln_manager.models import CTIFeed, CTIItem, CTIMatch, DebianTrackerSnapshot, NotificationDelivery, NotificationRule, Scan, Software, Vulnerability
+from vuln_manager.models import CTIFeed, CTIItem, CTIMatch, DebianAdvisorySnapshot, DebianTrackerSnapshot, NotificationDelivery, NotificationRule, Scan, Software, Vulnerability
 from vuln_manager.utils.audit import log_vulnerability_event
 from vuln_manager.utils.vuln_dedup import create_or_update_vulnerability
 from vuln_manager.utils.cti import cti_enabled, validate_feed_url
@@ -38,12 +38,15 @@ def detail(request, pk):
     item = get_object_or_404(CTIItem.objects.select_related("source").prefetch_related("matches__software", "findings"), pk=pk)
     related = Vulnerability.objects.filter(cve_id__in=item.cves).select_related("host", "software")[:50]
     from vuln_manager.utils.debian_cti import assess_host
+    from vuln_manager.utils.debian_advisories import advisory_ids
+    ids = advisory_ids(item)
+    advisory_sources = DebianAdvisorySnapshot.objects.filter(kind__in={value[:3] for value in ids}).only("kind", "fetched_at", "error")
     snapshot = DebianTrackerSnapshot.objects.filter(pk=1).first() if item.cves and item.matches.exists() else None
     assessments = []
     for match in item.matches.all():
         for host in match.software.hosts.all():
             assessments.append({"software": match.software, **assess_host(item, match.software, host, snapshot)})
-    return render(request, "vuln_manager/cti_detail.html", {"item": item, "related": related, "assessments": assessments, "tracker_snapshot": snapshot, "severity_choices": Vulnerability.SEVERITY_CHOICES})
+    return render(request, "vuln_manager/cti_detail.html", {"item": item, "related": related, "assessments": assessments, "tracker_snapshot": snapshot, "advisory_ids": ids, "advisory_sources": advisory_sources, "severity_choices": Vulnerability.SEVERITY_CHOICES})
 
 
 @login_required
@@ -111,6 +114,19 @@ def refresh_feed(request, pk):
         fetch_feed(feed)
         feed.last_success = timezone.now()
         feed.last_error = ""
+        # Refreshing an external advisory index can take longer than a web
+        # request; continue in the background, like the other manual jobs.
+        import threading
+        from django.db import close_old_connections
+        def enrich_background():
+            close_old_connections()
+            try:
+                if cti_enabled():
+                    from vuln_manager.utils.debian_advisories import enrich_existing_items
+                    enrich_existing_items()
+            finally:
+                close_old_connections()
+        threading.Thread(target=enrich_background, daemon=True).start()
     except Exception as exc:
         feed.last_error = str(exc)[:500]
     feed.save(update_fields=["last_attempt", "last_success", "last_error"])

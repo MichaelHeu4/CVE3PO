@@ -513,6 +513,8 @@ class CTIItem(models.Model):
     updated_at = models.DateTimeField(null=True, blank=True)
     received_at = models.DateTimeField(default=timezone.now)
     cves = models.JSONField(default=list, blank=True)
+    feed_cves = models.JSONField(default=list, blank=True)
+    debian_advisories = models.JSONField(default=dict, blank=True)
     status = models.CharField(max_length=20, choices=[("new", "New"), ("reviewed", "Reviewed"), ("dismissed", "Dismissed")], default="new")
     findings = models.ManyToManyField(Vulnerability, blank=True, related_name="cti_items")
 
@@ -528,6 +530,14 @@ class CTIMatch(models.Model):
 
 
 class DebianTrackerSnapshot(models.Model):
+    last_attempt = models.DateTimeField(null=True, blank=True)
+    fetched_at = models.DateTimeField(null=True, blank=True)
+    error = models.CharField(max_length=500, blank=True)
+    data = models.JSONField(default=dict)
+
+
+class DebianAdvisorySnapshot(models.Model):
+    kind = models.CharField(max_length=3, unique=True)
     last_attempt = models.DateTimeField(null=True, blank=True)
     fetched_at = models.DateTimeField(null=True, blank=True)
     error = models.CharField(max_length=500, blank=True)
