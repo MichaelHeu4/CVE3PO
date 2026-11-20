@@ -489,3 +489,76 @@ class FeedRun(models.Model):
     finished_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=20, default="running")
     details = models.TextField(blank=True)
+
+
+class CTIFeed(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    url = models.URLField(unique=True)
+    enabled = models.BooleanField(default=True)
+    last_attempt = models.DateTimeField(null=True, blank=True)
+    last_success = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(blank=True)
+
+
+class CTIItem(models.Model):
+    source = models.ForeignKey(CTIFeed, on_delete=models.PROTECT, related_name="items")
+    external_id = models.CharField(max_length=64, unique=True)
+    title = models.CharField(max_length=500)
+    summary = models.TextField(blank=True)
+    url = models.URLField(max_length=1000)
+    published_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(null=True, blank=True)
+    received_at = models.DateTimeField(default=timezone.now)
+    cves = models.JSONField(default=list, blank=True)
+    status = models.CharField(max_length=20, choices=[("new", "New"), ("reviewed", "Reviewed"), ("dismissed", "Dismissed")], default="new")
+    findings = models.ManyToManyField(Vulnerability, blank=True, related_name="cti_items")
+
+
+class CTIMatch(models.Model):
+    item = models.ForeignKey(CTIItem, on_delete=models.CASCADE, related_name="matches")
+    software = models.ForeignKey(Software, on_delete=models.CASCADE, related_name="cti_matches")
+    reason = models.CharField(max_length=255)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["item", "software"], name="unique_cti_software")]
+
+
+class NotificationRule(models.Model):
+    EVENTS = [("cti_match", "CTI inventory match"), ("new_finding", "New finding"), ("reopened", "Finding reopened"), ("kev_added", "CVE added to KEV"), ("sla_tomorrow", "SLA due tomorrow")]
+    name = models.CharField(max_length=100)
+    enabled = models.BooleanField(default=False)
+    event_type = models.CharField(max_length=30, choices=EVENTS)
+    severity = models.CharField(max_length=10, blank=True, choices=Vulnerability.SEVERITY_CHOICES)
+    critical_host = models.BooleanField(default=False)
+    exposed_host = models.BooleanField(default=False)
+    email = models.EmailField(blank=True)
+    webhook_url = models.URLField(blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+
+class NotificationEvent(models.Model):
+    key = models.CharField(max_length=255, unique=True)
+    event_type = models.CharField(max_length=30, choices=NotificationRule.EVENTS)
+    title = models.CharField(max_length=500)
+    vulnerability = models.ForeignKey(Vulnerability, null=True, blank=True, on_delete=models.SET_NULL)
+    item = models.ForeignKey(CTIItem, null=True, blank=True, on_delete=models.SET_NULL)
+    software = models.ForeignKey(Software, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(default=timezone.now)
+    processed_at = models.DateTimeField(null=True, blank=True)
+
+
+class NotificationDelivery(models.Model):
+    event = models.ForeignKey(NotificationEvent, on_delete=models.CASCADE, related_name="deliveries")
+    rule = models.ForeignKey(NotificationRule, on_delete=models.CASCADE, related_name="deliveries")
+    channel = models.CharField(max_length=10)
+    destination = models.CharField(max_length=1000)
+    status = models.CharField(max_length=20, default="pending")
+    attempts = models.PositiveIntegerField(default=0)
+    next_attempt = models.DateTimeField(default=timezone.now)
+    claimed_at = models.DateTimeField(null=True, blank=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    error = models.CharField(max_length=500, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["event", "rule", "channel"], name="unique_event_rule_channel")]

@@ -2,9 +2,21 @@ from django.views.decorators.csrf import csrf_exempt
 from django.urls import path
 from django.contrib.auth import views as auth_views
 from . import views
+from . import cti_views
 from .extensions import wazuh, agent
 
 urlpatterns = [
+    path("cti/", cti_views.inbox, name="cti_inbox"),
+    path("cti/<int:pk>/", cti_views.detail, name="cti_detail"),
+    path("cti/<int:pk>/status/", cti_views.set_status, name="cti_set_status"),
+    path("cti/<int:pk>/finding/", cti_views.create_finding, name="cti_create_finding"),
+    path("cti/<int:pk>/finding/<int:vuln_pk>/link/", cti_views.link_finding, name="cti_link_finding"),
+    path("cti/feeds/<int:pk>/toggle/", cti_views.toggle_feed, name="cti_toggle_feed"),
+    path("cti/feeds/<int:pk>/refresh/", cti_views.refresh_feed, name="cti_refresh_feed"),
+    path("notification-rules/", cti_views.rules, name="notification_rules"),
+    path("notification-rules/add/", cti_views.add_rule, name="notification_rule_add"),
+    path("notification-rules/<int:pk>/edit/", cti_views.add_rule, name="notification_rule_edit"),
+    path("notification-rules/<int:pk>/", cti_views.change_rule, name="notification_rule_change"),
     path("agent/latest/<str:filename>", views.agent_latest_file, name="agent_latest_file"),
     path("agent/install/", views.agent_install_guide, name="agent_install_guide"),
     path("", views.dashboard, name="dashboard"),

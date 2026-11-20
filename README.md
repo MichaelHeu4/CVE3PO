@@ -8,6 +8,14 @@
 
 ## Features
 
+### CTI Inbox und Benachrichtigungsregeln
+
+- Die CTI Inbox ruft die Heise-Security-Alerts und Security-News regelmäßig als Atom-Feeds ab. In der Inbox sind Quellen einzeln aktivierbar; Admins können einen Abruf auch manuell anstoßen. Die Inbox speichert Titel, Feed-Anrisstext und den Link zum Originalartikel.
+- Meldungen können ohne CVE vorliegen. Produktnamen und vorhandene CVE-Findings liefern Vorschläge für den Inventarabgleich; Produktnamen allein bestätigen keine Betroffenheit oder Version. Die Oberfläche erlaubt das Prüfen, Verwerfen und explizite Erstellen bzw. Verknüpfen eines Findings. Ein Wrike-Ticket wird ausschließlich über die vorhandene manuelle Ticketfunktion erstellt.
+- Unter „Notification Rules“ können Admins Regeln für CTI-Inventartreffer, neue oder wieder eröffnete Findings, neu im KEV-Katalog gelistete CVEs und morgen fällige SLAs anlegen. Bedingungen umfassen Severity sowie kritische und internetexponierte Hosts; beide Hostbedingungen beziehen sich auf denselben Host. Severity gilt für Finding-Ereignisse, nicht für reine CTI-Meldungen.
+- Ziel ist eine E-Mail-Adresse, eine Webhook-URL oder beides. E-Mail benötigt eine konfigurierte SMTP-Verbindung. Zustellstatus und Fehler stehen bei den Regeln; fehlgeschlagene Zustellungen werden bis zu fünfmal versucht. Webhook-Nachrichten enthalten eine stabile `delivery_id`, mit der Empfänger Wiederholungen erkennen können. Regeln greifen nur für neue Ereignisse; beim Deaktivieren oder Ändern werden ausstehende Zustellungen abgebrochen. Die älteren SLA-Erinnerungen funktionieren unabhängig davon und sollten bei Bedarf abgeschaltet werden, um Doppelbenachrichtigungen zu vermeiden.
+- Der eingebaute Scheduler prüft Feeds stündlich und Benachrichtigungen ungefähr alle fünf Minuten, solange die Anwendung läuft. Die Feeds sind vorgegeben und können einzeln deaktiviert werden. Inventar-Vorschläge beruhen auf CVE- und exakten Produktnamen und sind keine automatisierte Versionsprüfung.
+
 ### Scanner & Imports
 - Nmap
 - Nuclei

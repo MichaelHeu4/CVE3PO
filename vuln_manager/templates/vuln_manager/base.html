@@ -143,6 +143,7 @@
                 <span class="material-symbols-outlined">dashboard</span><span class="nav-label">Dashboard</span>
             </a>
             <a href="{% url 'coverage' %}" class="nav-item"><span class="material-symbols-outlined">monitoring</span><span class="nav-label">Coverage</span></a>
+            <a href="{% url 'cti_inbox' %}" class="nav-item"><span class="material-symbols-outlined">rss_feed</span><span class="nav-label">CTI Inbox</span></a>
             <a href="{% url 'host_list' %}" class="nav-item {% if request.resolver_match.url_name == 'host_list' %}active{% endif %}">
                 <span class="material-symbols-outlined">inventory_2</span><span class="nav-label">Assets</span>
             </a>
@@ -170,6 +171,7 @@
 
             {% if request.user.is_staff %}
             <div class="nav-section">Admin</div>
+            <a href="{% url 'notification_rules' %}" class="nav-item"><span class="material-symbols-outlined">notifications</span><span class="nav-label">Notification Rules</span></a>
             <a href="{% url 'user_admin' %}" class="nav-item {% if request.resolver_match.url_name == 'user_admin' %}active{% endif %}">
                 <span class="material-symbols-outlined">admin_panel_settings</span><span class="nav-label">Users</span>
             </a>

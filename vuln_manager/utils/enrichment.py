@@ -26,6 +26,10 @@ def sync_cisa_kev_to_db(*, strict=False):
             
             if new_entries:
                 CisaKevEntry.objects.bulk_create(new_entries)
+                from vuln_manager.models import Vulnerability
+                from vuln_manager.utils.notifications import emit
+                for vuln in Vulnerability.objects.filter(cve_id__in=[entry.cve_id for entry in new_entries]).iterator():
+                    emit(f"kev:{vuln.pk}:{vuln.cve_id}", "kev_added", f"New KEV: {vuln.cve_id}", vulnerability=vuln)
             return len(new_entries)
         if strict:
             raise RuntimeError(f"CISA KEV returned HTTP {response.status_code}")
