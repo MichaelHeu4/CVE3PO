@@ -333,6 +333,16 @@ def _scheduler_loop():
     time.sleep(_STARTUP_DELAY_SECONDS)
     while True:
         try:
+            from vuln_manager.utils.cti import run_feeds
+            run_feeds()
+        except Exception:
+            logger.exception("CTI feed check failed")
+        try:
+            from vuln_manager.utils.notifications import tick as notification_tick
+            notification_tick()
+        except Exception:
+            logger.exception("Notification check failed")
+        try:
             from vuln_manager.utils.reminders import run_reminders
             run_reminders()
         except Exception:
