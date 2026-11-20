@@ -5,6 +5,7 @@ from datetime import timedelta
 import requests
 from django.db.models import Q
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from vuln_manager.models import DebianTrackerSnapshot, HostSoftwareRelationship
 
@@ -93,6 +94,35 @@ def assess_host(item, software, host, snapshot):
     if not relation or not relation.source_package or not relation.source_version:
         result["reason"] = "Debian source package/version missing from agent inventory"
         return result
+    # A Debian advisory can itself supply an authoritative source-package fix
+    # for this release, even where its feed summary contains no CVE IDs.
+    from vuln_manager.utils.debian_advisories import advisory_ids
+    ids = advisory_ids(item)
+    if len(ids) == 1:
+        record = item.debian_advisories.get(ids[0], {})
+        try:
+            fetched = parse_datetime(record.get("fetched_at", ""))
+        except (TypeError, ValueError):
+            fetched = None
+        if fetched and timezone.is_aware(fetched) and fetched >= timezone.now() - timedelta(hours=48):
+            fixes = [entry.get("fixed_version") for entry in record.get("fixes", []) if entry.get("source_package") == relation.source_package and entry.get("release") == release and entry.get("fixed_version")]
+            try:
+                if fixes:
+                    fixed = fixes[0]
+                    for candidate in fixes[1:]:
+                        if compare_debian_versions(candidate, fixed) > 0:
+                            fixed = candidate
+                    comparison = compare_debian_versions(relation.source_version, fixed)
+                    result.update(
+                        status="below_fix" if comparison < 0 else "fixed",
+                        label="Potentially affected" if comparison < 0 else "At or above Debian fix",
+                        reason=f"{ids[0]}: source {relation.source_package} {relation.source_version}; Debian {release} fixed version {fixed}",
+                        checked_at=fetched,
+                        source_url=f"https://security-tracker.debian.org/tracker/{ids[0]}",
+                    )
+                    return result
+            except (TypeError, ValueError):
+                pass
     if not item.cves:
         result["reason"] = "No CVE in the feed item; tracker cannot be queried reliably"
         return result

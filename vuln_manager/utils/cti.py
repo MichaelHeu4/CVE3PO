@@ -166,7 +166,11 @@ def fetch_feed(feed):
         response.close()
     for data in items:
         with transaction.atomic():
-            item, _ = CTIItem.objects.update_or_create(external_id=data.pop("external_id"), defaults={**data, "source": feed})
+            feed_cves = data.pop("cves")
+            item, _ = CTIItem.objects.update_or_create(external_id=data.pop("external_id"), defaults={**data, "source": feed, "feed_cves": feed_cves})
+            advisory_cves = {cve for advisory in item.debian_advisories.values() for cve in advisory.get("cves", [])}
+            item.cves = sorted(set(feed_cves) | advisory_cves)
+            item.save(update_fields=["cves"])
             suggest_matches(item)
     return len(items)
 
@@ -174,9 +178,6 @@ def fetch_feed(feed):
 def run_feeds():
     if not cti_enabled():
         return
-    if CTIItem.objects.exclude(cves=[]).exists() and HostSoftwareRelationship.objects.filter(package_manager="dpkg").exists():
-        from vuln_manager.utils.debian_cti import refresh_tracker
-        refresh_tracker()
     now = timezone.now()
     polled = False
     for feed in CTIFeed.objects.filter(enabled=True):
@@ -192,6 +193,12 @@ def run_feeds():
         except Exception as exc:
             logger.exception("CTI feed failed: %s", feed.name)
             CTIFeed.objects.filter(pk=feed.pk).update(last_error=str(exc)[:500])
+    # Debian advisories may add CVEs even if no installed host has agent metadata.
+    from vuln_manager.utils.debian_advisories import enrich_existing_items
+    enrich_existing_items()
+    if CTIItem.objects.exclude(cves=[]).exists() and HostSoftwareRelationship.objects.filter(package_manager="dpkg").exists():
+        from vuln_manager.utils.debian_cti import refresh_tracker
+        refresh_tracker()
     # Re-evaluate recent items for software added since the last feed poll.
     if polled:
         for item in CTIItem.objects.filter(received_at__gte=now-timedelta(days=30)).iterator():
