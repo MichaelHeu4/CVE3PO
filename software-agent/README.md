@@ -2,6 +2,8 @@
 
 Der Agent sammelt installierte Software und sendet Snapshots an den CVE3PO Agent-Endpoint.
 
+Für dpkg-Pakete meldet ein neu gebauter Agent zusätzlich Paketmanager, Debian-Quellpaket und Quellversion. CVE3PO kann damit Debian-Tracker-Versionen pro Host vergleichen. Alte Agent-Versionen bleiben kompatibel, liefern diese Informationen aber nicht; für den Abgleich den Agent neu bauen und auf den Hosts aktualisieren.
+
 ## Konfiguration
 
 Der Agent liest Einstellungen in dieser Reihenfolge:
