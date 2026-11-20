@@ -1,16 +1,28 @@
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator, validate_email
-from django.http import HttpResponse, HttpResponseForbidden
+from django.http import HttpResponse, HttpResponseForbidden, HttpResponseNotFound
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from vuln_manager.models import CTIFeed, CTIItem, CTIMatch, NotificationDelivery, NotificationRule, Scan, Software, Vulnerability
 from vuln_manager.utils.audit import log_vulnerability_event
 from vuln_manager.utils.vuln_dedup import create_or_update_vulnerability
+from vuln_manager.utils.cti import cti_enabled, validate_feed_url
+
+
+def active_cti(view):
+    from functools import wraps
+    @wraps(view)
+    def wrapped(request, *args, **kwargs):
+        if not cti_enabled():
+            return HttpResponseNotFound("CTI module disabled")
+        return view(request, *args, **kwargs)
+    return wrapped
 
 
 @login_required
+@active_cti
 def inbox(request):
     status = request.GET.get("status", "new")
     items = CTIItem.objects.select_related("source").prefetch_related("matches__software").order_by("-received_at")
@@ -21,6 +33,7 @@ def inbox(request):
 
 
 @login_required
+@active_cti
 def detail(request, pk):
     item = get_object_or_404(CTIItem.objects.select_related("source").prefetch_related("matches__software", "findings"), pk=pk)
     related = Vulnerability.objects.filter(cve_id__in=item.cves).select_related("host", "software")[:50]
@@ -29,6 +42,7 @@ def detail(request, pk):
 
 @login_required
 @require_POST
+@active_cti
 def set_status(request, pk):
     item = get_object_or_404(CTIItem, pk=pk)
     status = request.POST.get("status")
@@ -41,6 +55,7 @@ def set_status(request, pk):
 
 @login_required
 @require_POST
+@active_cti
 def create_finding(request, pk):
     item = get_object_or_404(CTIItem, pk=pk)
     software_id = request.POST.get("software", "")
@@ -73,11 +88,12 @@ def toggle_feed(request, pk):
     feed = get_object_or_404(CTIFeed, pk=pk)
     feed.enabled = not feed.enabled
     feed.save(update_fields=["enabled"])
-    return redirect("cti_inbox")
+    return redirect("extensions") if request.POST.get("from_modules") else redirect("cti_inbox")
 
 
 @login_required
 @require_POST
+@active_cti
 def refresh_feed(request, pk):
     if not request.user.is_staff:
         return HttpResponseForbidden()
@@ -92,17 +108,59 @@ def refresh_feed(request, pk):
     except Exception as exc:
         feed.last_error = str(exc)[:500]
     feed.save(update_fields=["last_attempt", "last_success", "last_error"])
-    return redirect("cti_inbox")
+    return redirect("extensions") if request.POST.get("from_modules") else redirect("cti_inbox")
 
 
 @login_required
 @require_POST
+@active_cti
 def link_finding(request, pk, vuln_pk):
     item = get_object_or_404(CTIItem, pk=pk)
     vuln = get_object_or_404(Vulnerability, pk=vuln_pk, cve_id__in=item.cves)
     item.findings.add(vuln)
     log_vulnerability_event(vuln, "updated", user=request.user, details={"cti_item_id": item.pk, "action": "linked"})
     return redirect("cti_detail", pk=pk)
+
+
+@login_required
+@require_POST
+def save_feed(request, pk=None):
+    if not request.user.is_staff:
+        return HttpResponseForbidden()
+    name = request.POST.get("name", "").strip()
+    url = request.POST.get("url", "").strip()
+    try:
+        if not name or len(name) > 100 or len(url) > 200:
+            raise ValueError("Invalid feed name or URL")
+        URLValidator(schemes=["https"])(url)
+        validate_feed_url(url, resolve=False)
+    except (ValueError, ValidationError):
+        return HttpResponse("Invalid feed: use a public HTTPS URL and a name", status=400)
+    if CTIFeed.objects.filter(name=name).exclude(pk=pk).exists() or CTIFeed.objects.filter(url=url).exclude(pk=pk).exists():
+        return HttpResponse("Feed name or URL already exists", status=400)
+    if pk:
+        feed = get_object_or_404(CTIFeed, pk=pk)
+        if feed.url != url:
+            feed.last_success = None
+        feed.name, feed.url, feed.last_attempt, feed.last_error = name, url, None, ""
+        feed.save(update_fields=["name", "url", "last_attempt", "last_success", "last_error"])
+    else:
+        CTIFeed.objects.create(name=name, url=url)
+    return redirect("extensions")
+
+
+@login_required
+@require_POST
+def delete_feed(request, pk):
+    if not request.user.is_staff:
+        return HttpResponseForbidden()
+    from django.db.models.deletion import ProtectedError
+    feed = get_object_or_404(CTIFeed, pk=pk)
+    try:
+        feed.delete()
+    except ProtectedError:
+        return HttpResponse("Feed has saved items; disable it to retain its history.", status=409)
+    return redirect("extensions")
 
 
 @login_required

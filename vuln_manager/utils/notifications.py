@@ -46,7 +46,11 @@ def queue_due_events():
 
 
 def queue_deliveries():
-    for event in NotificationEvent.objects.filter(processed_at__isnull=True).order_by("created_at")[:500]:
+    from vuln_manager.utils.cti import cti_enabled
+    events = NotificationEvent.objects.filter(processed_at__isnull=True)
+    if not cti_enabled():
+        events = events.exclude(event_type="cti_match")
+    for event in events.order_by("created_at")[:500]:
         rules = NotificationRule.objects.filter(enabled=True, event_type=event.event_type, created_at__lte=event.created_at)
         for rule in rules:
             if not _matches(rule, event):
@@ -62,8 +66,11 @@ def deliver():
     # Claims are atomic, so concurrent workers do not normally send twice.
     # After a crash during delivery, retries are at-least-once; receivers should
     # deduplicate using the stable delivery_id in the webhook body.
-    pending = NotificationDelivery.objects.filter(Q(status="pending", next_attempt__lte=now) | Q(status="sending", claimed_at__lt=now-timedelta(minutes=10))).order_by("pk")[:100]
-    for delivery in list(pending):
+    pending = NotificationDelivery.objects.filter(Q(status="pending", next_attempt__lte=now) | Q(status="sending", claimed_at__lt=now-timedelta(minutes=10))).order_by("pk")
+    from vuln_manager.utils.cti import cti_enabled
+    if not cti_enabled():
+        pending = pending.exclude(event__event_type="cti_match")
+    for delivery in list(pending[:100]):
         claimed = NotificationDelivery.objects.filter(pk=delivery.pk).filter(Q(status="pending", next_attempt__lte=now) | Q(status="sending", claimed_at__lt=now-timedelta(minutes=10))).update(status="sending", claimed_at=now)
         if not claimed:
             continue
