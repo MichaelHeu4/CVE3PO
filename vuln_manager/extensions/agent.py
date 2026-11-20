@@ -1,6 +1,7 @@
 from django.http import JsonResponse, HttpResponseNotFound
 from django.views.decorators.csrf import csrf_exempt
 from django.db import transaction
+from django.utils import timezone
 from django.db import close_old_connections
 import logging
 from vuln_manager.models import (
@@ -47,7 +48,8 @@ def _sync_inventory_payload(data):
         )
         # Refresh the host's Last seen even when the reported inventory and
         # metadata are unchanged. auto_now only runs for listed update_fields.
-        host_update_fields = ["last_scanned"]
+        host.last_agent_contact = timezone.now()
+        host_update_fields = ["last_scanned", "last_agent_contact"]
         if hostname and not host.hostname:
             host.hostname = hostname
             host_update_fields.append("hostname")

@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 _kev_cache = None
 
-def sync_cisa_kev_to_db():
+def sync_cisa_kev_to_db(*, strict=False):
     from vuln_manager.models import CisaKevEntry
     try:
         url = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
@@ -27,12 +27,16 @@ def sync_cisa_kev_to_db():
             if new_entries:
                 CisaKevEntry.objects.bulk_create(new_entries)
             return len(new_entries)
+        if strict:
+            raise RuntimeError(f"CISA KEV returned HTTP {response.status_code}")
     except Exception:
         logger.exception("Error bulk syncing CISA KEV")
+        if strict:
+            raise
     return 0
 
 
-def get_epss_score(cve_id):
+def get_epss_score(cve_id, *, strict=False):
     """
     Holt den EPSS-Score von der FIRST.org API mit DB-Caching.
     """
@@ -44,7 +48,10 @@ def get_epss_score(cve_id):
         from vuln_manager.models import EpssEntry
         cached = EpssEntry.objects.filter(cve_id=cve_upper).first()
         if cached:
-            return cached.score
+            from django.utils import timezone
+            from datetime import timedelta
+            if cached.last_updated >= timezone.now() - timedelta(days=1):
+                return cached.score
     except Exception:
         logger.exception("Error reading EPSS cache")
 
@@ -65,8 +72,12 @@ def get_epss_score(cve_id):
                 except Exception:
                     logger.exception("Error saving EPSS to cache")
                 return score
+        if strict:
+            raise RuntimeError(f"EPSS unavailable for {cve_id} (HTTP {response.status_code})")
     except Exception:
         logger.exception("Error fetching EPSS for %s", cve_id)
+        if strict:
+            raise
     return 0.0
 
 

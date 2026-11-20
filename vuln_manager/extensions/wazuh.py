@@ -1,6 +1,7 @@
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.http import JsonResponse, HttpResponseNotFound
+from django.db.models import Count
 import json
 import logging
 from vuln_manager.models import (
@@ -198,7 +199,7 @@ def _handle_alert(data):
         elif software:
             filter_kwargs["software"] = software
 
-        for vuln in Vulnerability.objects.filter(**filter_kwargs):
+        for vuln in Vulnerability.objects.filter(**filter_kwargs).annotate(source_count=Count("observations")).filter(source_count__lte=1):
             if vuln.status != "fixed":
                 old_status = vuln.status
                 vuln.status = "fixed"

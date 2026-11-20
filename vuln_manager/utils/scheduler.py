@@ -36,7 +36,8 @@ def run_full_enrichment():
     refresh (CISA KEV + EPSS), and — when the Shodan module is active — refresh
     host exposure/ports from Shodan. Safe to call from any thread.
     """
-    from vuln_manager.models import Extension, Software, Vulnerability
+    from vuln_manager.models import Extension, Software, Vulnerability, FeedRun
+    from django.utils import timezone
     from vuln_manager.utils.enrichment import (
         get_epss_score, sync_cisa_kev_to_db,
         get_cve_enrichment, apply_cve_enrichment,
@@ -47,10 +48,16 @@ def run_full_enrichment():
     logger.info("Full enrichment cycle started")
 
     # 1) Threat intelligence: refresh the CISA KEV catalogue.
+    kev_run = FeedRun.objects.create(source="CISA KEV")
     try:
-        sync_cisa_kev_to_db()
-    except Exception:
+        count = sync_cisa_kev_to_db(strict=True)
+        kev_run.status, kev_run.details = "success", f"{count} new entries"
+    except Exception as exc:
+        kev_run.status, kev_run.details = "failed", str(exc)[:500]
         logger.exception("CISA KEV sync failed during scheduled enrichment")
+    finally:
+        kev_run.finished_at = timezone.now()
+        kev_run.save(update_fields=["status", "details", "finished_at"])
 
     # 2) Re-check every software with a known version against OSV/NVD. This is
     #    what surfaces newly published CVEs for already-inventoried software and
@@ -61,16 +68,28 @@ def run_full_enrichment():
         .values_list("id", flat=True)
     )
     enriched = 0
+    failed_software = []
+    software_run = FeedRun.objects.create(source="OSV/NVD software")
     for software_id in software_ids:
         try:
-            enrich_software_with_feeds(software_id)
-            enriched += 1
+            if enrich_software_with_feeds(software_id) is False:
+                failed_software.append(str(software_id))
+            else:
+                enriched += 1
         except Exception:
+            failed_software.append(str(software_id))
             logger.exception("Scheduled enrichment failed for software %s", software_id)
         if _PER_SOFTWARE_DELAY_SECONDS:
             time.sleep(_PER_SOFTWARE_DELAY_SECONDS)
 
-    # 3) Ensure EPSS scores exist for every CVE we track.
+    software_run.status = "partial" if failed_software else "success"
+    software_run.details = (f"{enriched}/{len(software_ids)} completed; failed software IDs: " + ", ".join(failed_software))[:2000]
+    software_run.finished_at = timezone.now()
+    software_run.save(update_fields=["status", "details", "finished_at"])
+
+    # 3) Refresh stale EPSS scores and record failures.
+    epss_run = FeedRun.objects.create(source="EPSS")
+    epss_errors = []
     for cve_id in Vulnerability.objects.values_list("cve_id", flat=True).distinct():
         if cve_id and cve_id.startswith("CVE-"):
             # Also repair old imports and findings with no associated software.
@@ -86,9 +105,14 @@ def run_full_enrichment():
                 except Exception:
                     logger.exception("Rating enrichment failed for %s", cve_id)
             try:
-                get_epss_score(cve_id)
-            except Exception:
+                get_epss_score(cve_id, strict=True)
+            except Exception as exc:
+                epss_errors.append(f"{cve_id}: {exc}")
                 logger.exception("EPSS fetch failed for %s during scheduled enrichment", cve_id)
+    epss_run.status = "partial" if epss_errors else "success"
+    epss_run.details = "; ".join(epss_errors)[:2000] if epss_errors else "Refresh completed"
+    epss_run.finished_at = timezone.now()
+    epss_run.save(update_fields=["status", "details", "finished_at"])
 
     # 4) Optional: refresh Shodan exposure/ports for all hosts.
     shodan_summary = None
@@ -108,6 +132,7 @@ def run_full_enrichment():
     return {
         "software_total": len(software_ids),
         "software_enriched": enriched,
+        "errors": bool(failed_software or epss_errors or kev_run.status != "success"),
         "shodan": shodan_summary,
     }
 
@@ -125,7 +150,7 @@ def run_full_enrichment_and_record(record_status=True):
     if record_status:
         try:
             status = (
-                f"ok: {result['software_enriched']}/{result['software_total']} software"
+                f"{'partial' if result.get('errors') else 'ok'}: {result['software_enriched']}/{result['software_total']} software"
             )
             if result.get("shodan") and result["shodan"].get("status") == "done":
                 status += (
@@ -292,9 +317,30 @@ def _tick_netbox_sync():
         connections.close_all()
 
 
+def reopen_expired_exceptions():
+    """Reopen expired exceptions, preserving the decision in the audit trail."""
+    from django.utils import timezone
+    from vuln_manager.models import Vulnerability
+    from vuln_manager.utils.audit import log_vulnerability_event
+    expired = Vulnerability.objects.filter(status__in=["risk_accepted", "false_positive"], exception_expires__lt=timezone.localdate())
+    for vuln in expired.iterator():
+        old = vuln.status
+        if Vulnerability.objects.filter(pk=vuln.pk, status=old, exception_expires__lt=timezone.localdate()).update(status="open"):
+            log_vulnerability_event(vuln, "reopened", actor="exception_expiry", details={"from_status": old, "to_status": "open", "reason": "exception_expired"})
+
+
 def _scheduler_loop():
     time.sleep(_STARTUP_DELAY_SECONDS)
     while True:
+        try:
+            from vuln_manager.utils.reminders import run_reminders
+            run_reminders()
+        except Exception:
+            logger.exception("Reminder check failed")
+        try:
+            reopen_expired_exceptions()
+        except Exception:
+            logger.exception("Exception expiry check failed")
         try:
             _tick()
         except Exception:

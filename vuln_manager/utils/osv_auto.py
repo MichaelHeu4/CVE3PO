@@ -2,6 +2,7 @@ import logging
 import os
 
 import requests
+from django.db.models import Count
 
 import re
 from packaging import version
@@ -343,7 +344,7 @@ def _collect_nvd_vulns(software):
                 software.name,
                 keyword,
             )
-            continue
+            raise
 
         for cve in cves:
             cve_id = cve.get("id")
@@ -364,6 +365,7 @@ def enrich_software_with_feeds(software_id):
     # CVE ids reported by the feeds in THIS run, used to reconcile afterwards.
     seen_cve_ids = set()
     any_query_ok = False
+    query_failed = False
 
     scan_obj, _ = Scan.objects.get_or_create(
         scan_type="OSV", defaults={"raw_file": None}
@@ -380,6 +382,7 @@ def enrich_software_with_feeds(software_id):
                 software.name,
                 ecosystem,
             )
+            query_failed = True
             continue
 
         any_query_ok = True
@@ -417,6 +420,7 @@ def enrich_software_with_feeds(software_id):
             any_query_ok = True
         except Exception:
             logger.exception("NVD collection failed for software '%s'", software.name)
+            query_failed = True
             nvd_cves = []
 
         for cve in nvd_cves:
@@ -443,29 +447,28 @@ def enrich_software_with_feeds(software_id):
             )
 
     # Reconcile: feed-sourced vulns previously recorded for this software but no
-    # longer reported are marked fixed (mirrors a scanner diff). Guarded by
-    # any_query_ok so a transient network failure never mass-closes the list.
+    # no longer reported need human verification. Require every attempted query
+    # to succeed so a partial feed outage cannot change finding statuses.
     # Only touches open/in_progress — manual risk_accepted/false_positive stay.
-    if any_query_ok:
+    if any_query_ok and not query_failed:
         stale = Vulnerability.objects.filter(
             software=software,
             scan__scan_type__in=["OSV", "NVD"],
             status__in=["open", "in_progress"],
-        ).exclude(cve_id__in=seen_cve_ids)
+        ).exclude(cve_id__in=seen_cve_ids).annotate(source_count=Count("observations")).filter(source_count__lte=1)
         for vuln in stale:
             old_status = vuln.status
-            vuln.status = "fixed"
-            vuln.save(update_fields=["status"])
+            vuln.status = "verification"
+            vuln.verification_notes = "Feed no longer reports this finding; verify the installed version and scanner coverage before closing."
+            vuln.save(update_fields=["status", "verification_notes"])
             log_vulnerability_event(
                 vuln,
                 "status_changed",
                 actor="osv_auto:reconcile",
-                details={
-                    "from_status": old_status,
-                    "to_status": "fixed",
-                    "reason": "no_longer_reported",
-                },
+                details={"from_status": old_status, "to_status": "verification", "reason": "no_longer_reported"},
             )
+
+    return any_query_ok and not query_failed
 
 
 def enrich_software_with_osv(software_id):

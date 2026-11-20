@@ -1,0 +1,11 @@
+{% extends 'vuln_manager/base.html' %}
+{% block title %}Coverage{% endblock %}{% block header_title %}Coverage{% endblock %}
+{% block content %}
+<section class="page-header"><div><h1 class="page-title">Coverage and data quality</h1><p class="page-subtitle">Agent contact, inventory gaps and source freshness. Agent contact is recorded from this version onward.</p></div></section>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+<div class="card p-4"><h2 class="card-title">Agents with no contact for 24 hours ({{ stale_agents.count }})</h2>{% for host in stale_agents %}<p><a class="text-primary" href="{% url 'host_detail' host.pk %}">{{ host }}</a> · {{ host.last_agent_contact }}</p>{% empty %}<p>None</p>{% endfor %}</div>
+<div class="card p-4"><h2 class="card-title">No agent contact recorded ({{ never_agents.count }})</h2><p class="text-xs">Includes hosts without agents and contacts before this feature was installed.</p>{% for host in never_agents %}<p><a class="text-primary" href="{% url 'host_detail' host.pk %}">{{ host }}</a></p>{% empty %}<p>None</p>{% endfor %}</div>
+<div class="card p-4"><h2 class="card-title">Software without version ({{ unknown_versions.count }})</h2>{% for sw in unknown_versions %}<p><a class="text-primary" href="{% url 'software_detail' sw.pk %}">{{ sw.name }}</a></p>{% empty %}<p>None</p>{% endfor %}</div>
+<div class="card p-4"><h2 class="card-title">Feed and scan activity</h2><p>Last enrichment: {{ settings_obj.auto_enrich_last_run|default:"Never" }} · {{ settings_obj.auto_enrich_last_status|default:"No status" }}</p><p>Latest EPSS record update: {{ epss_latest|default:"Unknown" }}</p><p class="text-xs">The enrichment status can include partial failures; scan import time does not guarantee scan coverage.</p>{% for scan in recent_scans %}<p>{{ scan.get_scan_type_display }} · {{ scan.uploaded_at }}</p>{% endfor %}</div>
+<div class="card p-4"><h2 class="card-title">Feed runs</h2>{% for run in feed_runs %}<p>{{ run.source }} · {{ run.status }} · {{ run.started_at }}{% if run.details %}: {{ run.details }}{% endif %}</p>{% empty %}<p>No feed runs recorded yet.</p>{% endfor %}</div>
+</div>{% endblock %}
