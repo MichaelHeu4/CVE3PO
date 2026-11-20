@@ -40,6 +40,19 @@
 - KI Dashboard
 - PDF Export
 
+### Workflows und Datenqualität
+
+- In der Vulnerability-Detailansicht können Verantwortliche, Team, Fälligkeit, Behebungs- und Verifikationsnachweise gepflegt werden. Kritische und hohe neue Findings erhalten standardmäßig eine Fälligkeit nach den konfigurierten SLA-Tagen; sie kann angepasst werden.
+- Die Vulnerability-Liste bietet Arbeitsfilter für eigene, überfällige und bald fällige Findings sowie zur Prüfung anstehende Ausnahmen. „Verification Pending“ steht auch auf dem Kanban-Board zur Verfügung.
+- Für Risikoakzeptanz und False Positives kann ein Prüf-/Ablaufdatum gesetzt werden. Unveränderte erneute Meldungen behalten die Entscheidung; nach Ablauf öffnet der Scheduler das Finding wieder. Ohne Datum läuft eine Ausnahme nicht automatisch ab.
+- „Coverage“ zeigt Agent-Kontakte ab Installation dieser Version, fehlende Softwareversionen und verfügbare Informationen über Scan- und Feed-Läufe. Ein fehlender Agent-Kontakt bedeutet nicht zwingend, dass ein Host einen Agent benötigt.
+- Die Detailansicht zeigt lokal gespeicherte KEV-/EPSS-Daten. EPSS-Werte werden bei einem Feed-Lauf nach einem Tag erneuert; die Coverage-Seite zeigt KEV-/EPSS-Läufe und Importfehler.
+- Neue Quellen mit derselben CVE und exakt derselben Softwareversion, demselben Host und Port werden nur bei einem eindeutigen offenen Treffer automatisch zusammengeführt. Andere identische Ziele können nach Prüfung manuell zusammengeführt werden; widersprüchliche Status, Bearbeitungsdaten und doppelte Quellen verhindern die Zusammenführung. Beobachtungen und Audit-Ereignisse bleiben erhalten.
+- Findings, die nach erfolgreicher Feed-Abfrage nicht mehr gemeldet werden, gehen in die Verifikation; eine ausbleibende Meldung allein ist kein Beleg für eine Behebung. Bei mehreren Quellen wird nicht automatisch geschlossen.
+- Unter „Users“ können tägliche E-Mail-Erinnerungen und eine Eskalation an zusätzliche Empfänger aktiviert werden. Dafür müssen SMTP und die E-Mail-Adresse der zuständigen Person konfiguriert sein; die Funktion ist standardmäßig aus.
+
+Nach einem Update müssen die Django-Migrationen ausgeführt werden (`python manage.py migrate`); beim Container-Start geschieht dies automatisch.
+
 ## Betrieb mit GHCR Image
 
 Image:

@@ -1,8 +1,10 @@
 import hashlib
+import re
 
 from django.utils import timezone
 
-from vuln_manager.models import Vulnerability
+from vuln_manager.models import Vulnerability, VulnerabilityObservation, SystemSettings
+from datetime import timedelta
 from vuln_manager.utils.audit import log_vulnerability_event
 
 
@@ -57,6 +59,17 @@ def create_or_update_vulnerability(
     )
 
     vuln = Vulnerability.objects.filter(fingerprint=fingerprint).first()
+    if vuln is None:
+        observation = VulnerabilityObservation.objects.select_related("vulnerability").filter(fingerprint=fingerprint).first()
+        vuln = observation.vulnerability if observation else None
+    # Only correlate known CVEs on the exact same software version, host and
+    # port. Ambiguous matches and decided findings need human review instead.
+    if vuln is None and software and re.fullmatch(r"CVE-\d{4}-\d{4,}", cve_id or "", re.IGNORECASE):
+        candidates = list(Vulnerability.objects.filter(
+            cve_id__iexact=cve_id, software=software, host=host, port=port,
+            status="open").exclude(observations__source=scan.scan_type)[:2])
+        if len(candidates) == 1:
+            vuln = candidates[0]
     if vuln:
         old_status = vuln.status
         update_fields = []
@@ -64,7 +77,9 @@ def create_or_update_vulnerability(
         vuln.scan = scan
         update_fields.append("scan")
 
-        if severity is not None and vuln.severity != severity:
+        severity_order = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+        is_new_source = not vuln.observations.filter(source=scan.scan_type).exists()
+        if severity is not None and vuln.severity != severity and (not is_new_source or severity_order.get(severity, 0) > severity_order.get(vuln.severity, 0)):
             vuln.severity = severity
             update_fields.append("severity")
         if vuln.name != name:
@@ -87,7 +102,9 @@ def create_or_update_vulnerability(
         vuln.detection_count += 1
         update_fields.extend(["last_seen", "detection_count"])
 
-        if vuln.status in {"fixed", "false_positive", "risk_accepted"}:
+        expired_exception = (vuln.status in {"false_positive", "risk_accepted"}
+                             and vuln.exception_expires and vuln.exception_expires < timezone.localdate())
+        if vuln.status in {"fixed", "verification"} or expired_exception:
             vuln.status = "open"
             update_fields.append("status")
             if vuln.fixed_at is not None:
@@ -108,6 +125,15 @@ def create_or_update_vulnerability(
             )
 
         vuln.save(update_fields=sorted(set(update_fields)))
+        observation, created = VulnerabilityObservation.objects.get_or_create(
+            vulnerability=vuln, source=scan.scan_type,
+            defaults={"scan": scan, "name": name, "description": description, "fingerprint": fingerprint})
+        if not created:
+            observation.scan, observation.name, observation.description = scan, name, description
+            observation.fingerprint = fingerprint
+            observation.last_seen = now
+            observation.detection_count += 1
+            observation.save()
         return vuln
 
     vuln = Vulnerability.objects.create(
@@ -127,5 +153,11 @@ def create_or_update_vulnerability(
         last_seen=now,
         detection_count=1,
     )
+    settings = SystemSettings.objects.first()
+    days = (settings.sla_critical_days if settings else 7) if severity == "critical" else ((settings.sla_high_days if settings else 30) if severity == "high" else None)
+    if days:
+        vuln.due_date = timezone.localdate(now) + timedelta(days=days)
+        vuln.save(update_fields=["due_date"])
+    VulnerabilityObservation.objects.create(vulnerability=vuln, scan=scan, source=scan.scan_type, name=name, description=description, fingerprint=fingerprint)
     log_vulnerability_event(vuln, "created", actor=actor, details={"source": scan.scan_type})
     return vuln

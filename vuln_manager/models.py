@@ -30,6 +30,9 @@ class SystemSettings(models.Model):
     disable_register = models.BooleanField(default=True)
     sla_critical_days = models.PositiveIntegerField(default=7)
     sla_high_days = models.PositiveIntegerField(default=30)
+    reminders_enabled = models.BooleanField(default=False)
+    escalation_recipients = models.TextField(blank=True)
+    escalation_after_days = models.PositiveIntegerField(default=7)
     wrike_folder_id = models.CharField(max_length=100, blank=True, null=True)
     email_report_recipients = models.TextField(blank=True, null=True)
     ai_triage_provider = models.CharField(max_length=20, default="openrouter")
@@ -132,6 +135,7 @@ class Host(models.Model):
     # Running kernel release reported by the agent on Linux hosts (e.g.
     # "6.8.0-45-generic"). Optional for backwards compatibility with older agents.
     running_kernel = models.CharField(max_length=255, blank=True, null=True)
+    last_agent_contact = models.DateTimeField(blank=True, null=True)
     last_scanned = models.DateTimeField(auto_now=True)
     is_exposed = models.BooleanField(default=False)
     criticality = models.CharField(
@@ -277,6 +281,7 @@ class Vulnerability(models.Model):
     STATUS_CHOICES = (
         ("open", "Open"),
         ("in_progress", "In Progress"),
+        ("verification", "Verification Pending"),
         ("fixed", "Fixed"),
         ("risk_accepted", "Risk Accepted"),
         ("false_positive", "False Positive"),
@@ -334,6 +339,16 @@ class Vulnerability(models.Model):
     # Drives the Auto-Delete-Fixed retention module.
     fixed_at = models.DateTimeField(blank=True, null=True)
     detection_count = models.PositiveIntegerField(default=1)
+    assignee = models.ForeignKey("auth.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="assigned_vulnerabilities")
+    owner_team = models.CharField(max_length=200, blank=True)
+    due_date = models.DateField(null=True, blank=True)
+    exception_reason = models.TextField(blank=True)
+    exception_expires = models.DateField(null=True, blank=True)
+    exception_reviewer = models.ForeignKey("auth.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="reviewed_exceptions")
+    remediation_notes = models.TextField(blank=True)
+    remediation_reference = models.URLField(blank=True)
+    fixed_version = models.CharField(max_length=200, blank=True)
+    verification_notes = models.TextField(blank=True)
     wrike_task_id = models.CharField(max_length=50, blank=True, null=True)
     wrike_task_url = models.URLField(blank=True, null=True)
 
@@ -438,3 +453,39 @@ class EpssEntry(models.Model):
 
     def __str__(self):
         return f"{self.cve_id} (Score: {self.score})"
+
+
+class VulnerabilityObservation(models.Model):
+    vulnerability = models.ForeignKey(Vulnerability, on_delete=models.CASCADE, related_name="observations")
+    scan = models.ForeignKey(Scan, on_delete=models.SET_NULL, null=True, blank=True)
+    source = models.CharField(max_length=20)
+    fingerprint = models.CharField(max_length=64, blank=True, null=True, db_index=True)
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    first_seen = models.DateTimeField(default=timezone.now)
+    last_seen = models.DateTimeField(default=timezone.now)
+    detection_count = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["vulnerability", "source"], name="unique_vuln_source")]
+
+
+class ReminderDelivery(models.Model):
+    vulnerability = models.ForeignKey(Vulnerability, on_delete=models.CASCADE, related_name="reminder_deliveries")
+    date = models.DateField()
+    kind = models.CharField(max_length=30)
+    recipient = models.EmailField()
+    claimed_at = models.DateTimeField(default=timezone.now)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    error = models.TextField(blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["vulnerability", "date", "kind", "recipient"], name="unique_reminder_delivery")]
+
+
+class FeedRun(models.Model):
+    source = models.CharField(max_length=40)
+    started_at = models.DateTimeField(default=timezone.now)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=20, default="running")
+    details = models.TextField(blank=True)

@@ -45,7 +45,9 @@
                             <option value="{{ sk }}" {% if vuln.status == sk %}selected{% endif %}>Set to {{ sl }}</option>
                             {% endfor %}
                         </select>
-                        <textarea name="status_reason" id="statusReason" rows="2" placeholder="Reason (required for Risk Accepted / False Positive)" class="search-input h-auto py-2"></textarea>
+                        <textarea name="status_reason" id="statusReason" rows="2" placeholder="Reason or verification evidence (required for exceptions and verification)" class="search-input h-auto py-2"></textarea>
+                        <label class="text-xs text-outline">Exception review/expiry date (optional)</label>
+                        <input type="date" name="exception_expires" value="{{ vuln.exception_expires|date:'Y-m-d' }}" class="search-input">
                         <button type="submit" class="btn btn-ghost w-full">Update status</button>
                     </form>
                     <div class="grid grid-cols-2 gap-2 mt-2">
@@ -55,6 +57,25 @@
                 </div>
             </div>
 
+            <div class="bg-surface-container-low rounded-md border border-outline-variant p-4 mb-5">
+                <h5 class="card-title mb-3">Threat intelligence</h5>
+                <p class="text-sm">CISA KEV: {% if kev %}<strong>Listed</strong>{% else %}Not listed in the local catalogue{% endif %}</p>
+                <p class="text-sm">EPSS: {% if epss %}{{ epss.score|floatformat:4 }} (percentile {{ epss.percentile|default_if_none:"—" }}) · updated {{ epss.last_updated|date:"d M Y H:i" }}{% else %}Not available{% endif %}</p>
+            </div>
+            <div class="bg-surface-container-low rounded-md border border-outline-variant p-4 mb-5">
+                <h5 class="card-title mb-3">Ownership and remediation</h5>
+                <form action="{% url 'update_vulnerability_work' vuln.id %}" method="post" class="space-y-2">{% csrf_token %}
+                    <label class="text-xs">Assignee</label><select name="assignee" class="search-input"><option value="">Unassigned</option>{% for user in users %}<option value="{{ user.pk }}" {% if vuln.assignee_id == user.pk %}selected{% endif %}>{{ user.username }}</option>{% endfor %}</select>
+                    <label class="text-xs">Responsible team</label><input name="owner_team" value="{{ vuln.owner_team }}" class="search-input">
+                    <label class="text-xs">Due date</label><input type="date" name="due_date" value="{{ vuln.due_date|date:'Y-m-d' }}" class="search-input">
+                    <label class="text-xs">Remediation notes</label><textarea name="remediation_notes" class="search-input h-auto" rows="2">{{ vuln.remediation_notes }}</textarea>
+                    <label class="text-xs">Change or ticket URL</label><input type="url" name="remediation_reference" value="{{ vuln.remediation_reference }}" class="search-input">
+                    <label class="text-xs">Fixed version</label><input name="fixed_version" value="{{ vuln.fixed_version }}" class="search-input">
+                    <label class="text-xs">Verification evidence</label><textarea name="verification_notes" class="search-input h-auto" rows="2">{{ vuln.verification_notes }}</textarea>
+                    <button type="submit" class="btn btn-ghost">Save work details</button>
+                </form>
+                {% if vuln.exception_reason %}<p class="text-xs mt-3">Exception: {{ vuln.exception_reason }} · reviewer {{ vuln.exception_reviewer|default:"unknown" }} · review {{ vuln.exception_expires|date:"d M Y"|default:"not set" }}</p>{% endif %}
+            </div>
             <h5 class="text-[11px] font-semibold text-outline uppercase tracking-wide mb-2">Technical details</h5>
             <p class="text-on-surface-variant leading-relaxed text-sm">{{ vuln.description|linebreaksbr }}</p>
 
@@ -124,6 +145,11 @@
             </div>
         </div>
 
+        <div class="card"><div class="card-head"><h5 class="card-title">Sources and related findings</h5></div><div class="p-4 space-y-2">
+            {% for observation in vuln.observations.all %}<p class="text-xs">{{ observation.source }} · last seen {{ observation.last_seen|date:"d M Y H:i" }} · {{ observation.detection_count }} observations</p>{% empty %}<p class="text-xs">No observation history recorded yet.</p>{% endfor %}
+            {% for related in related_findings %}<div class="text-xs"><a class="text-primary" href="{% url 'vuln_detail' related.pk %}">{{ related.scan.get_scan_type_display }}: {{ related.name }}</a> · {{ related.get_status_display }}
+            <form method="post" action="{% url 'merge_vulnerabilities' vuln.pk related.pk %}" onsubmit="return confirm('Merge this finding into the current finding?');">{% csrf_token %}<button class="btn btn-ghost" type="submit">Merge into this finding</button></form></div>{% endfor %}
+        </div></div>
         {% if request.user.is_staff %}
         <div class="card">
             <div class="card-head"><h5 class="card-title">Wrike ticketing</h5></div>
@@ -170,7 +196,7 @@ function updateStatusReasonRequirement() {
     const select = document.getElementById('statusSelect');
     const reason = document.getElementById('statusReason');
     if (!select || !reason) return;
-    reason.required = ['risk_accepted', 'false_positive'].includes(select.value);
+    reason.required = ['risk_accepted', 'false_positive'].includes(select.value) || ('{{ vuln.status }}' === 'verification' && select.value === 'fixed');
 }
 function copyPoc() {
     const text = document.getElementById('pocText').innerText;

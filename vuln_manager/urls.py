@@ -46,6 +46,9 @@ urlpatterns = [
     ),
     path("register/", views.register_view, name="register"),
     path("logout/", views.logout_view, name="logout"),
+    path("coverage/", views.coverage, name="coverage"),
+    path("vulnerabilities/<int:pk>/merge/<int:other_pk>/", views.merge_vulnerabilities, name="merge_vulnerabilities"),
+    path("vulnerabilities/<int:pk>/work/", views.update_vulnerability_work, name="update_vulnerability_work"),
     path("hosts/", views.host_list, name="host_list"),
     path("hosts/add/", views.host_form, name="host_add"),
     path("hosts/<int:pk>/edit/", views.host_form, name="host_edit"),
@@ -187,6 +190,7 @@ urlpatterns = [
     path("users/<int:pk>/staff/", views.set_user_staff, name="set_user_staff"),
     path("users/<int:pk>/delete/", views.delete_user, name="delete_user"),
     path("settings/sla/", views.save_sla_settings, name="save_sla_settings"),
+    path("settings/reminders/", views.save_reminder_settings, name="save_reminder_settings"),
     path("users/register/toggle/", views.toggle_register, name="toggle_register"),
     path(
         "vulnerabilities/<int:pk>/wrike/create/",

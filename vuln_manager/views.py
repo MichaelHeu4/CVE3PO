@@ -31,6 +31,7 @@ from .models import (
     Software,
     Extension,
     SystemSettings,
+    CisaKevEntry, EpssEntry, FeedRun,
 )
 from .parser import nmap
 from .parser import nuclei
@@ -1532,9 +1533,9 @@ def scan_diff(request, pk):
 # they are loaded lazily (0 cards until the user clicks "Load"). Only the two
 # active columns are rendered eagerly. This keeps the initial DOM small instead
 # of rendering a card per vulnerability and running the browser out of memory.
-KANBAN_COLUMN_ORDER = ["open", "in_progress",
+KANBAN_COLUMN_ORDER = ["open", "in_progress", "verification",
                        "fixed", "risk_accepted", "false_positive"]
-KANBAN_EAGER_COLUMNS = {"open", "in_progress"}
+KANBAN_EAGER_COLUMNS = {"open", "in_progress", "verification"}
 KANBAN_PAGE_SIZE = 50
 
 
@@ -1650,6 +1651,24 @@ def update_vuln_status(request, pk):
                     content_type="text/plain; charset=utf-8",
                 )
             old_status = vuln.status
+            if old_status == "verification" and new_status == "fixed":
+                if not status_reason:
+                    return JsonResponse({"status": "error", "message": "verification_evidence_required"}, status=400) if is_json else HttpResponse("verification_evidence_required", status=400)
+                vuln.verification_notes = status_reason
+            if new_status in required_reason_statuses:
+                expires = request.POST.get("exception_expires", "") if not is_json else payload.get("exception_expires", "")
+                if expires:
+                    try:
+                        parsed = datetime.date.fromisoformat(expires)
+                        if parsed < now().date():
+                            raise ValueError()
+                    except ValueError:
+                        return HttpResponse("invalid_exception_expiry", status=400)
+                    vuln.exception_expires = parsed
+                else:
+                    vuln.exception_expires = None
+                vuln.exception_reason = status_reason
+                vuln.exception_reviewer = request.user
             vuln.status = new_status
             stamp_fixed_at(vuln)
             vuln.save()
@@ -1689,6 +1708,15 @@ def vuln_list(request):
     else:
         vulns_query = active_vulns.exclude(status="fixed")
 
+    work_filter = request.GET.get("work", "")
+    if work_filter == "mine":
+        vulns_query = vulns_query.filter(assignee=request.user, status__in=["open", "in_progress", "verification"])
+    elif work_filter == "overdue":
+        vulns_query = vulns_query.filter(due_date__lt=now().date(), status__in=["open", "in_progress", "verification"])
+    elif work_filter == "soon":
+        vulns_query = vulns_query.filter(due_date__gte=now().date(), due_date__lte=now().date()+timedelta(days=7), status__in=["open", "in_progress", "verification"])
+    elif work_filter == "exceptions":
+        vulns_query = Vulnerability.objects.filter(status__in=["risk_accepted", "false_positive"], exception_expires__lte=now().date()+timedelta(days=30))
     if severity:
         vulns_query = vulns_query.filter(severity=severity.lower())
 
@@ -1740,6 +1768,7 @@ def vuln_list(request):
         "vuln_manager/vuln_list.html",
         {
             "vulns": vulns,
+            "work_filter": work_filter,
             "severity": severity,
             "severity_choices": Vulnerability.SEVERITY_CHOICES,
             "status_filter": status_filter,
@@ -1790,6 +1819,10 @@ def vuln_detail(request, pk):
         "vuln_manager/vuln_detail.html",
         {
             "vuln": vuln,
+            "users": User.objects.filter(is_active=True).order_by("username"),
+            "kev": CisaKevEntry.objects.filter(cve_id__iexact=vuln.cve_id).first(),
+            "epss": EpssEntry.objects.filter(cve_id__iexact=vuln.cve_id).first(),
+            "related_findings": Vulnerability.objects.filter(cve_id__iexact=vuln.cve_id, host_id=vuln.host_id, software_id=vuln.software_id, port_id=vuln.port_id).exclude(pk=vuln.pk).select_related("scan") if (vuln.host_id or vuln.software_id) and vuln.cve_id.upper().startswith("CVE-") else [],
             "wrike_ready": wrike_ready,
             "affected_count": affected_count,
             "cluster_1": cluster_1,
@@ -1816,21 +1849,32 @@ def scan_import(request):
             scan_obj = Scan.objects.create(
                 scan_type=scan_type, raw_file=raw_file)
             file_path = scan_obj.raw_file.path
-            if scan_type == "NMAP":
-                nmap.parse_nmap_xml(file_path, scan_obj)
-            elif scan_type == "NUCLEI":
-                nuclei.parse_nuclei_jsonl(file_path, scan_obj)
-            elif scan_type == "OPENVAS":
-                openvas.parse_openvas_xml(file_path, scan_obj)
-            elif scan_type == "SEMGREP":
-                semgrep.parse_semgrep_json(
-                    file_path, scan_obj, software_obj=sw_obj)
-            elif scan_type == "OSV":
-                osvscanner.parse_osv_json(
-                    file_path, scan_obj, software_obj=sw_obj)
-            elif scan_type == "CYCLONEDX":
-                cyclonedx.parse_cyclonedx_json(
-                    file_path, scan_obj, software_obj=sw_obj)
+            run = FeedRun.objects.create(source=f"Import {scan_type}")
+            try:
+                if scan_type == "NMAP":
+                    nmap.parse_nmap_xml(file_path, scan_obj)
+                elif scan_type == "NUCLEI":
+                    nuclei.parse_nuclei_jsonl(file_path, scan_obj)
+                elif scan_type == "OPENVAS":
+                    openvas.parse_openvas_xml(file_path, scan_obj)
+                elif scan_type == "SEMGREP":
+                    semgrep.parse_semgrep_json(
+                        file_path, scan_obj, software_obj=sw_obj)
+                elif scan_type == "OSV":
+                    osvscanner.parse_osv_json(
+                        file_path, scan_obj, software_obj=sw_obj)
+                elif scan_type == "CYCLONEDX":
+                    cyclonedx.parse_cyclonedx_json(
+                        file_path, scan_obj, software_obj=sw_obj)
+                run.status = "success"
+                run.details = "Import completed; coverage depends on scanner scope."
+            except Exception as exc:
+                run.status = "failed"
+                run.details = str(exc)[:500]
+                raise
+            finally:
+                run.finished_at = now()
+                run.save(update_fields=["status", "details", "finished_at"])
             if sw_obj:
                 return redirect("software_detail", pk=sw_obj.id)
             return redirect("dashboard")
@@ -1854,7 +1898,15 @@ def delete_host(request, pk):
 def delete_scan(request, pk):
     if request.method == "POST":
         scan = get_object_or_404(Scan, pk=pk)
-        scan.delete()
+        with transaction.atomic():
+            # Preserve correlated findings when their currently selected scan is removed.
+            for vuln in scan.vulnerabilities.annotate(source_count=Count("observations")).filter(source_count__gt=1):
+                alternative = vuln.observations.exclude(scan_id=scan.pk).filter(scan__isnull=False).select_related("scan").first()
+                if not alternative:
+                    return HttpResponse("This scan is the last retained scan for a multi-source finding", status=409)
+                vuln.scan = alternative.scan
+                vuln.save(update_fields=["scan"])
+            scan.delete()
     return redirect("scan_list")
 
 
@@ -2117,6 +2169,9 @@ def user_admin(request):
             "registration_disabled": system_settings.disable_register,
             "sla_critical_days": system_settings.sla_critical_days,
             "sla_high_days": system_settings.sla_high_days,
+            "reminders_enabled": system_settings.reminders_enabled,
+            "escalation_recipients": system_settings.escalation_recipients,
+            "escalation_after_days": system_settings.escalation_after_days,
         },
     )
 
@@ -2759,3 +2814,111 @@ def enrich_single_vulnerability(request, pk):
     apply_cve_enrichment(vuln, get_cve_enrichment(vuln.cve_id), user=request.user)
 
     return redirect("vuln_detail", pk=pk)
+
+
+@login_required
+@require_POST
+def update_vulnerability_work(request, pk):
+    vuln = get_object_or_404(Vulnerability, pk=pk)
+    assignee = request.POST.get("assignee", "")
+    if assignee and not User.objects.filter(pk=assignee, is_active=True).exists():
+        return HttpResponse("invalid_assignee", status=400)
+    due = request.POST.get("due_date", "")
+    try:
+        due = datetime.date.fromisoformat(due) if due else None
+    except ValueError:
+        return HttpResponse("invalid_due_date", status=400)
+    reference = request.POST.get("remediation_reference", "").strip()
+    if reference:
+        from django.core.validators import URLValidator
+        try:
+            URLValidator(schemes=["http", "https"])(reference)
+        except ValidationError:
+            return HttpResponse("invalid_reference", status=400)
+    vuln.assignee_id = assignee or None
+    vuln.owner_team = request.POST.get("owner_team", "").strip()[:200]
+    vuln.due_date = due
+    vuln.remediation_notes = request.POST.get("remediation_notes", "").strip()
+    vuln.remediation_reference = reference
+    vuln.fixed_version = request.POST.get("fixed_version", "").strip()[:200]
+    vuln.verification_notes = request.POST.get("verification_notes", "").strip()
+    vuln.save(update_fields=["assignee", "owner_team", "due_date", "remediation_notes", "remediation_reference", "fixed_version", "verification_notes"])
+    log_vulnerability_event(vuln, "updated", user=request.user, details={"work_details_updated": True})
+    return redirect("vuln_detail", pk=pk)
+
+@login_required
+def coverage(request):
+    cutoff = now() - timedelta(days=1)
+    return render(request, "vuln_manager/coverage.html", {
+        "stale_agents": Host.objects.filter(last_agent_contact__lt=cutoff).order_by("last_agent_contact"),
+        "never_agents": Host.objects.filter(last_agent_contact__isnull=True).order_by("hostname"),
+        "unknown_versions": Software.objects.filter(Q(version__isnull=True) | Q(version="")).order_by("name"),
+        "recent_scans": Scan.objects.order_by("-uploaded_at")[:20],
+        "settings_obj": get_system_settings(),
+        "epss_latest": EpssEntry.objects.aggregate(latest=Max("last_updated"))["latest"],
+        "feed_runs": FeedRun.objects.order_by("-started_at")[:30],
+    })
+
+
+@login_required
+@require_POST
+def merge_vulnerabilities(request, pk, other_pk):
+    if pk == other_pk:
+        return HttpResponse("Cannot merge a finding with itself", status=400)
+    with transaction.atomic():
+        rows = list(Vulnerability.objects.select_for_update().filter(pk__in=[pk, other_pk]).order_by("pk"))
+        if len(rows) != 2:
+            return HttpResponseNotFound()
+        by_id = {v.pk: v for v in rows}
+        target, other = by_id[pk], by_id[other_pk]
+        if (not re.fullmatch(r"CVE-\d{4}-\d{4,}", target.cve_id, re.IGNORECASE)
+                or target.cve_id.upper() != other.cve_id.upper()
+                or not (target.host_id or target.software_id)
+                or (target.host_id, target.software_id, target.port_id) != (other.host_id, other.software_id, other.port_id)):
+            return HttpResponse("Findings do not have an identical CVE and target", status=400)
+        if target.status != other.status:
+            return HttpResponse("Statuses differ; review them before merging", status=400)
+        fields = ["assignee_id", "owner_team", "due_date", "exception_reason", "exception_expires", "exception_reviewer_id", "remediation_notes", "remediation_reference", "fixed_version", "verification_notes", "wrike_task_id", "wrike_task_url"]
+        for field in fields:
+            left, right = getattr(target, field), getattr(other, field)
+            if left and right and left != right:
+                return HttpResponse("Conflicting work details: " + field, status=400)
+            if not left and right:
+                setattr(target, field, right)
+        sources = set(target.observations.values_list("source", flat=True))
+        if sources.intersection(other.observations.values_list("source", flat=True)):
+            return HttpResponse("Both findings already contain the same source", status=400)
+        source_id = other.pk
+        summary = {"merged_finding_id": source_id, "name": other.name, "source": other.scan.scan_type, "first_seen": other.first_seen.isoformat(), "last_seen": other.last_seen.isoformat()}
+        other.observations.update(vulnerability=target)
+        other.audit_events.update(vulnerability=target)
+        target.first_seen = min(target.first_seen, other.first_seen)
+        target.last_seen = max(target.last_seen, other.last_seen)
+        target.detection_count += other.detection_count
+        target.save()
+        other.delete()
+        log_vulnerability_event(target, "updated", user=request.user, details=summary)
+    return redirect("vuln_detail", pk=pk)
+
+
+@login_required
+@require_POST
+def save_reminder_settings(request):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+    from django.core.validators import validate_email
+    addresses = [a.strip() for a in request.POST.get("escalation_recipients", "").replace(";", ",").split(",") if a.strip()]
+    try:
+        for address in addresses:
+            validate_email(address)
+        days = int(request.POST.get("escalation_after_days", "7"))
+        if days < 1 or days > 3650:
+            raise ValueError()
+    except (ValidationError, ValueError):
+        return HttpResponse("Invalid escalation configuration", status=400)
+    obj = get_system_settings()
+    obj.reminders_enabled = request.POST.get("reminders_enabled") == "on"
+    obj.escalation_recipients = ", ".join(addresses)
+    obj.escalation_after_days = days
+    obj.save(update_fields=["reminders_enabled", "escalation_recipients", "escalation_after_days"])
+    return redirect("user_admin")
