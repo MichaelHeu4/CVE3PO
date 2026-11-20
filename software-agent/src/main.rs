@@ -13,6 +13,12 @@ use std::process::Command;
 struct SoftwareEntry {
     name: String,
     version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    package_manager: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source_package: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source_version: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -441,14 +447,11 @@ fn collect_software() -> Result<Vec<SoftwareEntry>, Box<dyn Error>> {
 }
 
 fn dedup(entries: Vec<SoftwareEntry>) -> Vec<SoftwareEntry> {
-    let mut map: HashMap<String, String> = HashMap::new();
-    for e in entries {
-        map.entry(e.name).or_insert(e.version);
+    let mut map: HashMap<String, SoftwareEntry> = HashMap::new();
+    for entry in entries {
+        map.entry(entry.name.clone()).or_insert(entry);
     }
-    let mut out: Vec<SoftwareEntry> = map
-        .into_iter()
-        .map(|(name, version)| SoftwareEntry { name, version })
-        .collect();
+    let mut out: Vec<SoftwareEntry> = map.into_values().collect();
     out.sort_by(|a, b| a.name.cmp(&b.name));
     out
 }
@@ -503,6 +506,9 @@ fn parse_tab_separated(lines: &str) -> Vec<SoftwareEntry> {
             Some(SoftwareEntry {
                 name: name.to_string(),
                 version: version.to_string(),
+                package_manager: None,
+                source_package: None,
+                source_version: None,
             })
         })
         .collect()
@@ -578,6 +584,9 @@ fn parse_windows_entry(value: &Value) -> Option<SoftwareEntry> {
     Some(SoftwareEntry {
         name: name.to_string(),
         version: version.to_string(),
+        package_manager: None,
+        source_package: None,
+        source_version: None,
     })
 }
 
@@ -586,8 +595,21 @@ fn collect_with_dpkg() -> Result<Vec<SoftwareEntry>, Box<dyn Error>> {
     if !has_cmd("dpkg-query") {
         return Ok(Vec::new());
     }
-    let out = run_shell(r#"dpkg-query -W -f='${Package}\t${Version}\n'"#)?;
-    Ok(parse_tab_separated(&out))
+    let out = run_shell(r#"dpkg-query -W -f='${binary:Package}\t${Version}\t${source:Package}\t${source:Version}\n'"#)?;
+    Ok(out.lines().filter_map(|line| {
+        let mut parts = line.split('\t');
+        let name = parts.next()?.trim();
+        let version = parts.next()?.trim();
+        let source = parts.next().unwrap_or("").trim();
+        let source_version = parts.next().unwrap_or("").trim();
+        if name.is_empty() || version.is_empty() { return None; }
+        Some(SoftwareEntry {
+            name: name.to_string(), version: version.to_string(),
+            package_manager: Some("dpkg".to_string()),
+            source_package: if source.is_empty() { None } else { Some(source.to_string()) },
+            source_version: if source_version.is_empty() { None } else { Some(source_version.to_string()) },
+        })
+    }).collect())
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -621,6 +643,9 @@ fn collect_with_apk() -> Result<Vec<SoftwareEntry>, Box<dyn Error>> {
             Some(SoftwareEntry {
                 name: name.to_string(),
                 version: version.to_string(),
+                package_manager: None,
+                source_package: None,
+                source_version: None,
             })
         })
         .collect();
@@ -642,6 +667,9 @@ fn collect_with_pacman() -> Result<Vec<SoftwareEntry>, Box<dyn Error>> {
             Some(SoftwareEntry {
                 name: name.to_string(),
                 version: version.to_string(),
+                package_manager: None,
+                source_package: None,
+                source_version: None,
             })
         })
         .collect();
@@ -665,6 +693,9 @@ fn collect_with_snap() -> Result<Vec<SoftwareEntry>, Box<dyn Error>> {
             Some(SoftwareEntry {
                 name: cols[0].to_string(),
                 version: cols[1].to_string(),
+                package_manager: None,
+                source_package: None,
+                source_version: None,
             })
         })
         .collect();
@@ -689,6 +720,9 @@ fn collect_with_flatpak() -> Result<Vec<SoftwareEntry>, Box<dyn Error>> {
             Some(SoftwareEntry {
                 name: name.to_string(),
                 version: version.to_string(),
+                package_manager: None,
+                source_package: None,
+                source_version: None,
             })
         })
         .collect();

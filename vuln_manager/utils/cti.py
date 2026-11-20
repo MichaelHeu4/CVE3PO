@@ -16,7 +16,7 @@ from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.html import strip_tags
-from vuln_manager.models import CTIFeed, CTIItem, CTIMatch, Extension, NotificationEvent, Software, Vulnerability
+from vuln_manager.models import CTIFeed, CTIItem, CTIMatch, Extension, HostSoftwareRelationship, NotificationEvent, Software, Vulnerability
 
 logger = logging.getLogger(__name__)
 FEEDS = {
@@ -110,13 +110,22 @@ def suggest_matches(item):
             key=f"cti:{item.pk}:vuln:{vuln.pk}",
             defaults={"event_type": "cti_match", "title": item.title, "item": item, "vulnerability": vuln, "software_id": vuln.software_id},
         )
+    sources = {}
+    for software_id, source in HostSoftwareRelationship.objects.filter(package_manager="dpkg").exclude(source_package="").values_list("software_id", "source_package").iterator():
+        sources.setdefault(software_id, set()).add(source)
+    tracker = {}
+    if item.cves and sources:
+        from vuln_manager.utils.debian_cti import current_tracker_data
+        tracker = current_tracker_data()
     for software in Software.objects.all().iterator():
         name = (software.name or "").strip()
         by_name = len(name) >= 4 and bool(re.search(r"(?<!\w)" + re.escape(name) + r"(?!\w)", text, re.I))
-        if software.pk not in candidates and not by_name:
+        matched_source = next((source for source in sources.get(software.pk, ()) if len(source) >= 4 and re.search(r"(?<!\w)" + re.escape(source) + r"(?!\w)", text, re.I)), None)
+        tracker_source = next((source for source in sources.get(software.pk, ()) if any(cve in tracker.get(source, {}) for cve in item.cves)), None)
+        if software.pk not in candidates and not by_name and not matched_source and not tracker_source:
             continue
         matched_ids.append(software.pk)
-        reason = "CVE matches existing finding" if software.pk in candidates else f"Product name: {name}; version not verified"
+        reason = "CVE matches existing finding" if software.pk in candidates else (f"Debian tracker source package: {tracker_source}; version needs evaluation" if tracker_source else (f"Debian source package: {matched_source}; version needs evaluation" if matched_source else f"Product name: {name}; version needs evaluation"))
         match, created = CTIMatch.objects.get_or_create(item=item, software=software, defaults={"reason": reason})
         if not created and match.reason != reason:
             match.reason = reason
@@ -165,6 +174,9 @@ def fetch_feed(feed):
 def run_feeds():
     if not cti_enabled():
         return
+    if CTIItem.objects.exclude(cves=[]).exists() and HostSoftwareRelationship.objects.filter(package_manager="dpkg").exists():
+        from vuln_manager.utils.debian_cti import refresh_tracker
+        refresh_tracker()
     now = timezone.now()
     polled = False
     for feed in CTIFeed.objects.filter(enabled=True):

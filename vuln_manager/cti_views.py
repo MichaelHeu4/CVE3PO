@@ -5,7 +5,7 @@ from django.http import HttpResponse, HttpResponseForbidden, HttpResponseNotFoun
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from vuln_manager.models import CTIFeed, CTIItem, CTIMatch, NotificationDelivery, NotificationRule, Scan, Software, Vulnerability
+from vuln_manager.models import CTIFeed, CTIItem, CTIMatch, DebianTrackerSnapshot, NotificationDelivery, NotificationRule, Scan, Software, Vulnerability
 from vuln_manager.utils.audit import log_vulnerability_event
 from vuln_manager.utils.vuln_dedup import create_or_update_vulnerability
 from vuln_manager.utils.cti import cti_enabled, validate_feed_url
@@ -37,7 +37,13 @@ def inbox(request):
 def detail(request, pk):
     item = get_object_or_404(CTIItem.objects.select_related("source").prefetch_related("matches__software", "findings"), pk=pk)
     related = Vulnerability.objects.filter(cve_id__in=item.cves).select_related("host", "software")[:50]
-    return render(request, "vuln_manager/cti_detail.html", {"item": item, "related": related, "severity_choices": Vulnerability.SEVERITY_CHOICES})
+    from vuln_manager.utils.debian_cti import assess_host
+    snapshot = DebianTrackerSnapshot.objects.filter(pk=1).first() if item.cves and item.matches.exists() else None
+    assessments = []
+    for match in item.matches.all():
+        for host in match.software.hosts.all():
+            assessments.append({"software": match.software, **assess_host(item, match.software, host, snapshot)})
+    return render(request, "vuln_manager/cti_detail.html", {"item": item, "related": related, "assessments": assessments, "tracker_snapshot": snapshot, "severity_choices": Vulnerability.SEVERITY_CHOICES})
 
 
 @login_required

@@ -85,9 +85,16 @@ def _sync_inventory_payload(data):
 
                 sw_obj.hosts.add(host)
 
-                HostSoftwareRelationship.objects.get_or_create(
-                    host=host, software=sw_obj, source="agent"
+                relation, created = HostSoftwareRelationship.objects.get_or_create(
+                    host=host, software=sw_obj, defaults={"source": "agent"}
                 )
+                # Old agents omit these fields; do not keep stale package identity
+                # when a newer snapshot no longer supplies it.
+                relation.source = "agent"
+                relation.package_manager = str(sw_item.get("package_manager") or "")[:20]
+                relation.source_package = str(sw_item.get("source_package") or "")[:255]
+                relation.source_version = str(sw_item.get("source_version") or "")[:100]
+                relation.save(update_fields=["source", "package_manager", "source_package", "source_version"])
 
                 synced_sw_ids.add(sw_obj.id)
                 added_count += 1

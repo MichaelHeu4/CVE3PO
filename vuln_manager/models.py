@@ -250,6 +250,9 @@ class HostSoftwareRelationship(models.Model):
     host = models.ForeignKey(Host, on_delete=models.CASCADE)
     software = models.ForeignKey(Software, on_delete=models.CASCADE)
     source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default="manual")
+    package_manager = models.CharField(max_length=20, blank=True)
+    source_package = models.CharField(max_length=255, blank=True)
+    source_version = models.CharField(max_length=100, blank=True)
     installed_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -522,6 +525,13 @@ class CTIMatch(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["item", "software"], name="unique_cti_software")]
+
+
+class DebianTrackerSnapshot(models.Model):
+    last_attempt = models.DateTimeField(null=True, blank=True)
+    fetched_at = models.DateTimeField(null=True, blank=True)
+    error = models.CharField(max_length=500, blank=True)
+    data = models.JSONField(default=dict)
 
 
 class NotificationRule(models.Model):
