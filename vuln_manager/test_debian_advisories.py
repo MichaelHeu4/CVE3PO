@@ -91,7 +91,7 @@ class DebianAdvisoryTests(TestCase):
         response = self.client.get(reverse("cti_detail", args=[self.item.pk]))
         self.assertContains(response, "CVE-2026-42356")
         self.assertContains(response, "2.4.71-1~deb12u1")
-        self.assertContains(response, "Potentially affected")
+        self.assertContains(response, "Möglicherweise betroffen")
 
     def test_stale_or_incomplete_advisory_never_claims_fixed(self):
         self.snapshot.fetched_at = timezone.now() - timedelta(days=3)

@@ -89,13 +89,17 @@ def debian_release(os_name):
     return RELEASES.get(match.group(1)) if match else None
 
 
-def assess_host(item, software, host, snapshot):
+_RELATION_UNSET = object()
+
+
+def assess_host(item, software, host, snapshot, *, relation=_RELATION_UNSET):
     result = {"host": host, "status": "unknown", "label": "Unknown", "reason": "No reliable Debian assessment available", "source_url": "https://security-tracker.debian.org/tracker/", "checked_at": snapshot.fetched_at if snapshot else None}
     release = debian_release(host.operating_system)
     if not release:
         result["reason"] = "Debian release not identified; version not evaluated"
         return result
-    relation = HostSoftwareRelationship.objects.filter(host=host, software=software, package_manager="dpkg").first()
+    if relation is _RELATION_UNSET:
+        relation = HostSoftwareRelationship.objects.filter(host=host, software=software, package_manager="dpkg").first()
     if not relation or not relation.source_package or not relation.source_version:
         result["reason"] = "Debian source package/version missing from agent inventory"
         return result
