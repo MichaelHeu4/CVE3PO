@@ -8,6 +8,7 @@ use std::error::Error;
 use std::fs;
 use std::net::{IpAddr, UdpSocket};
 use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Serialize)]
 struct SoftwareEntry {
@@ -39,6 +40,10 @@ struct AgentPayload {
     // Wazuh/Shodan alert on any of these IPs maps back to this same asset.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     ip_addresses: Vec<String>,
+    // Only explicitly completed package-manager collections can confirm absence.
+    inventory_complete: bool,
+    snapshot_started_ms: u64,
+    complete_sources: Vec<String>,
     software: Vec<SoftwareEntry>,
 }
 
@@ -78,7 +83,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         })
         .filter(|v| !v.is_empty())
         .unwrap_or_else(|| detect_all_ips(&host_ip));
-    let software = collect_software()?;
+    // Record the start time so delayed snapshots cannot overtake newer ones.
+    let snapshot_started_ms = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
+    let (software, complete_sources) = collect_software()?;
     let payload = AgentPayload {
         host_ip,
         hostname,
@@ -86,6 +93,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         running_kernel,
         machine_id,
         ip_addresses,
+        inventory_complete: true,
+        snapshot_started_ms,
+        complete_sources,
         software,
     };
 
@@ -425,31 +435,50 @@ fn detect_running_kernel() -> Option<String> {
     None
 }
 
-fn collect_software() -> Result<Vec<SoftwareEntry>, Box<dyn Error>> {
+fn collect_software() -> Result<(Vec<SoftwareEntry>, Vec<String>), Box<dyn Error>> {
     let mut entries = Vec::new();
+    let mut complete_sources = Vec::new();
 
     #[cfg(target_os = "windows")]
     {
-        entries.extend(collect_with_windows_registry()?);
+        let mut items = collect_with_windows_registry()?;
+        for item in &mut items { item.package_manager = Some("windows".to_string()); }
+        entries.extend(items);
     }
 
     #[cfg(not(target_os = "windows"))]
     {
-        entries.extend(collect_with_dpkg()?);
-        entries.extend(collect_with_rpm()?);
-        entries.extend(collect_with_apk()?);
-        entries.extend(collect_with_pacman()?);
-        entries.extend(collect_with_snap()?);
-        entries.extend(collect_with_flatpak()?);
+        if has_cmd("dpkg-query") {
+            entries.extend(collect_with_dpkg()?);
+            complete_sources.push("dpkg".to_string());
+        }
+        if has_cmd("rpm") {
+            let mut items = collect_with_rpm()?;
+            for item in &mut items { item.package_manager = Some("rpm".to_string()); }
+            entries.extend(items);
+            complete_sources.push("rpm".to_string());
+        }
+        // These collectors remain inventory-only until completeness can be
+        // established for every supported platform and output format.
+        for (name, mut items) in [
+            ("apk", collect_with_apk()?), ("pacman", collect_with_pacman()?),
+            ("snap", collect_with_snap()?), ("flatpak", collect_with_flatpak()?),
+        ] {
+            for item in &mut items { item.package_manager = Some(name.to_string()); }
+            entries.extend(items);
+        }
     }
 
-    Ok(dedup(entries))
+    Ok((dedup(entries), complete_sources))
 }
 
 fn dedup(entries: Vec<SoftwareEntry>) -> Vec<SoftwareEntry> {
-    let mut map: HashMap<String, SoftwareEntry> = HashMap::new();
+    // Do not discard another package manager or version with the same name:
+    // a complete snapshot must retain every installed version.
+    let mut map: HashMap<(String, String, Option<String>), SoftwareEntry> = HashMap::new();
     for entry in entries {
-        map.entry(entry.name.clone()).or_insert(entry);
+        let key = (entry.name.clone(), entry.version.clone(), entry.package_manager.clone());
+        map.entry(key).or_insert(entry);
     }
     let mut out: Vec<SoftwareEntry> = map.into_values().collect();
     out.sort_by(|a, b| a.name.cmp(&b.name));
@@ -595,21 +624,27 @@ fn collect_with_dpkg() -> Result<Vec<SoftwareEntry>, Box<dyn Error>> {
     if !has_cmd("dpkg-query") {
         return Ok(Vec::new());
     }
-    let out = run_shell(r#"dpkg-query -W -f='${binary:Package}\t${Version}\t${source:Package}\t${source:Version}\n'"#)?;
-    Ok(out.lines().filter_map(|line| {
+    let out = run_shell(r#"dpkg-query -W -f='${binary:Package}\t${Version}\t${source:Package}\t${source:Version}\t${db:Status-Status}\n'"#)?;
+    let mut entries = Vec::new();
+    for line in out.lines() {
         let mut parts = line.split('\t');
-        let name = parts.next()?.trim();
-        let version = parts.next()?.trim();
+        let name = parts.next().unwrap_or("").trim();
+        let version = parts.next().unwrap_or("").trim();
         let source = parts.next().unwrap_or("").trim();
         let source_version = parts.next().unwrap_or("").trim();
-        if name.is_empty() || version.is_empty() { return None; }
-        Some(SoftwareEntry {
+        let status = parts.next().unwrap_or("").trim();
+        if status == "not-installed" || status == "config-files" { continue; }
+        if status != "installed" || name.is_empty() || version.is_empty() {
+            return Err("Incomplete dpkg package inventory".into());
+        }
+        entries.push(SoftwareEntry {
             name: name.to_string(), version: version.to_string(),
             package_manager: Some("dpkg".to_string()),
             source_package: if source.is_empty() { None } else { Some(source.to_string()) },
             source_version: if source_version.is_empty() { None } else { Some(source_version.to_string()) },
-        })
-    }).collect())
+        });
+    }
+    Ok(entries)
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -618,7 +653,11 @@ fn collect_with_rpm() -> Result<Vec<SoftwareEntry>, Box<dyn Error>> {
         return Ok(Vec::new());
     }
     let out = run_shell(r#"rpm -qa --qf '%{NAME}\t%{VERSION}-%{RELEASE}\n'"#)?;
-    Ok(parse_tab_separated(&out))
+    let entries = parse_tab_separated(&out);
+    if entries.len() != out.lines().filter(|line| !line.trim().is_empty()).count() {
+        return Err("Incomplete rpm package inventory".into());
+    }
+    Ok(entries)
 }
 
 #[cfg(not(target_os = "windows"))]

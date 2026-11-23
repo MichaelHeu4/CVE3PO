@@ -46,6 +46,11 @@
 <label class="block text-xs">Escalate after days overdue<input type="number" min="1" max="3650" name="escalation_after_days" value="{{ escalation_after_days }}" class="search-input"></label>
 <p class="text-xs">Requires SMTP and email addresses for assigned users. Each recipient receives at most one reminder per finding per day.</p>
 <button class="btn btn-primary">Save reminders</button></form></div>
+<div class="card mb-4"><div class="card-head"><h2 class="card-title">Inventory finding retention</h2></div>
+<form action="{% url 'save_inventory_retention' %}" method="post" class="p-4 space-y-3">{% csrf_token %}
+<label class="block text-xs">Delete inventory-closed findings after days<input class="search-input" type="number" name="inventory_retention_days" min="1" max="3650" value="{{ inventory_retention_days }}" required></label>
+<p class="text-xs text-outline">A finding is closed only after two complete snapshots confirm the absence. Retention starts when the finding is closed. Manually closed findings use their own retention settings.</p>
+<button class="btn btn-primary">Save retention</button></form></div>
 <div class="toolbar">
     <form method="GET" class="search">
         {% if sort.key %}<input type="hidden" name="sort" value="{{ sort.key }}"><input type="hidden" name="dir" value="{{ sort.dir }}">{% endif %}

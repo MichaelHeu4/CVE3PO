@@ -129,7 +129,7 @@ class CveDetailEnrichmentParsingTests(TestCase):
 
 
 class SoftwareDeletionStatusTests(TestCase):
-    def test_deleting_software_marks_open_vulnerabilities_fixed_and_audits(self):
+    def test_deleting_software_keeps_open_vulnerabilities_and_audits(self):
         scan = Scan.objects.create(scan_type="MANUAL")
         sw = Software.objects.create(name="nginx", version="1.25.5", vendor="nginx")
         vuln = Vulnerability.objects.create(
@@ -144,15 +144,13 @@ class SoftwareDeletionStatusTests(TestCase):
         Software.objects.filter(pk=sw.pk).delete()
 
         vuln.refresh_from_db()
-        self.assertEqual(vuln.status, "fixed")
+        self.assertEqual(vuln.status, "open")
         self.assertIsNone(vuln.software)
 
         event = VulnerabilityAuditEvent.objects.filter(
-            vulnerability=vuln, action="status_changed"
+            vulnerability=vuln, action="updated"
         ).latest("created_at")
-        self.assertEqual(event.actor, "software_delete:auto_close")
-        self.assertEqual(event.details.get("from_status"), "open")
-        self.assertEqual(event.details.get("to_status"), "fixed")
+        self.assertEqual(event.actor, "software_delete")
         self.assertEqual(event.details.get("reason"), "software_deleted")
 
     def test_deleting_software_keeps_risk_accepted_unchanged(self):
@@ -628,11 +626,11 @@ class AgentInventorySnapshotSyncTests(TestCase):
         response = self._post_inventory({"host_ip": "10.0.0.1", "software": []})
         self.assertEqual(response.status_code, 404)
 
-    def test_snapshot_removes_stale_agent_software_and_auto_fixes_linked_vuln(self):
+    def test_two_complete_snapshots_confirm_absent_software_and_fix_linked_vuln(self):
         host = Host.objects.create(ip_address="10.0.0.10")
         stale_sw = Software.objects.create(name="oldpkg", version="1.0.0", vendor="acme")
         stale_sw.hosts.add(host)
-        HostSoftwareRelationship.objects.create(host=host, software=stale_sw, source="agent")
+        HostSoftwareRelationship.objects.create(host=host, software=stale_sw, source="agent", package_manager="dpkg")
         vuln = Vulnerability.objects.create(
             scan=self.scan,
             software=stale_sw,
@@ -642,24 +640,34 @@ class AgentInventorySnapshotSyncTests(TestCase):
             name="Old software vuln",
         )
 
-        response = self._post_inventory(
-            {
+        snapshot_ms = int(timezone.now().timestamp() * 1000) - 1000
+        payload = {
                 "host_ip": "10.0.0.10",
                 "hostname": "srv-01",
                 "operating_system": "Ubuntu 24.04",
+                "inventory_complete": True,
+                "snapshot_started_ms": snapshot_ms,
+                "complete_sources": ["dpkg"],
                 "software": [
                     {
                         "name": "newpkg",
                         "version": "2.0.0",
                         "vendor": "acme",
                         "port": 443,
+                        "package_manager": "dpkg",
                     }
                 ],
             }
-        )
+        response = self._post_inventory(payload)
+        self.assertEqual(response.status_code, 200)
+        vuln.refresh_from_db()
+        self.assertEqual(vuln.status, "open")
+        payload["snapshot_started_ms"] += 1
+        response = self._post_inventory(payload)
         self.assertEqual(response.status_code, 200)
 
-        self.assertFalse(Software.objects.filter(pk=stale_sw.pk).exists())
+        self.assertTrue(Software.objects.filter(pk=stale_sw.pk).exists())
+        self.assertFalse(stale_sw.hosts.filter(pk=host.pk).exists())
         new_sw = Software.objects.get(name="newpkg", version="2.0.0", vendor="acme")
         self.assertTrue(new_sw.hosts.filter(pk=host.pk).exists())
         self.assertTrue(
@@ -674,13 +682,13 @@ class AgentInventorySnapshotSyncTests(TestCase):
 
         vuln.refresh_from_db()
         self.assertEqual(vuln.status, "fixed")
-        self.assertIsNone(vuln.software)
+        self.assertEqual(vuln.software, stale_sw)
         event = VulnerabilityAuditEvent.objects.filter(
             vulnerability=vuln,
             action="status_changed",
-            actor="software_delete:auto_close",
+            actor="inventory:confirmed_absence",
         ).latest("created_at")
-        self.assertEqual(event.details.get("reason"), "software_deleted")
+        self.assertEqual(event.details.get("reason"), "removed")
 
     @patch("vuln_manager.extensions.agent.threading.Thread")
     def test_large_inventory_payload_is_accepted_and_processed_async(self, thread_cls):

@@ -8,7 +8,6 @@ from django.dispatch import receiver
 from vuln_manager.models import Host, HostAddress, Software, Vulnerability
 from vuln_manager.utils.osv_auto import enrich_software_with_feeds
 from vuln_manager.utils.audit import log_vulnerability_event
-from vuln_manager.utils.retention import stamp_fixed_at
 
 # Bound how many enrichment threads run at once. A Wazuh batch can create many
 # new Software rows in one request; without a cap each would spawn its own
@@ -20,8 +19,11 @@ _ENRICHMENT_SLOTS = threading.Semaphore(2)
 def trigger_osv_auto_lookup(sender, instance, created, **kwargs):
     if not created:
         return
+    schedule_software_enrichment(instance.id)
 
-    software_id = instance.id
+
+def schedule_software_enrichment(software_id):
+    """Enrich a new or reintroduced software version after commit."""
 
     def _worker():
         # Manually spawned threads get their own DB connections that Django
@@ -58,26 +60,16 @@ def ensure_primary_host_address(sender, instance, **kwargs):
 
 
 @receiver(pre_delete, sender=Software)
-def mark_software_vulnerabilities_fixed(sender, instance, **kwargs):
+def audit_software_removal(sender, instance, **kwargs):
     if getattr(instance, "_skip_auto_close_vulnerabilities", False):
         return
 
-    active_vulns = Vulnerability.objects.filter(software=instance).exclude(
-        status__in=["fixed", "false_positive", "risk_accepted"]
-    )
-
-    for vuln in active_vulns:
-        old_status = vuln.status
-        vuln.status = "fixed"
-        stamp_fixed_at(vuln)
-        vuln.save(update_fields=["status", "fixed_at"])
+    for vuln in Vulnerability.objects.filter(software=instance):
         log_vulnerability_event(
             vuln,
-            "status_changed",
-            actor="software_delete:auto_close",
+            "updated",
+            actor="software_delete",
             details={
-                "from_status": old_status,
-                "to_status": "fixed",
                 "reason": "software_deleted",
                 "software_id": instance.id,
                 "software_name": instance.name,

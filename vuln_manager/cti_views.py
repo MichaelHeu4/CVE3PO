@@ -36,7 +36,13 @@ def inbox(request):
 @active_cti
 def detail(request, pk):
     item = get_object_or_404(CTIItem.objects.select_related("source").prefetch_related("matches__software", "findings"), pk=pk)
-    related = Vulnerability.objects.filter(cve_id__in=item.cves).select_related("host", "software")[:50]
+    include_fixed = request.GET.get("include_fixed") == "1"
+    related = Vulnerability.objects.filter(cve_id__in=item.cves).select_related("host", "software")
+    linked_findings = item.findings.all()
+    if not include_fixed:
+        related = related.exclude(status="fixed")
+        linked_findings = linked_findings.exclude(status="fixed")
+    related = related[:50]
     from vuln_manager.utils.debian_cti import assess_host
     from vuln_manager.utils.debian_advisories import advisory_ids
     ids = advisory_ids(item)
@@ -46,7 +52,7 @@ def detail(request, pk):
     for match in item.matches.all():
         for host in match.software.hosts.all():
             assessments.append({"software": match.software, **assess_host(item, match.software, host, snapshot)})
-    return render(request, "vuln_manager/cti_detail.html", {"item": item, "related": related, "assessments": assessments, "tracker_snapshot": snapshot, "advisory_ids": ids, "advisory_sources": advisory_sources, "severity_choices": Vulnerability.SEVERITY_CHOICES})
+    return render(request, "vuln_manager/cti_detail.html", {"item": item, "related": related, "linked_findings": linked_findings, "include_fixed": include_fixed, "assessments": assessments, "tracker_snapshot": snapshot, "advisory_ids": ids, "advisory_sources": advisory_sources, "severity_choices": Vulnerability.SEVERITY_CHOICES})
 
 
 @login_required

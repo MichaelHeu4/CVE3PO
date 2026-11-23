@@ -172,6 +172,7 @@ def run_fixed_vulnerability_cleanup():
     number of days are removed. Safe to call from any thread.
     """
     from django.utils import timezone
+    from django.db.models import F
     from datetime import timedelta
 
     from vuln_manager.models import SystemSettings, Vulnerability
@@ -183,7 +184,7 @@ def run_fixed_vulnerability_cleanup():
 
     stale_fixed = Vulnerability.objects.filter(
         status="fixed", fixed_at__isnull=False, fixed_at__lt=threshold
-    )
+    ).exclude(inventory_closed_at=F("fixed_at"))
     deleted = bulk_delete_fixed_vulnerabilities(
         stale_fixed, actor="auto_delete_fixed", tag="auto_fixed_retention"
     )
@@ -329,9 +330,37 @@ def reopen_expired_exceptions():
             log_vulnerability_event(vuln, "reopened", actor="exception_expiry", details={"from_status": old, "to_status": "open", "reason": "exception_expired"})
 
 
+def _tick_inventory_cleanup():
+    from django.db import connections
+    from django.db.models import Q
+    from django.utils import timezone
+    from datetime import timedelta
+    from vuln_manager.models import SystemSettings
+    from vuln_manager.utils.inventory_lifecycle import cleanup_inventory_findings
+
+    try:
+        SystemSettings.objects.get_or_create(pk=1)
+        claimed = SystemSettings.objects.filter(pk=1).filter(
+            Q(inventory_cleanup_last_run__isnull=True) | Q(inventory_cleanup_last_run__lt=timezone.now()-timedelta(days=1))
+        ).update(inventory_cleanup_last_run=timezone.now())
+        if claimed:
+            try:
+                count = cleanup_inventory_findings()
+                logger.info("Inventory retention removed %s findings", count)
+            except Exception:
+                SystemSettings.objects.filter(pk=1).update(inventory_cleanup_last_run=None)
+                raise
+    finally:
+        connections.close_all()
+
+
 def _scheduler_loop():
     time.sleep(_STARTUP_DELAY_SECONDS)
     while True:
+        try:
+            _tick_inventory_cleanup()
+        except Exception:
+            logger.exception("Inventory cleanup failed")
         try:
             from vuln_manager.utils.cti import run_feeds
             run_feeds()
