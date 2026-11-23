@@ -1,16 +1,21 @@
 """Debian source-package assessments using the Debian Security Tracker."""
 import re
+import json
 from datetime import timedelta
 
+import ijson
 import requests
-from django.db.models import Q
+from django.db.models import F, Q
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from vuln_manager.models import DebianTrackerSnapshot, HostSoftwareRelationship
 
 TRACKER_URL = "https://security-tracker.debian.org/tracker/data/json"
-MAX_SNAPSHOT_BYTES = 64 * 1024 * 1024
+# These bounds apply to the decompressed stream and the retained subset,
+# respectively. The upstream compressed Content-Length is not sufficient.
+MAX_SNAPSHOT_BYTES = 256 * 1024 * 1024
+MAX_RETAINED_BYTES = 64 * 1024 * 1024
 RELEASES = {"8": "jessie", "9": "stretch", "10": "buster", "11": "bullseye", "12": "bookworm", "13": "trixie", "14": "forky"}
 VERSION_RE = re.compile(r"^(?:(\d+):)?([0-9][A-Za-z0-9.+:~\-]*?)(?:-([A-Za-z0-9.+~]+))?$")
 _snapshot_cache = (None, {})
@@ -155,11 +160,76 @@ def assess_host(item, software, host, snapshot):
     return result
 
 
+class _BoundedReader:
+    def __init__(self, raw, limit):
+        self.raw = raw
+        self.limit = limit
+        self.total = 0
+
+    def read(self, size=-1):
+        # ijson normally requests bounded blocks. Do not allow read(-1) to
+        # allocate the entire remote dataset if a different backend is used.
+        if size < 0:
+            size = 65536
+        chunk = self.raw.read(size)
+        self.total += len(chunk)
+        if self.total > self.limit:
+            raise ValueError("Debian tracker snapshot exceeds size limit")
+        return chunk
+
+
+def _inventory_packages():
+    return sorted(set(HostSoftwareRelationship.objects.filter(package_manager="dpkg").exclude(source_package="").values_list("source_package", flat=True)))
+
+
+def _read_relevant_packages(response, packages):
+    """Stream the source-package index and retain only fields used by CTI."""
+    response.raw.decode_content = True
+    stream = _BoundedReader(response.raw, MAX_SNAPSHOT_BYTES)
+    wanted = set(packages)
+    result = {}
+    seen = 0
+    retained_bytes = 0
+    for name, entries in ijson.kvitems(stream, ""):
+        seen += 1
+        if not isinstance(entries, dict):
+            raise ValueError("Invalid Debian tracker package data")
+        if name not in wanted:
+            continue
+        compact = {}
+        for cve, details in entries.items():
+            releases = details.get("releases", {}) if isinstance(details, dict) else {}
+            if not isinstance(releases, dict):
+                releases = {}
+            compact[cve] = {"releases": {
+                release: {"status": entry.get("status"), "fixed_version": entry.get("fixed_version")}
+                for release, entry in releases.items() if isinstance(entry, dict)
+            }}
+        retained_bytes += len(json.dumps(compact, separators=(",", ":"), ensure_ascii=True).encode("utf-8"))
+        if retained_bytes > MAX_RETAINED_BYTES:
+            raise ValueError("Debian tracker inventory subset exceeds size limit")
+        result[name] = compact
+    if not seen:
+        raise ValueError("Invalid or empty Debian tracker snapshot")
+    return result
+
+
 def refresh_tracker():
-    """Keep the last valid snapshot; a failed fetch never means not affected."""
-    snapshot, _ = DebianTrackerSnapshot.objects.get_or_create(pk=1)
+    """Stream a bounded snapshot; preserve the last valid subset on failure."""
+    packages = _inventory_packages()
+    if not packages:
+        return
+    snapshot, _ = DebianTrackerSnapshot.objects.defer("data").get_or_create(pk=1)
     now = timezone.now()
-    claimed = DebianTrackerSnapshot.objects.filter(pk=snapshot.pk).filter(Q(last_attempt__isnull=True) | Q(last_attempt__lt=now-timedelta(hours=24))).update(last_attempt=now)
+    if (snapshot.fetched_at and snapshot.fetched_at >= now-timedelta(hours=24)
+            and sorted(snapshot.covered_packages or []) == packages):
+        return
+    # New packages trigger a refresh immediately after a successful run.
+    # Failures retry after an hour, and only one worker may claim a refresh.
+    claimed = DebianTrackerSnapshot.objects.filter(pk=snapshot.pk).filter(
+        Q(last_attempt__isnull=True) | Q(last_attempt__lt=now-timedelta(hours=1))
+        | Q(fetched_at__isnull=False, last_attempt__lte=F("fetched_at"))
+    ).update(last_attempt=now)
     if not claimed:
         return
     try:
@@ -167,15 +237,7 @@ def refresh_tracker():
             response.raise_for_status()
             if response.status_code != 200:
                 raise ValueError(f"Unexpected tracker status {response.status_code}")
-            content = bytearray()
-            for chunk in response.iter_content(65536):
-                content.extend(chunk)
-                if len(content) > MAX_SNAPSHOT_BYTES:
-                    raise ValueError("Debian tracker snapshot exceeds size limit")
-        import json
-        data = json.loads(content)
-        if not isinstance(data, dict) or not data:
-            raise ValueError("Invalid Debian tracker snapshot")
-        DebianTrackerSnapshot.objects.filter(pk=1).update(data=data, fetched_at=timezone.now(), error="")
+            data = _read_relevant_packages(response, packages)
+        DebianTrackerSnapshot.objects.filter(pk=1).update(data=data, covered_packages=packages, fetched_at=timezone.now(), error="")
     except Exception as exc:
         DebianTrackerSnapshot.objects.filter(pk=1).update(error=str(exc)[:500])

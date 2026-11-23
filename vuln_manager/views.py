@@ -2176,6 +2176,7 @@ def user_admin(request):
             "registration_disabled": system_settings.disable_register,
             "sla_critical_days": system_settings.sla_critical_days,
             "sla_high_days": system_settings.sla_high_days,
+            "inventory_retention_days": system_settings.inventory_retention_days,
             "reminders_enabled": system_settings.reminders_enabled,
             "escalation_recipients": system_settings.escalation_recipients,
             "escalation_after_days": system_settings.escalation_after_days,
@@ -2268,6 +2269,23 @@ def delete_user(request, pk):
     if target_user.is_superuser and User.objects.filter(is_staff=True).count() <= 1:
         return HttpResponseForbidden("cannot_delete_last_superuser")
     target_user.delete()
+    return redirect("user_admin")
+
+
+@login_required
+@require_POST
+def save_inventory_retention(request):
+    if not request.user.is_staff:
+        return HttpResponseForbidden("forbidden")
+    try:
+        days = int(request.POST.get("inventory_retention_days", ""))
+        if not 1 <= days <= 3650:
+            raise ValueError()
+    except ValueError:
+        return HttpResponse("invalid_inventory_retention", status=400)
+    settings_obj = get_system_settings()
+    settings_obj.inventory_retention_days = days
+    settings_obj.save(update_fields=["inventory_retention_days"])
     return redirect("user_admin")
 
 

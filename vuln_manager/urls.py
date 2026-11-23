@@ -205,6 +205,7 @@ urlpatterns = [
     path("users/<int:pk>/staff/", views.set_user_staff, name="set_user_staff"),
     path("users/<int:pk>/delete/", views.delete_user, name="delete_user"),
     path("settings/sla/", views.save_sla_settings, name="save_sla_settings"),
+    path("settings/inventory-retention/", views.save_inventory_retention, name="save_inventory_retention"),
     path("settings/reminders/", views.save_reminder_settings, name="save_reminder_settings"),
     path("users/register/toggle/", views.toggle_register, name="toggle_register"),
     path(

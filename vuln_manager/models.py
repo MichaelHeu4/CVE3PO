@@ -30,6 +30,8 @@ class SystemSettings(models.Model):
     disable_register = models.BooleanField(default=True)
     sla_critical_days = models.PositiveIntegerField(default=7)
     sla_high_days = models.PositiveIntegerField(default=30)
+    inventory_retention_days = models.PositiveIntegerField(default=90)
+    inventory_cleanup_last_run = models.DateTimeField(null=True, blank=True)
     reminders_enabled = models.BooleanField(default=False)
     escalation_recipients = models.TextField(blank=True)
     escalation_after_days = models.PositiveIntegerField(default=7)
@@ -136,6 +138,7 @@ class Host(models.Model):
     # "6.8.0-45-generic"). Optional for backwards compatibility with older agents.
     running_kernel = models.CharField(max_length=255, blank=True, null=True)
     last_agent_contact = models.DateTimeField(blank=True, null=True)
+    last_complete_inventory_ms = models.BigIntegerField(default=0)
     last_scanned = models.DateTimeField(auto_now=True)
     is_exposed = models.BooleanField(default=False)
     criticality = models.CharField(
@@ -253,6 +256,7 @@ class HostSoftwareRelationship(models.Model):
     package_manager = models.CharField(max_length=20, blank=True)
     source_package = models.CharField(max_length=255, blank=True)
     source_version = models.CharField(max_length=100, blank=True)
+    missing_snapshots = models.PositiveSmallIntegerField(default=0)
     installed_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -341,6 +345,7 @@ class Vulnerability(models.Model):
     # Set when the status transitions to "fixed", cleared when it leaves "fixed".
     # Drives the Auto-Delete-Fixed retention module.
     fixed_at = models.DateTimeField(blank=True, null=True)
+    inventory_closed_at = models.DateTimeField(blank=True, null=True)
     detection_count = models.PositiveIntegerField(default=1)
     assignee = models.ForeignKey("auth.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="assigned_vulnerabilities")
     owner_team = models.CharField(max_length=200, blank=True)
@@ -430,6 +435,17 @@ class VulnerabilityAuditEvent(models.Model):
     def __str__(self):
         target = self.vulnerability.cve_id if self.vulnerability else "deleted_vulnerability"
         return f"{self.action} - {target}"
+
+
+class InventoryFindingClosure(models.Model):
+    vulnerability = models.ForeignKey(Vulnerability, on_delete=models.CASCADE, related_name="inventory_closures")
+    host = models.ForeignKey(Host, null=True, on_delete=models.SET_NULL)
+    host_label = models.CharField(max_length=255)
+    software_name = models.CharField(max_length=255)
+    software_version = models.CharField(max_length=100, blank=True)
+    reason = models.CharField(max_length=30, choices=[("removed", "Uninstalled"), ("version_changed", "Version changed")])
+    closed_at = models.DateTimeField(default=timezone.now)
+    reopened_at = models.DateTimeField(null=True, blank=True)
 
 
 class CisaKevEntry(models.Model):
@@ -534,6 +550,7 @@ class DebianTrackerSnapshot(models.Model):
     fetched_at = models.DateTimeField(null=True, blank=True)
     error = models.CharField(max_length=500, blank=True)
     data = models.JSONField(default=dict)
+    covered_packages = models.JSONField(default=list, blank=True)
 
 
 class DebianAdvisorySnapshot(models.Model):
