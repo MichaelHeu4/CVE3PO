@@ -43,16 +43,14 @@ def detail(request, pk):
         related = related.exclude(status="fixed")
         linked_findings = linked_findings.exclude(status="fixed")
     related = related[:50]
-    from vuln_manager.utils.debian_cti import assess_host
     from vuln_manager.utils.debian_advisories import advisory_ids
+    from vuln_manager.utils.cti_assessments import assessment_groups
     ids = advisory_ids(item)
     advisory_sources = DebianAdvisorySnapshot.objects.filter(kind__in={value[:3] for value in ids}).only("kind", "fetched_at", "error")
     snapshot = DebianTrackerSnapshot.objects.filter(pk=1).first() if item.cves and item.matches.exists() else None
-    assessments = []
-    for match in item.matches.all():
-        for host in match.software.hosts.all():
-            assessments.append({"software": match.software, **assess_host(item, match.software, host, snapshot)})
-    return render(request, "vuln_manager/cti_detail.html", {"item": item, "related": related, "linked_findings": linked_findings, "include_fixed": include_fixed, "assessments": assessments, "tracker_snapshot": snapshot, "advisory_ids": ids, "advisory_sources": advisory_sources, "severity_choices": Vulnerability.SEVERITY_CHOICES})
+    context = {"item": item, "related": related, "linked_findings": linked_findings, "include_fixed": include_fixed, "tracker_snapshot": snapshot, "advisory_ids": ids, "advisory_sources": advisory_sources, "severity_choices": Vulnerability.SEVERITY_CHOICES}
+    context.update(assessment_groups(request, item, snapshot))
+    return render(request, "vuln_manager/cti_detail.html", context)
 
 
 @login_required
