@@ -128,7 +128,7 @@ class Host(models.Model):
     # /etc/machine-id or DMI UUID, Windows MachineGuid). It is the strongest
     # correlation key: a multi-homed server keeps ONE asset even when different
     # sources (agent, Wazuh, Shodan) observe it under different IPs. Optional and
-    # unique — NULL for hosts discovered by sources that cannot report it.
+    # unique â€” NULL for hosts discovered by sources that cannot report it.
     machine_id = models.CharField(
         max_length=255, unique=True, null=True, blank=True
     )
@@ -382,20 +382,20 @@ class Vulnerability(models.Model):
     @property
     def most_critical_host(self):
         """
-        Gibt das Host-Objekt mit der höchsten Kritikalität zurück.
-        Prüft den direkt verknüpften Host sowie alle Hosts der verknüpften Software.
+        Gibt das Host-Objekt mit der hÃ¶chsten KritikalitÃ¤t zurÃ¼ck.
+        PrÃ¼ft den direkt verknÃ¼pften Host sowie alle Hosts der verknÃ¼pften Software.
         """
         highest_weight = 0
         top_host = None
 
-        # 1. Den direkt verknüpften Host prüfen
+        # 1. Den direkt verknÃ¼pften Host prÃ¼fen
         if self.host and self.host.criticality:
             weight = CRITICALITY_WEIGHTS.get(self.host.criticality, 0)
             if weight > highest_weight:
                 highest_weight = weight
                 top_host = self.host
 
-        # 2. Die Hosts über die Software prüfen
+        # 2. Die Hosts Ã¼ber die Software prÃ¼fen
         if self.software:
             for host in self.software.hosts.all():
                 if host.criticality:
@@ -599,3 +599,27 @@ class NotificationDelivery(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["event", "rule", "channel"], name="unique_event_rule_channel")]
+
+class AITriageJob(models.Model):
+    """Progress for a host-initiated batch of software triage operations."""
+    STATUS_CHOICES = (("running", "Running"), ("completed", "Completed"),
+                      ("partial", "Completed with errors"), ("failed", "Failed"),
+                      ("interrupted", "Interrupted"))
+    kind = models.CharField(max_length=16, choices=(("software", "Host software"), ("findings", "Finding triage")), default="software")
+    heartbeat_at = models.DateTimeField(null=True, blank=True)
+    host = models.ForeignKey(Host, null=True, on_delete=models.SET_NULL, related_name="ai_triage_jobs")
+    host_label = models.CharField(max_length=255)
+    started_by = models.ForeignKey("auth.User", null=True, on_delete=models.SET_NULL)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="running")
+    total = models.PositiveIntegerField(default=0)
+    processed = models.PositiveIntegerField(default=0)
+    succeeded = models.PositiveIntegerField(default=0)
+    failed = models.PositiveIntegerField(default=0)
+    current_item = models.CharField(max_length=255, blank=True)
+    failed_items = models.JSONField(default=list, blank=True)
+    started_at = models.DateTimeField(default=timezone.now)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    @property
+    def progress_percent(self):
+        return round(self.processed * 100 / self.total) if self.total else 0

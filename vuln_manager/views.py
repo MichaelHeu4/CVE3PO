@@ -1,6 +1,7 @@
 from django.core.paginator import Paginator
 from django.views.decorators.http import require_POST
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.db import close_old_connections, transaction
 from django.db.models import (
     Count,
@@ -31,7 +32,7 @@ from .models import (
     Software,
     Extension,
     SystemSettings,
-    CisaKevEntry, EpssEntry, FeedRun, CTIFeed,
+    CisaKevEntry, EpssEntry, FeedRun, CTIFeed, AITriageJob,
 )
 from .parser import nmap
 from .parser import nuclei
@@ -53,6 +54,7 @@ from .utils import scheduler as scheduler_util
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import authenticate, login, logout
+from django.contrib import messages
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
@@ -253,113 +255,27 @@ def _get_sla_thresholds():
 
 
 def _build_dashboard_report_context():
-    all_vulns = Vulnerability.objects.exclude(
-        status__in=["fixed", "false_positive"])
-    # Evaluated several times below; aggregate once so the open-vuln table is
-    # scanned a single time instead of once per metric.
-    open_vuln_counts = all_vulns.aggregate(
-        total=Count("id"),
-        critical=Count("id", filter=Q(severity="critical")),
-        high=Count("id", filter=Q(severity="high")),
-    )
-    open_vuln_count = open_vuln_counts["total"]
-    critical_count = open_vuln_counts["critical"]
-    high_count = open_vuln_counts["high"]
-    host_count = Host.objects.count()
-    # Two correlated EXISTS subqueries replace an OR-join + DISTINCT over the
-    # whole host x vuln x software graph, which blew up on large datasets.
-    vuln_hosts_count = Host.objects.filter(
-        Exists(all_vulns.filter(host_id=OuterRef("pk")))
-        | Exists(all_vulns.filter(software__hosts__id=OuterRef("pk")))
-    ).count()
-    avg_proc_time_ms = (
-        Vulnerability.objects.filter(ai_proc_time__gt=0).aggregate(Avg("ai_proc_time"))[
-            "ai_proc_time__avg"
-        ]
-        or 0
-    )
-    resolved_count = Vulnerability.objects.filter(status="fixed").count()
-    total_non_fp = Vulnerability.objects.exclude(
-        status="false_positive").count()
-    remediation_rate = (
-        round((resolved_count / total_non_fp) * 100, 1) if total_non_fp else 0
-    )
-    exposure_rate = round((vuln_hosts_count / host_count)
-                          * 100, 1) if host_count else 0
-    # Compute avg/oldest open age in the DB instead of pulling every open
-    # vulnerability's first_seen into Python and looping.
-    reference_now = now()
-    age_expr = ExpressionWrapper(
-        reference_now - F("first_seen"), output_field=DurationField()
-    )
-    age_stats = all_vulns.filter(first_seen__isnull=False).aggregate(
-        avg_age=Avg(age_expr),
-        oldest_first_seen=Min("first_seen"),
-    )
-    avg_age = age_stats["avg_age"]
-    avg_open_age_days = (
-        round(max(avg_age.total_seconds(), 0) / 86400, 1) if avg_age else 0
-    )
-    oldest_first_seen = age_stats["oldest_first_seen"]
-    oldest_open_days = (
-        max((reference_now - oldest_first_seen).days, 0) if oldest_first_seen else 0
-    )
-    sla_critical_days, sla_high_days = _get_sla_thresholds()
-    sla_breach_count = all_vulns.filter(
-        Q(severity="critical", first_seen__lt=now() -
-          timedelta(days=sla_critical_days))
-        | Q(severity="high", first_seen__lt=now() - timedelta(days=sla_high_days))
-    ).count()
-    reopened_30d = VulnerabilityAuditEvent.objects.filter(
-        action="reopened", created_at__gte=now() - timedelta(days=30)
-    ).count()
+    from .dashboard_views import ACTIVE, dashboard_counts, exposed_host_data, ordered_findings
+    from django.utils import timezone
 
-    top_hosts = Host.objects.annotate(
-        num_vulns=Count(
-            "vulnerabilities",
-            filter=~Q(vulnerabilities__status__in=["fixed", "false_positive"]),
-        )
-    ).order_by("-num_vulns")[:5]
-    top_software = (
-        Software.objects.annotate(
-            num_vulns=Count(
-                "vulnerabilities",
-                filter=~Q(vulnerabilities__status__in=[
-                          "fixed", "false_positive"]),
-            )
-        )
-        .filter(num_vulns__gt=0)
-        .order_by("-num_vulns", "name")[:5]
-    )
-
-    recent_vulns = (
-        Vulnerability.objects.filter(severity__in=["critical", "high"])
-        .exclude(status__in=["fixed", "false_positive"])
-        .order_by("-id")[:5]
-    )
-
+    today = timezone.localdate()
+    active = Vulnerability.objects.filter(status__in=ACTIVE)
+    findings = list(ordered_findings(active))
+    for finding in findings:
+        hosts = {host.pk: host for host in finding.software.hosts.all()} if finding.software else {}
+        if finding.host_id:
+            hosts[finding.host_id] = finding.host
+        finding.dashboard_hosts = sorted(hosts.values(), key=lambda host: (str(host).lower(), host.pk))
+    hosts, host_counts = exposed_host_data(active, today)
+    attention_hosts = [host for host in hosts if host.needs_attention]
+    attention_hosts.sort(key=lambda host: (not bool(host.act_count), not bool(host.attend_count), -host.critical_count, -host.high_count, (host.hostname or host.ip_address).lower(), host.pk))
     return {
-        "report_date": now(),
-        "metrics": {
-            "host_count": host_count,
-            "vuln_count": open_vuln_count,
-            "critical_count": critical_count,
-            "high_count": high_count,
-            "vuln_hosts_count": vuln_hosts_count,
-            "mttt": round(avg_proc_time_ms / 1000, 2),
-            "resolved_count": resolved_count,
-            "remediation_rate": remediation_rate,
-            "exposure_rate": exposure_rate,
-            "avg_open_age_days": avg_open_age_days,
-            "oldest_open_days": oldest_open_days,
-            "sla_breach_count": sla_breach_count,
-            "sla_critical_days": sla_critical_days,
-            "sla_high_days": sla_high_days,
-            "reopened_30d": reopened_30d,
-        },
-        "top_hosts": top_hosts,
-        "top_software": top_software,
-        "recent_vulns": recent_vulns,
+        "report_date": timezone.localtime(),
+        "today": today,
+        "counts": dashboard_counts(active, today),
+        "host_counts": host_counts,
+        "findings": findings,
+        "attention_hosts": attention_hosts,
     }
 
 
@@ -595,7 +511,7 @@ def dashboard(request):
               * 100, 1) if host_count else 0
     )
 
-    # Host Cluster Metrics (criticality x exposure) — one aggregate each
+    # Host Cluster Metrics (criticality x exposure) â€” one aggregate each
     # instead of 4 + 4 separate COUNT queries.
     HIGH_CRIT = ["Critical", "High"]
     LOW_CRIT = ["Medium", "Low"]
@@ -641,16 +557,16 @@ def dashboard(request):
     ):
         host_vuln_pairs.add((row["software__hosts"], row["id"]))
 
-    # Security Score (0–100): a composite of three sub-scores so that both the
+    # Security Score (0â€“100): a composite of three sub-scores so that both the
     # remediation effort and the current open risk shape the result, and the
     # score degrades smoothly instead of collapsing to 0 under a large backlog
     # (the previous formula was an unbounded penalty that clamped to 0 as soon
     # as the open count grew, ignoring everything already fixed).
     #
-    #   R – remediation effectiveness: severity-weighted share of vulns already
+    #   R â€“ remediation effectiveness: severity-weighted share of vulns already
     #       fixed vs. still open. Credits patching work.
-    #   S – SLA compliance: share of open critical/high still within SLA.
-    #   E – open critical/high exposure per host, on an exponential decay curve
+    #   S â€“ SLA compliance: share of open critical/high still within SLA.
+    #   E â€“ open critical/high exposure per host, on an exponential decay curve
     #       so heavy backlogs bend the score down without a hard cliff. Each
     #       open crit/high is weighted by the host it sits on, so risk on
     #       internet-exposed / business-critical hosts counts more.
@@ -1043,6 +959,8 @@ def host_detail(request, pk):
             "criticality_choices": Host.CRITICALITY_CHOICES,
             "criticality_locked": netbox_ext.manages_host(host),
             "shodan_available": shodan_available,
+            "ai_triage_active": Extension.objects.filter(name_id="ai_triage", is_active=True).exists(),
+            "host_software_count": host.software_inventory.count(),
         },
     )
 
@@ -1916,7 +1834,17 @@ def delete_scan(request, pk):
 
 
 @login_required
+def ai_triage_jobs(request):
+    mark_interrupted_triage_jobs()
+    jobs = AITriageJob.objects.select_related("started_by").order_by("-started_at", "-id")[:10]
+    response = render(request, "vuln_manager/partials/_ai_triage_jobs.html", {"triage_jobs": jobs})
+    response["Cache-Control"] = "no-store"
+    return response
+
+
+@login_required
 def ki_dashboard(request):
+    mark_interrupted_triage_jobs()
     selected_vuln_id = request.GET.get("selected_vuln")
     selected_vuln = None
     if selected_vuln_id:
@@ -1961,11 +1889,12 @@ def ki_dashboard(request):
     if not ai_extension.is_active:
         model_label = "Disabled"
     elif provider == "azure":
-        model_label = f"Azure AI · {settings_obj.ai_azure_model or 'N/A'}"
+        model_label = f"Azure AI Â· {settings_obj.ai_azure_model or 'N/A'}"
     else:
-        model_label = f"OpenRouter · {settings_obj.ai_openrouter_model or 'N/A'}"
+        model_label = f"OpenRouter Â· {settings_obj.ai_openrouter_model or 'N/A'}"
     ai = {"model": model_label, "proc_time": round(avg_proc_time_ms / 1000, 2)}
     context = {
+        "triage_jobs": AITriageJob.objects.select_related("started_by").order_by("-started_at", "-id")[:10],
         "triaged_vulns": triaged_vulns,
         "all_vulns": all_vulns,
         "action_required": action_required,
@@ -2741,45 +2670,120 @@ def toggle_register(request):
     return redirect("user_admin")
 
 
-def run_triage_background():
-    # 1. Alle unbewerteten (tbd)
-    pending = Vulnerability.objects.exclude(
-        status__in=["fixed", "false_positive", "risk_accepted"]
-    ).filter(ai_result="tbd")
+TRIAGE_HEARTBEAT_SECONDS = 10
+TRIAGE_TIMEOUT_SECONDS = 120
 
-    for vuln in pending:
-        ai_triage.triage(vuln)
 
-    # 2. Bereits bewertete, bei denen sich die Asset-Kritikalität geändert hat
-    triaged = Vulnerability.objects.exclude(
-        status__in=["fixed", "false_positive", "risk_accepted"]
-    ).exclude(ai_result="tbd")
+def mark_interrupted_triage_jobs():
+    cutoff = now() - timedelta(seconds=TRIAGE_TIMEOUT_SECONDS)
+    AITriageJob.objects.filter(status="running").filter(
+        Q(heartbeat_at__lt=cutoff) | Q(heartbeat_at__isnull=True, started_at__lt=cutoff)
+    ).update(status="interrupted", finished_at=now(), current_item="")
 
-    for vuln in triaged:
-        current_crit = "Low"
-        if vuln.most_critical_host:
-            current_crit = vuln.most_critical_host.criticality or "Low"
 
-        if vuln.ai_last_criticality != current_crit:
-            logger.info(
-                "Re-triaging %s due to criticality change: %s -> %s",
-                vuln.cve_id,
-                vuln.ai_last_criticality,
-                current_crit,
-            )
-            ai_triage.triage(vuln)
+def _triage_heartbeat(job_id, stopped):
+    close_old_connections()
+    try:
+        while not stopped.wait(TRIAGE_HEARTBEAT_SECONDS):
+            try:
+                updated = AITriageJob.objects.filter(pk=job_id, status="running").update(heartbeat_at=now())
+                if not updated:
+                    break
+            except Exception:
+                logger.exception("Could not update heartbeat for AI triage job %s", job_id)
+    finally:
+        close_old_connections()
+
+
+def _process_triage_job(job_id, items, model, callback):
+    for item_id in items:
+        if not AITriageJob.objects.filter(pk=job_id, status="running").exists():
+            return
+        obj = model.objects.filter(pk=item_id).first()
+        label = str(obj)[:255] if obj else f"{model.__name__} #{item_id} (removed)"
+        if not AITriageJob.objects.filter(pk=job_id, status="running").update(current_item=label):
+            return
+        try:
+            if obj is None:
+                raise LookupError("Item removed before triage")
+            callback(obj)
+            success = True
+        except Exception:
+            logger.exception("AI triage job %s failed for %s %s", job_id, model.__name__, item_id)
+            success = False
+        job = AITriageJob.objects.get(pk=job_id)
+        if job.status != "running":
+            return
+        if not success:
+            job.failed_items.append(label)
+        updated = AITriageJob.objects.filter(pk=job_id, status="running").update(
+            processed=F("processed") + 1,
+            succeeded=F("succeeded") + int(success),
+            failed=F("failed") + int(not success),
+            failed_items=job.failed_items,
+        )
+        if not updated:
+            return
+    job = AITriageJob.objects.get(pk=job_id)
+    status = "completed" if not job.failed else ("partial" if job.succeeded else "failed")
+    AITriageJob.objects.filter(pk=job_id, status="running").update(status=status, current_item="", finished_at=now())
+
+
+def _run_tracked_triage(job_id, get_items, model, callback):
+    close_old_connections()
+    stopped = threading.Event()
+    heartbeat = threading.Thread(target=_triage_heartbeat, args=(job_id, stopped), daemon=True)
+    try:
+        heartbeat.start()
+        items = get_items()
+        if AITriageJob.objects.filter(pk=job_id, status="running").update(total=len(items), current_item=""):
+            _process_triage_job(job_id, items, model, callback)
+    except Exception:
+        logger.exception("AI triage job %s stopped unexpectedly", job_id)
+        AITriageJob.objects.filter(pk=job_id, status="running").update(status="failed", current_item="", finished_at=now())
+    finally:
+        stopped.set()
+        if heartbeat.is_alive():
+            heartbeat.join(timeout=2)
+        close_old_connections()
+
+
+def _finding_triage_ids():
+    active = Vulnerability.objects.exclude(status__in=["fixed", "false_positive", "risk_accepted"])
+    ids = []
+    for vuln in active.select_related("host", "software").prefetch_related("software__hosts").order_by("pk"):
+        if vuln.ai_result == "tbd":
+            ids.append(vuln.pk)
+        else:
+            host = vuln.most_critical_host
+            if vuln.ai_last_criticality != ((host.criticality or "Low") if host else "Low"):
+                ids.append(vuln.pk)
+    return ids
+
+
+def run_triage_background(job_id):
+    _run_tracked_triage(job_id, _finding_triage_ids, Vulnerability, ai_triage.triage)
+
+
+def _start_triage_job(job, target, args):
+    try:
+        worker = threading.Thread(target=target, args=(job.pk, *args), daemon=True)
+        worker.start()
+        return True
+    except Exception:
+        logger.exception("Could not start AI triage job %s", job.pk)
+        AITriageJob.objects.filter(pk=job.pk, status="running").update(status="failed", finished_at=now())
+        return False
 
 
 @login_required
+@require_POST
 def do_triage(request):
     ai_extension, _ = get_ai_triage_config()
     if not ai_extension.is_active:
         return HttpResponseForbidden("ai_triage_disabled")
-    if request.method == "POST":
-        thread = threading.Thread(target=run_triage_background)
-        thread.start()
-        logger.info("Background triage started")
-
+    job = AITriageJob.objects.create(kind="findings", host_label="General finding triage", started_by=request.user, heartbeat_at=now(), current_item="Identifying findings")
+    _start_triage_job(job, run_triage_background, ())
     return redirect("ai_dashboard")
 
 
@@ -2811,6 +2815,29 @@ def triage_single_vulnerability(request, pk):
         details={"source": "manual_retriage"},
     )
     return redirect("vuln_detail", pk=pk)
+
+
+def run_host_software_triage(job_id, software_ids):
+    _run_tracked_triage(job_id, lambda: software_ids, Software, ai_triage.triage_software)
+
+
+@login_required
+@require_POST
+def triage_host_software(request, pk):
+    host = get_object_or_404(Host, pk=pk)
+    ai_extension, _ = get_ai_triage_config()
+    if not ai_extension.is_active:
+        return HttpResponseForbidden("ai_triage_disabled")
+    software_ids = list(host.software_inventory.order_by("pk").values_list("pk", flat=True))
+    if software_ids:
+        job = AITriageJob.objects.create(host=host, host_label=str(host), started_by=request.user, total=len(software_ids), heartbeat_at=now())
+        if _start_triage_job(job, run_host_software_triage, (software_ids,)):
+            messages.success(request, f"AI triage started in the background for {len(software_ids)} software components. Track progress in AI Dashboard; results are shared across hosts.")
+        else:
+            messages.error(request, "AI triage could not be started. See AI Dashboard for details.")
+    else:
+        messages.info(request, "No software is assigned to this host.")
+    return redirect(f"{reverse('host_detail', args=[host.pk])}?tab=inventory")
 
 
 @login_required

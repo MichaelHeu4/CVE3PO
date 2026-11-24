@@ -36,6 +36,10 @@
     </div>
 </section>
 
+{% if messages %}
+<div class="mb-4" role="status">{% for message in messages %}<p class="card p-3 text-sm text-on-surface">{{ message }}</p>{% endfor %}</div>
+{% endif %}
+
 <!-- Tabs -->
 <div class="flex items-center gap-1 mb-4 p-1 rounded-md bg-surface-container border border-outline-variant w-fit">
     <a href="?tab=threats{% if show_mode %}&mode={{ show_mode }}{% endif %}{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="chip border-0 {% if active_tab == 'threats' %}chip-on{% endif %}"><span class="material-symbols-outlined text-sm mr-1">gpp_maybe</span> Threats</a>
@@ -103,7 +107,12 @@
         {% elif active_tab == 'inventory' %}
         <div class="card">
             <div class="card-head flex-wrap gap-2">
-                <h5 class="card-title">Software inventory</h5>
+                <div><h5 class="card-title">Software inventory</h5><p class="text-[11px] text-outline mt-1">AI triage covers all {{ host_software_count }} components on this host, including those outside the current filter. Results are shared across hosts.</p></div>
+                {% if ai_triage_active %}
+                <form action="{% url 'triage_host_software' host.id %}" method="post">
+                    {% csrf_token %}<button type="submit" class="btn btn-subtle" {% if not host_software_count %}disabled{% endif %}><span class="material-symbols-outlined">psychology</span> Triage all host software</button>
+                </form>
+                {% else %}<p class="text-[11px] text-outline">AI triage is disabled. <a class="text-primary" href="{% url 'extensions' %}">Configure module</a></p>{% endif %}
                 <form method="GET" class="search w-full md:w-80">
                     <input type="hidden" name="tab" value="inventory">
                     <span class="material-symbols-outlined search-icon">search</span>

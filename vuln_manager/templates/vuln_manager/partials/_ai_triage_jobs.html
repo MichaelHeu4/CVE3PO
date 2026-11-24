@@ -1,0 +1,19 @@
+<div class="card">
+    <div class="card-head"><div><h3 class="card-title">AI triage runs</h3><p class="card-note mt-0.5">Latest 10 runs · progress counts findings or software components</p></div><span class="text-[11px] text-outline">Updates every 5 seconds</span></div>
+    <div class="divide-y divide-outline-variant">
+    {% for job in triage_jobs %}
+        <div class="p-4">
+            <div class="flex flex-wrap justify-between items-start gap-3">
+                <div><div class="flex items-center gap-2"><span class="font-semibold text-sm text-on-surface">{{ job.host_label }}</span><span class="text-[11px] text-outline">{{ job.get_kind_display }}</span><span class="badge-soft {% if job.status == 'completed' %}!text-primary{% elif job.status == 'failed' or job.status == 'partial' or job.status == 'interrupted' %}!text-error{% else %}!text-tertiary{% endif %}">{{ job.get_status_display }}</span></div><p class="text-[11px] text-outline mt-1">Started {{ job.started_at|date:'Y-m-d H:i:s' }}{% if job.started_by %} · {{ job.started_by }}{% endif %}{% if job.finished_at %} · Finished {{ job.finished_at|date:'Y-m-d H:i:s' }}{% endif %}</p></div>
+                <div class="text-right"><p class="font-semibold text-sm text-on-surface tabular-nums">{{ job.processed }} / {{ job.total }}</p><p class="text-[11px] text-outline">{{ job.succeeded }} successful · {{ job.failed }} failed</p></div>
+            </div>
+            <div class="h-1.5 mt-3 rounded-full bg-surface-container-highest overflow-hidden" role="progressbar" aria-label="{{ job.host_label }} progress" aria-valuenow="{{ job.processed }}" aria-valuemin="0" aria-valuemax="{{ job.total }}"><div class="h-full bg-primary rounded-full" style="width: {{ job.progress_percent }}%"></div></div>
+            {% if job.status == 'interrupted' %}<p class="text-[11px] text-error mt-2">This run stopped reporting progress. Start a new run to continue.</p>{% endif %}
+            {% if job.current_item %}<p class="text-[11px] text-outline mt-2">Processing: {{ job.current_item }}</p>{% endif %}
+            {% if job.failed_items %}<details class="mt-2 text-[11px] text-on-surface-variant"><summary class="cursor-pointer text-error">Show failed items</summary><ul class="mt-1">{% for item in job.failed_items %}<li>{{ item }}</li>{% endfor %}</ul><p class="mt-1 text-outline">See server logs for error details.</p></details>{% endif %}
+            {% if job.status == 'failed' and not job.failed_items %}<p class="text-[11px] text-error mt-2">The run could not finish. See server logs for details.</p>{% endif %}
+        </div>
+    {% empty %}<p class="p-4 text-xs text-outline">No tracked triage runs yet. Start finding triage here or software triage from a host inventory.</p>{% endfor %}
+    </div>
+    <p class="px-4 pb-3 text-[11px] text-outline">Software progress includes its associated finding triage. Runs without a heartbeat for two minutes are marked interrupted; they do not resume automatically.</p>
+</div>
