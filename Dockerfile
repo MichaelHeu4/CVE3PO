@@ -1,6 +1,7 @@
 FROM rust:1.87-slim AS agent-builder
 RUN apt-get update && apt-get install -y --no-install-recommends \
     musl-tools \
+    gcc-mingw-w64-x86-64 \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
@@ -8,12 +9,15 @@ WORKDIR /build/software-agent
 COPY software-agent/Cargo.toml software-agent/Cargo.lock ./
 COPY software-agent/src ./src
 
-RUN rustup target add x86_64-unknown-linux-musl
-RUN cargo build --release --target x86_64-unknown-linux-musl
+RUN rustup target add x86_64-unknown-linux-musl x86_64-pc-windows-gnu
+RUN cargo build --locked --release --target x86_64-unknown-linux-musl \
+    && cargo build --locked --release --target x86_64-pc-windows-gnu
 RUN mkdir -p /out \
     && cp /build/software-agent/target/x86_64-unknown-linux-musl/release/software-agent /out/cve3po-agent-linux-amd64 \
     && chmod +x /out/cve3po-agent-linux-amd64 \
-    && sha256sum /out/cve3po-agent-linux-amd64 | awk '{print $1 "  cve3po-agent-linux-amd64"}' > /out/cve3po-agent-linux-amd64.sha256
+    && sha256sum /out/cve3po-agent-linux-amd64 | awk '{print $1 "  cve3po-agent-linux-amd64"}' > /out/cve3po-agent-linux-amd64.sha256 \
+    && cp /build/software-agent/target/x86_64-pc-windows-gnu/release/software-agent.exe /out/cve3po-agent-windows-amd64.exe \
+    && sha256sum /out/cve3po-agent-windows-amd64.exe | awk '{print $1 "  cve3po-agent-windows-amd64.exe"}' > /out/cve3po-agent-windows-amd64.exe.sha256
 
 FROM python:3.13-slim AS builder
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -55,6 +59,8 @@ RUN mkdir -p /app/data && chown -R appuser:appuser /app/data
 COPY --chown=appuser:appuser . .
 COPY --from=agent-builder /out/cve3po-agent-linux-amd64 /app/software-agent/cve3po-agent-linux-amd64
 COPY --from=agent-builder /out/cve3po-agent-linux-amd64.sha256 /app/software-agent/cve3po-agent-linux-amd64.sha256
+COPY --from=agent-builder /out/cve3po-agent-windows-amd64.exe /app/software-agent/cve3po-agent-windows-amd64.exe
+COPY --from=agent-builder /out/cve3po-agent-windows-amd64.exe.sha256 /app/software-agent/cve3po-agent-windows-amd64.exe.sha256
 # Freshly compiled stylesheet overwrites any stale committed copy.
 COPY --from=css-builder --chown=appuser:appuser /build/vuln_manager/static/vuln_manager/css/app.css /app/vuln_manager/static/vuln_manager/css/app.css
 

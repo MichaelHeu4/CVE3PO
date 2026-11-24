@@ -85,6 +85,8 @@ AGENT_PUBLIC_FILES = {
     "agent.env.example": "agent.env.example",
     "cve3po-agent-linux-amd64": "cve3po-agent-linux-amd64",
     "cve3po-agent-linux-amd64.sha256": "cve3po-agent-linux-amd64.sha256",
+    "cve3po-agent-windows-amd64.exe": "cve3po-agent-windows-amd64.exe",
+    "cve3po-agent-windows-amd64.exe.sha256": "cve3po-agent-windows-amd64.exe.sha256",
 }
 
 # Wazuh integration scripts that can be downloaded from the module config.
@@ -407,6 +409,9 @@ def agent_install_guide(request):
             "install_script_url": install_script_url,
             "binary_url": binary_url,
             "sha256_url": sha256_url,
+            "windows_binary_url": f"{base_url}/agent/latest/cve3po-agent-windows-amd64.exe",
+            "windows_sha256_url": f"{base_url}/agent/latest/cve3po-agent-windows-amd64.exe.sha256",
+            "agent_config_url": f"{base_url}/agent/latest/agent.env.example",
             "api_url": api_url,
             "agent_hosts": agent_hosts,
         },

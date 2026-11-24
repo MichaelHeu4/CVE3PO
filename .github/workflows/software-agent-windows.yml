@@ -1,0 +1,46 @@
+name: Build Windows software agent
+
+on:
+  push:
+    branches: [main]
+    paths: ["software-agent/**", ".github/workflows/software-agent-windows.yml"]
+  pull_request:
+    paths: ["software-agent/**", ".github/workflows/software-agent-windows.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: software-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Test and build
+        run: |
+          cargo test --locked
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo build --release --locked
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Check Windows inventory
+        run: |
+          $env:SOFTWARE_API_URL = 'https://example.com/inventory/'
+          $env:DRY_RUN = 'true'
+          $inventory = & ./target/release/software-agent.exe | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or -not $inventory.hostname -or -not $inventory.operating_system -or @($inventory.software).Count -eq 0) { throw 'Windows inventory check failed' }
+      - name: Prepare download
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item target/release/software-agent.exe dist/cve3po-agent-windows-amd64.exe
+          $hash = (Get-FileHash dist/cve3po-agent-windows-amd64.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText("$PWD/dist/cve3po-agent-windows-amd64.exe.sha256", "$hash  cve3po-agent-windows-amd64.exe`n")
+          Copy-Item agent.env.example dist/agent.env.example
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cve3po-agent-windows-amd64
+          path: software-agent/dist/*
+          if-no-files-found: error

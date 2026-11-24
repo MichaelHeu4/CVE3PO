@@ -48,8 +48,7 @@ struct AgentPayload {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let config_path = env::var("SOFTWARE_AGENT_CONFIG")
-        .unwrap_or_else(|_| "/etc/cve3po-agent/agent.env".to_string());
+    let config_path = env::var("SOFTWARE_AGENT_CONFIG").unwrap_or_else(|_| default_config_path());
     let file_config = load_env_file(&config_path)?;
 
     let api_url = get_required_setting("SOFTWARE_API_URL", &file_config)?;
@@ -123,6 +122,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[cfg(target_os = "windows")]
+fn default_config_path() -> String {
+    let program_data = env::var("PROGRAMDATA").unwrap_or_else(|_| r"C:\ProgramData".to_string());
+    format!(r"{}\CVE3PO\agent.env", program_data)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn default_config_path() -> String {
+    "/etc/cve3po-agent/agent.env".to_string()
+}
+
 fn get_setting(key: &str, file_config: &HashMap<String, String>) -> Option<String> {
     env::var(key).ok().or_else(|| file_config.get(key).cloned())
 }
@@ -150,7 +160,7 @@ fn load_env_file(path: &str) -> Result<HashMap<String, String>, Box<dyn Error>> 
         Err(err) => return Err(err.into()),
     };
 
-    for line in content.lines() {
+    for line in content.trim_start_matches('\u{feff}').lines() {
         let trimmed = line.trim();
         if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;
@@ -546,10 +556,11 @@ fn parse_tab_separated(lines: &str) -> Vec<SoftwareEntry> {
 #[cfg(target_os = "windows")]
 fn collect_with_windows_registry() -> Result<Vec<SoftwareEntry>, Box<dyn Error>> {
     if !has_cmd("powershell") {
-        return Ok(Vec::new());
+        return Err("PowerShell is required to enumerate Windows software".into());
     }
 
     let script = r#"
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
 $paths=@(
   'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
   'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
