@@ -2,6 +2,8 @@ from unittest.mock import patch
 
 import json
 import io
+import tempfile
+from pathlib import Path
 from datetime import timedelta
 
 from django.contrib.auth.models import User
@@ -402,6 +404,19 @@ class AgentPublicDownloadsTests(TestCase):
         response = self.client.get(reverse("agent_latest_file", args=["not-found.sh"]))
         self.assertEqual(response.status_code, 404)
 
+    def test_windows_agent_files_are_publicly_downloadable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            agent_dir = Path(directory) / "software-agent"
+            agent_dir.mkdir()
+            with override_settings(BASE_DIR=directory):
+                for filename in ("cve3po-agent-windows-amd64.exe", "cve3po-agent-windows-amd64.exe.sha256"):
+                    with self.subTest(filename=filename):
+                        (agent_dir / filename).write_bytes(b"test download")
+                        response = self.client.get(reverse("agent_latest_file", args=[filename]))
+                        self.assertEqual(response.status_code, 200)
+                        self.assertIn(f'attachment; filename="{filename}"', response["Content-Disposition"])
+                        self.assertEqual(b"".join(response.streaming_content), b"test download")
+
     def test_downloads_blocked_when_agent_module_disabled(self):
         self.agent_extension.is_active = False
         self.agent_extension.save(update_fields=["is_active"])
@@ -430,6 +445,10 @@ class AgentInstallGuideTests(TestCase):
         response = self.client.get(reverse("agent_install_guide"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "/agent/latest/install.sh")
+        self.assertContains(response, "/agent/latest/cve3po-agent-windows-amd64.exe")
+        self.assertContains(response, "/agent/latest/cve3po-agent-windows-amd64.exe.sha256")
+        self.assertContains(response, "/agent/latest/agent.env.example")
+        self.assertContains(response, "Register-ScheduledTask")
         self.assertContains(response, "/api/inventory/update/")
         self.assertContains(response, "10.88.0.10")
 

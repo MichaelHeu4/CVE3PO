@@ -12,6 +12,7 @@
         </div>
     </section>
 
+    <h2 class="card-title">Linux</h2>
     <div class="card p-5">
         <h2 class="card-title mb-3">1. Download installer</h2>
         <pre class="bg-surface-container-low border border-outline-variant rounded-md p-3 text-xs text-on-surface overflow-x-auto m-0"><code class="font-mono">wget -O install.sh {{ install_script_url }}</code></pre>
@@ -32,6 +33,40 @@
         <pre class="bg-surface-container-low border border-outline-variant rounded-md p-3 text-xs text-on-surface overflow-x-auto m-0"><code class="font-mono">sudo systemctl status cve3po-agent.timer --no-pager
 sudo systemctl status cve3po-agent.service --no-pager
 sudo journalctl -u cve3po-agent -n 100 --no-pager</code></pre>
+    </div>
+
+    <h2 class="card-title">Windows (64-bit)</h2>
+    <div class="card p-5">
+        <h3 class="card-title mb-3">1. Download and verify</h3>
+        <p class="text-sm mb-3">Open PowerShell as administrator. The download is verified before installation.</p>
+        <pre class="bg-surface-container-low border border-outline-variant rounded-md p-3 text-xs text-on-surface overflow-x-auto m-0"><code class="font-mono">$dir = Join-Path $env:ProgramData 'CVE3PO'
+New-Item -ItemType Directory -Force $dir | Out-Null
+$exe = Join-Path $dir 'cve3po-agent-windows-amd64.exe'
+$download = Join-Path $dir 'cve3po-agent-windows-amd64.exe.download'
+Invoke-WebRequest -Uri '{{ windows_binary_url }}' -OutFile $download
+$expected = ((Invoke-WebRequest -Uri '{{ windows_sha256_url }}' -UseBasicParsing).Content -split '\s+')[0]
+if ((Get-FileHash $download -Algorithm SHA256).Hash -ne $expected) { Remove-Item $download; throw 'Checksum mismatch' }
+Move-Item -Force $download $exe
+Invoke-WebRequest -Uri '{{ agent_config_url }}' -OutFile (Join-Path $dir 'agent.env.example')</code></pre>
+    </div>
+    <div class="card p-5">
+        <h3 class="card-title mb-3">2. Configure and test</h3>
+        <p class="text-sm mb-3">Copy the example to <code>agent.env</code> for a new installation. Set <code>SOFTWARE_API_URL</code> to <code>{{ api_url }}</code> and enter the token shown in <strong>Modules → CVE3PO Agent</strong>. Save as UTF-8 and restrict access to the file to administrators and the account running the agent.</p>
+        <pre class="bg-surface-container-low border border-outline-variant rounded-md p-3 text-xs text-on-surface overflow-x-auto m-0"><code class="font-mono">$config = Join-Path $dir 'agent.env'
+if (-not (Test-Path $config)) { Copy-Item (Join-Path $dir 'agent.env.example') $config }
+notepad $config
+$env:DRY_RUN = 'true'
+&amp; $exe
+Remove-Item Env:DRY_RUN</code></pre>
+    </div>
+    <div class="card p-5">
+        <h3 class="card-title mb-3">3. Schedule every 15 minutes</h3>
+        <pre class="bg-surface-container-low border border-outline-variant rounded-md p-3 text-xs text-on-surface overflow-x-auto m-0"><code class="font-mono">$action = New-ScheduledTaskAction -Execute $exe
+$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 15)
+Register-ScheduledTask -TaskName 'CVE3PO Agent' -Action $action -Trigger $trigger -User 'SYSTEM' -RunLevel Highest
+Start-ScheduledTask -TaskName 'CVE3PO Agent'
+Get-ScheduledTaskInfo -TaskName 'CVE3PO Agent'</code></pre>
+        <p class="text-[11px] text-outline mt-3">The SYSTEM account sees machine-wide software and its own per-user registry, not every user's applications. Windows inventory does not automatically confirm removals.</p>
     </div>
 
     <div class="table-wrap">

@@ -151,3 +151,8 @@ Wenn das Agent-Modul aktiv ist, sind die Agent-Dateien verfügbar unter:
 - `/agent/latest/install.sh`
 - `/agent/latest/cve3po-agent-linux-amd64`
 - `/agent/latest/cve3po-agent-linux-amd64.sha256`
+- `/agent/latest/cve3po-agent-windows-amd64.exe`
+- `/agent/latest/cve3po-agent-windows-amd64.exe.sha256`
+- `/agent/latest/agent.env.example`
+
+Das Docker-Image baut beide Agenten beim Image-Build. Die Agent-Installationsseite in der Anwendung enthält die Installationsschritte für Linux und Windows.
