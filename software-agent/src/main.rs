@@ -497,10 +497,10 @@ fn dedup(entries: Vec<SoftwareEntry>) -> Vec<SoftwareEntry> {
 
 #[cfg(target_os = "windows")]
 fn has_cmd(name: &str) -> bool {
-    Command::new("where")
+    Command::new("where.exe")
         .arg(name)
-        .status()
-        .map(|s| s.success())
+        .output()
+        .map(|output| output.status.success())
         .unwrap_or(false)
 }
 
