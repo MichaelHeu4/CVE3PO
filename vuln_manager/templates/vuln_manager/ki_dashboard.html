@@ -6,9 +6,23 @@
 <section class="page-header">
     <div>
         <h1 class="page-title">AI triage</h1>
-        <p class="page-subtitle">AI-assisted prioritization of findings by impact and confidence.</p>
+        <p class="page-subtitle">Review AI results and monitor host software triage runs.</p>
     </div>
 </section>
+
+<div id="triage-jobs" class="mb-4" aria-live="polite">{% include 'vuln_manager/partials/_ai_triage_jobs.html' %}</div>
+<script>
+(function () {
+    async function refreshJobs() {
+        if (document.querySelector('#triage-jobs details[open]')) return;
+        try {
+            const response = await fetch("{% url 'ai_triage_jobs' %}", {headers: {'X-Requested-With': 'XMLHttpRequest'}, cache: 'no-store'});
+            if (response.ok && !response.redirected) document.getElementById('triage-jobs').innerHTML = await response.text();
+        } catch (error) { /* Retain the last visible status until the next refresh. */ }
+    }
+    setInterval(refreshJobs, 5000);
+}());
+</script>
 
 <!-- Stat strip -->
 <div class="grid grid-cols-1 md:grid-cols-3 bg-surface-container border border-outline-variant rounded-md mb-4">
@@ -33,7 +47,7 @@
         <div class="card-head">
             <div>
                 <h3 class="card-title">Triage queue</h3>
-                <p class="card-note mt-0.5">Prioritized by AI confidence &amp; impact</p>
+                <p class="card-note mt-0.5">Findings and their current AI assessments</p>
             </div>
             <form action="{% url 'do_triage' %}" method="post">
                 {% csrf_token %}
@@ -64,7 +78,7 @@
                         <td><span class="badge severity-{{ vuln.severity|lower }}">{{ vuln.severity|upper }}</span></td>
                         <td class="font-medium text-on-surface whitespace-nowrap">{{ vuln.cve_id }}</td>
                         <td>
-                            <div class="text-on-surface">{% if vuln.most_critical_host %}{{ vuln.most_critical_host }}{% else %}—{% endif %}</div>
+                            <div class="text-on-surface">{% if vuln.most_critical_host %}{{ vuln.most_critical_host }}{% else %}â€”{% endif %}</div>
                             {% if vuln.software %}<div class="text-[11px] text-outline">{{ vuln.software }}</div>{% endif %}
                         </td>
                         <td><span class="font-medium {% if vuln.ai_result == 'Act' %}text-tertiary{% else %}text-on-surface-variant{% endif %}">{{ vuln.ai_result }}</span></td>

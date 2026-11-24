@@ -295,7 +295,7 @@ class AuthAndStatusFlowTests(TestCase):
         ).latest("created_at")
         self.assertEqual(event.details.get("status_reason"), "Compensating control in place")
 
-    def test_dashboard_contains_extended_kpis(self):
+    def test_dashboard_contains_operational_counts(self):
         host = Host.objects.create(ip_address="10.0.0.20")
         sw = Software.objects.create(name="demo", version="1.0.0", vendor="acme")
         sw.hosts.add(host)
@@ -305,11 +305,7 @@ class AuthAndStatusFlowTests(TestCase):
         self.client.force_login(self.user)
         response = self.client.get(reverse("dashboard"))
         self.assertEqual(response.status_code, 200)
-        self.assertIn("remediation_rate", response.context)
-        self.assertIn("avg_open_age_days", response.context)
-        self.assertIn("sla_breach_count", response.context)
-        self.assertIn("status_map", response.context)
-        self.assertIn("top_software", response.context)
+        self.assertIn("counts", response.context)
 
 
 class HostExposureFlagTests(TestCase):
@@ -1912,12 +1908,8 @@ class DashboardReportExportTests(TestCase):
         from vuln_manager.views import _build_dashboard_report_context
 
         ctx = _build_dashboard_report_context()
-        metrics = ctx["metrics"]
-        self.assertEqual(metrics["vuln_count"], 1)  # only non-fixed/non-fp
-        self.assertEqual(metrics["critical_count"], 1)
-        self.assertEqual(metrics["vuln_hosts_count"], 1)
-        self.assertGreaterEqual(metrics["oldest_open_days"], 9)
-        self.assertGreater(metrics["avg_open_age_days"], 0)
+        self.assertEqual(ctx["counts"]["pending"], 1)
+        self.assertEqual([v.pk for v in ctx["findings"]], [self.open_vuln.pk])
 
     def test_export_returns_pdf(self):
         self.client.force_login(self.user)

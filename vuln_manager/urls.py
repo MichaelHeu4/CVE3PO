@@ -2,6 +2,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.urls import path
 from django.contrib.auth import views as auth_views
 from . import views
+from . import dashboard_views
 from . import cti_views
 from .extensions import wazuh, agent
 
@@ -22,7 +23,7 @@ urlpatterns = [
     path("notification-rules/<int:pk>/", cti_views.change_rule, name="notification_rule_change"),
     path("agent/latest/<str:filename>", views.agent_latest_file, name="agent_latest_file"),
     path("agent/install/", views.agent_install_guide, name="agent_install_guide"),
-    path("", views.dashboard, name="dashboard"),
+    path("", dashboard_views.dashboard, name="dashboard"),
     path(
         "api/inventory/update/", agent.update_inventory_api, name="api_update_inventory"
     ),
@@ -69,6 +70,7 @@ urlpatterns = [
     path("hosts/<int:pk>/edit/", views.host_form, name="host_edit"),
     path("ports/", views.port_list, name="port_list"),
     path("hosts/<int:pk>/", views.host_detail, name="host_detail"),
+    path("hosts/<int:pk>/triage-software/", views.triage_host_software, name="triage_host_software"),
     path("hosts/<int:pk>/delete/", views.delete_host, name="delete_host"),
     path(
         "hosts/<int:pk>/criticality/",
@@ -134,6 +136,7 @@ urlpatterns = [
         name="remove_host_from_software",
     ),
     path("ai/dashboard/", views.ki_dashboard, name="ai_dashboard"),
+    path("ai/jobs/", views.ai_triage_jobs, name="ai_triage_jobs"),
     path("ai/triage", views.do_triage, name="do_triage"),
     path(
         "vulnerabilities/<int:pk>/triage/",
