@@ -128,7 +128,7 @@ class Host(models.Model):
     # /etc/machine-id or DMI UUID, Windows MachineGuid). It is the strongest
     # correlation key: a multi-homed server keeps ONE asset even when different
     # sources (agent, Wazuh, Shodan) observe it under different IPs. Optional and
-    # unique â€” NULL for hosts discovered by sources that cannot report it.
+    # unique — NULL for hosts discovered by sources that cannot report it.
     machine_id = models.CharField(
         max_length=255, unique=True, null=True, blank=True
     )
@@ -382,20 +382,20 @@ class Vulnerability(models.Model):
     @property
     def most_critical_host(self):
         """
-        Gibt das Host-Objekt mit der hÃ¶chsten KritikalitÃ¤t zurÃ¼ck.
-        PrÃ¼ft den direkt verknÃ¼pften Host sowie alle Hosts der verknÃ¼pften Software.
+        Gibt das Host-Objekt mit der höchsten Kritikalität zurück.
+        Prüft den direkt verknüpften Host sowie alle Hosts der verknüpften Software.
         """
         highest_weight = 0
         top_host = None
 
-        # 1. Den direkt verknÃ¼pften Host prÃ¼fen
+        # 1. Den direkt verknüpften Host prüfen
         if self.host and self.host.criticality:
             weight = CRITICALITY_WEIGHTS.get(self.host.criticality, 0)
             if weight > highest_weight:
                 highest_weight = weight
                 top_host = self.host
 
-        # 2. Die Hosts Ã¼ber die Software prÃ¼fen
+        # 2. Die Hosts über die Software prüfen
         if self.software:
             for host in self.software.hosts.all():
                 if host.criticality:
@@ -607,6 +607,10 @@ class AITriageJob(models.Model):
                       ("interrupted", "Interrupted"))
     kind = models.CharField(max_length=16, choices=(("software", "Host software"), ("findings", "Finding triage")), default="software")
     heartbeat_at = models.DateTimeField(null=True, blank=True)
+    dismissed = models.BooleanField(default=False)
+    resumed_at = models.DateTimeField(null=True, blank=True)
+    software_ids = models.JSONField(null=True, blank=True)
+    completed_software_ids = models.JSONField(default=list, blank=True)
     host = models.ForeignKey(Host, null=True, on_delete=models.SET_NULL, related_name="ai_triage_jobs")
     host_label = models.CharField(max_length=255)
     started_by = models.ForeignKey("auth.User", null=True, on_delete=models.SET_NULL)

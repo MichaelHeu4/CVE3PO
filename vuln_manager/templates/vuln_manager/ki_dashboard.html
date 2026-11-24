@@ -14,7 +14,7 @@
 <script>
 (function () {
     async function refreshJobs() {
-        if (document.querySelector('#triage-jobs details[open]')) return;
+        if (document.querySelector('#triage-jobs details[open]') || document.getElementById('triage-jobs').contains(document.activeElement)) return;
         try {
             const response = await fetch("{% url 'ai_triage_jobs' %}", {headers: {'X-Requested-With': 'XMLHttpRequest'}, cache: 'no-store'});
             if (response.ok && !response.redirected) document.getElementById('triage-jobs').innerHTML = await response.text();
@@ -78,7 +78,7 @@
                         <td><span class="badge severity-{{ vuln.severity|lower }}">{{ vuln.severity|upper }}</span></td>
                         <td class="font-medium text-on-surface whitespace-nowrap">{{ vuln.cve_id }}</td>
                         <td>
-                            <div class="text-on-surface">{% if vuln.most_critical_host %}{{ vuln.most_critical_host }}{% else %}â€”{% endif %}</div>
+                            <div class="text-on-surface">{% if vuln.most_critical_host %}{{ vuln.most_critical_host }}{% else %}—{% endif %}</div>
                             {% if vuln.software %}<div class="text-[11px] text-outline">{{ vuln.software }}</div>{% endif %}
                         </td>
                         <td><span class="font-medium {% if vuln.ai_result == 'Act' %}text-tertiary{% else %}text-on-surface-variant{% endif %}">{{ vuln.ai_result }}</span></td>

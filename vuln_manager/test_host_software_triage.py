@@ -80,3 +80,43 @@ class HostSoftwareTriageTests(TestCase):
     def test_status_endpoint_requires_login(self):
         self.client.logout()
         self.assertEqual(self.client.get(reverse("ai_triage_jobs")).status_code, 302)
+
+    @patch("vuln_manager.views.threading.Thread")
+    def test_resume_skips_successes_and_retries_other_components(self, thread):
+        from django.utils import timezone
+        job = AITriageJob.objects.create(host=self.host, host_label="test", status="interrupted", total=2, processed=1, succeeded=1, software_ids=[self.first.pk, self.second.pk], completed_software_ids=[self.first.pk], finished_at=timezone.now())
+        response = self.client.post(reverse("resume_triage_job", args=[job.pk]))
+        self.assertRedirects(response, reverse("ai_dashboard"))
+        continuation = AITriageJob.objects.exclude(pk=job.pk).get()
+        self.assertEqual(continuation.software_ids, [self.second.pk])
+        self.assertEqual(thread.call_args.kwargs["args"], (continuation.pk, [self.second.pk]))
+        self.assertEqual(self.client.post(reverse("resume_triage_job", args=[job.pk])).status_code, 409)
+
+    @patch("vuln_manager.views.threading.Thread")
+    def test_resume_legacy_job_uses_completed_software_timestamp(self, thread):
+        from datetime import timedelta
+        from django.utils import timezone
+        started = timezone.now() - timedelta(hours=1)
+        finished = timezone.now()
+        Software.objects.filter(pk=self.first.pk).update(ai_triage_time=started + timedelta(minutes=5))
+        job = AITriageJob.objects.create(host=self.host, host_label="legacy", status="interrupted", started_at=started, finished_at=finished)
+        self.assertContains(self.client.get(reverse("ai_dashboard")), "Older run")
+        self.client.post(reverse("resume_triage_job", args=[job.pk]))
+        continuation = AITriageJob.objects.exclude(pk=job.pk).get()
+        self.assertEqual(continuation.software_ids, [self.second.pk])
+
+    def test_dismiss_finished_only_and_preserve_job(self):
+        job = AITriageJob.objects.create(host=self.host, host_label="finished", status="completed")
+        running = AITriageJob.objects.create(host=self.host, host_label="running")
+        self.assertEqual(self.client.post(reverse("dismiss_triage_job", args=[running.pk])).status_code, 409)
+        self.assertRedirects(self.client.post(reverse("dismiss_triage_job", args=[job.pk])), reverse("ai_dashboard"))
+        job.refresh_from_db()
+        self.assertTrue(job.dismissed)
+        self.assertNotContains(self.client.get(reverse("ai_triage_jobs")), "finished")
+
+    @patch("vuln_manager.views.ai_triage.triage_software")
+    def test_successful_components_are_recorded(self, triage):
+        job = AITriageJob.objects.create(host=self.host, host_label="test", software_ids=[self.first.pk, self.second.pk])
+        run_host_software_triage(job.pk, [self.first.pk, self.second.pk])
+        job.refresh_from_db()
+        self.assertEqual(job.completed_software_ids, [self.first.pk, self.second.pk])
