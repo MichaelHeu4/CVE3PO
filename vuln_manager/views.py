@@ -511,7 +511,7 @@ def dashboard(request):
               * 100, 1) if host_count else 0
     )
 
-    # Host Cluster Metrics (criticality x exposure) â€” one aggregate each
+    # Host Cluster Metrics (criticality x exposure) — one aggregate each
     # instead of 4 + 4 separate COUNT queries.
     HIGH_CRIT = ["Critical", "High"]
     LOW_CRIT = ["Medium", "Low"]
@@ -557,16 +557,16 @@ def dashboard(request):
     ):
         host_vuln_pairs.add((row["software__hosts"], row["id"]))
 
-    # Security Score (0â€“100): a composite of three sub-scores so that both the
+    # Security Score (0–100): a composite of three sub-scores so that both the
     # remediation effort and the current open risk shape the result, and the
     # score degrades smoothly instead of collapsing to 0 under a large backlog
     # (the previous formula was an unbounded penalty that clamped to 0 as soon
     # as the open count grew, ignoring everything already fixed).
     #
-    #   R â€“ remediation effectiveness: severity-weighted share of vulns already
+    #   R – remediation effectiveness: severity-weighted share of vulns already
     #       fixed vs. still open. Credits patching work.
-    #   S â€“ SLA compliance: share of open critical/high still within SLA.
-    #   E â€“ open critical/high exposure per host, on an exponential decay curve
+    #   S – SLA compliance: share of open critical/high still within SLA.
+    #   E – open critical/high exposure per host, on an exponential decay curve
     #       so heavy backlogs bend the score down without a hard cliff. Each
     #       open crit/high is weighted by the host it sits on, so risk on
     #       internet-exposed / business-critical hosts counts more.
@@ -1836,7 +1836,7 @@ def delete_scan(request, pk):
 @login_required
 def ai_triage_jobs(request):
     mark_interrupted_triage_jobs()
-    jobs = AITriageJob.objects.select_related("started_by").order_by("-started_at", "-id")[:10]
+    jobs = AITriageJob.objects.filter(dismissed=False).select_related("started_by").order_by("-started_at", "-id")[:10]
     response = render(request, "vuln_manager/partials/_ai_triage_jobs.html", {"triage_jobs": jobs})
     response["Cache-Control"] = "no-store"
     return response
@@ -1889,12 +1889,12 @@ def ki_dashboard(request):
     if not ai_extension.is_active:
         model_label = "Disabled"
     elif provider == "azure":
-        model_label = f"Azure AI Â· {settings_obj.ai_azure_model or 'N/A'}"
+        model_label = f"Azure AI · {settings_obj.ai_azure_model or 'N/A'}"
     else:
-        model_label = f"OpenRouter Â· {settings_obj.ai_openrouter_model or 'N/A'}"
+        model_label = f"OpenRouter · {settings_obj.ai_openrouter_model or 'N/A'}"
     ai = {"model": model_label, "proc_time": round(avg_proc_time_ms / 1000, 2)}
     context = {
-        "triage_jobs": AITriageJob.objects.select_related("started_by").order_by("-started_at", "-id")[:10],
+        "triage_jobs": AITriageJob.objects.filter(dismissed=False).select_related("started_by").order_by("-started_at", "-id")[:10],
         "triaged_vulns": triaged_vulns,
         "all_vulns": all_vulns,
         "action_required": action_required,
@@ -2716,11 +2716,14 @@ def _process_triage_job(job_id, items, model, callback):
             return
         if not success:
             job.failed_items.append(label)
+        elif model is Software:
+            job.completed_software_ids.append(item_id)
         updated = AITriageJob.objects.filter(pk=job_id, status="running").update(
             processed=F("processed") + 1,
             succeeded=F("succeeded") + int(success),
             failed=F("failed") + int(not success),
             failed_items=job.failed_items,
+            completed_software_ids=job.completed_software_ids,
         )
         if not updated:
             return
@@ -2830,7 +2833,7 @@ def triage_host_software(request, pk):
         return HttpResponseForbidden("ai_triage_disabled")
     software_ids = list(host.software_inventory.order_by("pk").values_list("pk", flat=True))
     if software_ids:
-        job = AITriageJob.objects.create(host=host, host_label=str(host), started_by=request.user, total=len(software_ids), heartbeat_at=now())
+        job = AITriageJob.objects.create(host=host, host_label=str(host), started_by=request.user, total=len(software_ids), heartbeat_at=now(), software_ids=software_ids)
         if _start_triage_job(job, run_host_software_triage, (software_ids,)):
             messages.success(request, f"AI triage started in the background for {len(software_ids)} software components. Track progress in AI Dashboard; results are shared across hosts.")
         else:
@@ -2838,6 +2841,50 @@ def triage_host_software(request, pk):
     else:
         messages.info(request, "No software is assigned to this host.")
     return redirect(f"{reverse('host_detail', args=[host.pk])}?tab=inventory")
+
+
+@login_required
+@require_POST
+def dismiss_triage_job(request, pk):
+    job = get_object_or_404(AITriageJob, pk=pk)
+    if job.status == "running":
+        return HttpResponse("Running jobs cannot be dismissed", status=409)
+    AITriageJob.objects.filter(pk=pk).update(dismissed=True)
+    return redirect("ai_dashboard")
+
+
+@login_required
+@require_POST
+def resume_triage_job(request, pk):
+    ai_extension, _ = get_ai_triage_config()
+    if not ai_extension.is_active:
+        return HttpResponseForbidden("ai_triage_disabled")
+    job = get_object_or_404(AITriageJob, pk=pk)
+    if job.kind != "software" or job.status not in ("interrupted", "partial", "failed") or not job.host_id:
+        return HttpResponse("This job cannot be resumed", status=409)
+    if job.software_ids is None:
+        # Older jobs did not record component IDs. Only software with a
+        # completed triage timestamp in this run can be safely omitted.
+        original_ids = list(job.host.software_inventory.order_by("pk").values_list("pk", flat=True))
+    else:
+        original_ids = job.software_ids
+    completed = set(job.completed_software_ids)
+    completed.update(Software.objects.filter(
+        pk__in=original_ids, ai_triage_time__gte=job.started_at,
+        ai_triage_time__lte=job.finished_at or now(),
+    ).values_list("pk", flat=True))
+    remaining = [software_id for software_id in original_ids if software_id not in completed]
+    with transaction.atomic():
+        claimed = AITriageJob.objects.filter(pk=pk, resumed_at__isnull=True, status__in=("interrupted", "partial", "failed")).update(resumed_at=now())
+        if not claimed:
+            return HttpResponse("This job has already been resumed", status=409)
+        new_job = AITriageJob.objects.create(host=job.host, host_label=job.host_label, started_by=request.user,
+                                            total=len(remaining), heartbeat_at=now(), software_ids=remaining)
+    if remaining:
+        _start_triage_job(new_job, run_host_software_triage, (remaining,))
+    else:
+        AITriageJob.objects.filter(pk=new_job.pk).update(status="completed", finished_at=now())
+    return redirect("ai_dashboard")
 
 
 @login_required

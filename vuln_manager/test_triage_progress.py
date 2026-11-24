@@ -63,3 +63,16 @@ class FindingTriageProgressTests(TestCase):
         run_triage_background(job.pk)
         job.refresh_from_db()
         self.assertEqual((job.status, job.total, job.processed), ("completed", 0, 0))
+
+    def test_dashboard_renders_special_characters_correctly(self):
+        from .models import SystemSettings
+        settings_obj, _ = SystemSettings.objects.get_or_create(pk=1)
+        settings_obj.ai_triage_provider = "azure"
+        settings_obj.ai_azure_model = "example-model"
+        settings_obj.save()
+        self.finding(host=None)
+        response = self.client.get(reverse("ai_dashboard"))
+        self.assertContains(response, "Azure AI · example-model")
+        self.assertContains(response, "—")
+        self.assertNotContains(response, "Â·")
+        self.assertNotContains(response, "â€")
