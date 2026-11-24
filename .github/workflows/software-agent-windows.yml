@@ -30,8 +30,10 @@ jobs:
         run: |
           $env:SOFTWARE_API_URL = 'https://example.com/inventory/'
           $env:DRY_RUN = 'true'
-          $inventory = & ./target/release/software-agent.exe | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0 -or -not $inventory.hostname -or -not $inventory.operating_system -or @($inventory.software).Count -eq 0) { throw 'Windows inventory check failed' }
+          $output = & ./target/release/software-agent.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Windows agent failed to collect inventory' }
+          $inventory = ($output -join "`n") | ConvertFrom-Json
+          if (-not $inventory.hostname -or -not $inventory.operating_system -or @($inventory.software).Count -eq 0) { throw 'Windows inventory check failed' }
       - name: Prepare download
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
