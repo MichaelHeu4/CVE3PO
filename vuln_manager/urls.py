@@ -90,6 +90,7 @@ urlpatterns = [
     path("vulnerabilities/<int:pk>/", views.vuln_detail, name="vuln_detail"),
     path("vulnerabilities/<int:pk>/context/prepare/", context_views.prepare_context, name="prepare_context"),
     path("vulnerabilities/<int:pk>/context/<int:assessment_id>/approve/", context_views.approve_context, name="approve_context"),
+    path("vulnerabilities/<int:pk>/context/<int:assessment_id>/apache/", context_views.approve_apache_context, name="approve_apache_context"),
     path("vulnerabilities/<int:pk>/context/jobs/<int:job_id>/review/", context_views.review_context, name="review_context"),
     path(
         "vulnerabilities/<int:pk>/delete/",

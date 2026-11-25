@@ -65,13 +65,18 @@ def generate_proposal(vulnerability, host):
             "Use only the supplied source IDs, do not invent facts, and distinguish observed facts from hypotheses. "
             "Wazuh observations are matched point-in-time hints and may be stale or truncated; "
             "absence does not prove a process or library is unused. "
-            "Return an osquery SELECT only when a specific prerequisite can be reliably checked; otherwise return "
-            "an empty query. Explain limitations and why empty output may not establish absence. "
+            "When a complete check is not possible, propose a useful allowed SELECT that checks one relevant "
+            "part of a prerequisite, such as evidence that a module is loaded, and explicitly state in limitations "
+            "that the query is only a partial check and cannot determine the overall CVE applicability. "
+            "Return an empty query only if no useful permitted observation can be made. "
+            "Explain limitations and why empty output may not establish absence. "
             "The query requires human approval. Do not request secrets or sensitive data. "
             "Only use SELECT with explicit columns and one table, up to five AND-separated filters "
             "using =, !=, <, >, <=, >= or LIKE, followed by LIMIT 1 to 100; no joins or expressions. "
             "registry queries require an exact key or path under HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL\\Protocols\\; "
             "system_controls requires an exact name under net.* or kernel.unprivileged_bpf_disabled or kernel.kptr_restrict; "
+            "Augeas requires an exact absolute path and exact label, and both must be allowed by the agent's "
+            "reported augeas_allowed_roots and augeas_allowed_labels; if capabilities are missing do not assume permission. "
             "file requires an exact path. Allowed tables and columns: " +
             "; ".join(f"{table}({','.join(sorted(columns))})" for table, columns in TABLES.items()) + ". " +
             "If the prerequisite cannot be assessed using this restricted schema return an empty query.")},

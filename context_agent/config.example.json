@@ -4,6 +4,11 @@
   "osquery_path": "/usr/bin/osqueryi",
   "legacy_agent_path": "/opt/cve3po-agent/cve3po-agent-linux-amd64",
   "legacy_agent_config": "/etc/cve3po-agent/agent.env",
+  "apache_server_root": "/etc/apache2",
+  "apache_config_path": "/etc/apache2/apache2.conf",
+  "apache_allowed_roots": ["/etc/apache2"],
+  "augeas_allowed_roots": [],
+  "augeas_allowed_labels": [],
   "poll_seconds": 60,
   "windows_cpus": []
 }

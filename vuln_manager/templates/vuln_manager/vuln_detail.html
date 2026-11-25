@@ -82,10 +82,19 @@
                     <p class="text-sm"><strong>Sources cited by AI:</strong> {{ assessment.proposal.source_ids|join:", " }}</p>
                     <ul class="text-xs">{% for source in assessment.sources %}<li>{{ source.id }}: {{ source.title }} {% if source.url %}<a href="{{ source.url }}" rel="noopener noreferrer">Source</a>{% endif %} {% if source.published_at %}({{ source.published_at }}){% endif %}</li>{% endfor %}</ul>
                     {% if request.user.is_staff and assessment.proposal.query %}<form action="{% url 'approve_context' vuln.id assessment.id %}" method="post" class="mt-2">{% csrf_token %}<button type="submit" class="btn btn-subtle">Approve and queue this query</button></form>{% endif %}
+                    {% if request.user.is_staff %}<form action="{% url 'approve_apache_context' vuln.id assessment.id %}" method="post" class="mt-2">{% csrf_token %}<button type="submit" class="btn btn-subtle">Approve Apache configuration evidence check</button><p class="text-xs">Uses the agent's configured Apache paths and collects selected security, virtual host and include directives. Review results manually.</p></form>{% endif %}
                     {% for job in assessment.jobs.all %}<div class="mt-3 border-t border-outline-variant pt-2 text-xs">
                         <p>Job {{ job.id }} · {{ job.status }} · approved by {{ job.approved_by|default:"unknown" }} · {{ job.created_at }}</p>
                         {% if job.completed_at %}<p>Completed {{ job.completed_at }} {% if job.is_stale %}· <strong>Stale: review again</strong>{% endif %}</p>{% endif %}
-                        {% if job.result %}<pre class="whitespace-pre-wrap break-all">{{ job.result|pprint }}</pre>{% endif %}
+                        {% if job.kind == 'apache' and job.status == 'completed' %}
+                        <p class="mt-2 font-semibold">Apache configuration evidence · applicability not determined</p>
+                        {% for warning in job.result.warnings %}<p class="text-xs">{{ warning }}</p>{% endfor %}
+                        {% for file in job.result.files %}<p class="text-xs">File: {{ file.path }} · included from {{ file.included_from|default:"main configuration" }} · scope {{ file.inherited_scope }}</p>{% endfor %}
+                        {% for host in job.result.virtual_hosts %}<p class="mt-2 font-semibold">Virtual host {{ host.addresses|join:", " }} · {{ host.file }}</p>
+                            {% for directive in host.directives %}<p class="text-xs">{{ directive.directive }} {{ directive.arguments|join:", " }} · {{ directive.file }}</p>{% endfor %}
+                        {% empty %}<p class="text-xs">No virtual hosts observed; this does not prove their absence.</p>{% endfor %}
+                        <details><summary class="cursor-pointer">All selected directives</summary><pre class="whitespace-pre-wrap break-all">{{ job.result.directives|pprint }}</pre></details>
+                        {% elif job.result %}<pre class="whitespace-pre-wrap break-all">{{ job.result|pprint }}</pre>{% endif %}
                         <p>Assessment: {% if job.is_stale %}not determined (stale){% else %}{{ job.get_verdict_display }}{% endif %} · {{ job.review_notes }} {% if job.reviewed_by %}· {{ job.reviewed_by }} · {{ job.reviewed_at }}{% endif %}</p>
                         {% if request.user.is_staff and job.status == 'completed' and not job.is_stale %}<form action="{% url 'review_context' vuln.id job.id %}" method="post" class="space-y-2 mt-2">{% csrf_token %}
                             <select name="verdict" class="search-input"><option value="not_determined">Not determined</option><option value="met">Prerequisite met</option><option value="not_met">Prerequisite not met</option></select>

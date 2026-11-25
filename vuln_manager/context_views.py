@@ -37,7 +37,7 @@ def sync_wazuh_inventory(request):
 def download_context_agent(request):
     """Dedicated pilot package; never changes the legacy agent artifacts."""
     directory = settings.BASE_DIR / "context_agent"
-    files = ("agent.py", "policy.py", "windows_service.py", "cve3po-context-agent.service", "config.example.json", "README.md")
+    files = ("agent.py", "apache_check.py", "policy.py", "windows_service.py", "cve3po-context-agent.service", "config.example.json", "README.md")
     archive_data = io.BytesIO()
     with zipfile.ZipFile(archive_data, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name in files:
@@ -107,8 +107,27 @@ def approve_context(request, pk, assessment_id):
 @login_required
 @user_passes_test(lambda user: user.is_staff)
 @require_POST
+def approve_apache_context(request, pk, assessment_id):
+    assessment = get_object_or_404(ContextAssessment.objects.select_related("vulnerability", "host"), pk=assessment_id, vulnerability_id=pk)
+    vuln = assessment.vulnerability
+    agent = ContextAgent.objects.filter(host=assessment.host, enabled=True).first()
+    if _target(vuln, assessment.host_id) is None or not agent:
+        messages.error(request, "This check requires a matching target host and an enabled context agent.")
+    elif not agent.capabilities.get("apache_check"):
+        messages.error(request, "The context agent must be updated and configured for Apache first.")
+    else:
+        ContextJob.objects.create(agent=agent, assessment=assessment, kind="apache", approved_by=request.user,
+                                  expires_at=timezone.now()+timedelta(hours=1),
+                                  target_software=str(vuln.software or "")[:500], target_os=assessment.host.operating_system or "")
+        messages.success(request, "Apache configuration evidence collection queued for this host.")
+    return redirect("vuln_detail", pk=pk)
+
+
+@login_required
+@user_passes_test(lambda user: user.is_staff)
+@require_POST
 def review_context(request, pk, job_id):
-    job = get_object_or_404(ContextJob.objects.select_related("assessment"), pk=job_id, assessment__vulnerability_id=pk, kind="query")
+    job = get_object_or_404(ContextJob.objects.select_related("assessment"), pk=job_id, assessment__vulnerability_id=pk, kind__in=["query", "apache"])
     verdict = request.POST.get("verdict")
     notes = request.POST.get("notes", "").strip()
     if job.status != "completed" or job.is_stale or verdict not in ("met", "not_met", "not_determined") or not notes or len(notes) > 5000:
