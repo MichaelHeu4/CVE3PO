@@ -40,6 +40,16 @@
 <div class="mb-4" role="status">{% for message in messages %}<p class="card p-3 text-sm text-on-surface">{{ message }}</p>{% endfor %}</div>
 {% endif %}
 
+{% if request.user.is_staff %}<p class="text-xs mb-4"><a href="{% url 'download_context_agent' %}">Download separate context-agent pilot package</a></p>{% endif %}
+{% if pilot_agent %}
+<details class="card p-4 mb-4"><summary class="card-title cursor-pointer">Context agent (pilot)</summary>
+    <p class="text-xs mt-2">{% if pilot_agent.enabled %}Enabled{% else %}Disabled{% endif %} · last contact {{ pilot_agent.last_seen|default:"Never" }}</p>
+    <p class="text-xs">Capabilities: {{ pilot_agent.capabilities|pprint }}</p>
+    <p class="text-xs">Pilot inventory snapshots are separate and never close or update existing findings.</p>
+    {% for job in pilot_inventory_jobs %}<details class="mt-2"><summary class="text-xs cursor-pointer">Inventory job {{ job.id }} · {{ job.status }} · {{ job.created_at }}</summary><pre class="text-xs whitespace-pre-wrap break-all">{{ job.result|pprint }}</pre></details>{% empty %}<p class="text-xs">No inventory jobs yet.</p>{% endfor %}
+</details>
+{% endif %}
+
 <!-- Tabs -->
 <div class="flex items-center gap-1 mb-4 p-1 rounded-md bg-surface-container border border-outline-variant w-fit">
     <a href="?tab=threats{% if show_mode %}&mode={{ show_mode }}{% endif %}{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="chip border-0 {% if active_tab == 'threats' %}chip-on{% endif %}"><span class="material-symbols-outlined text-sm mr-1">gpp_maybe</span> Threats</a>

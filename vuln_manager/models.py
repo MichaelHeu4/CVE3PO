@@ -545,6 +545,76 @@ class CTIMatch(models.Model):
         constraints = [models.UniqueConstraint(fields=["item", "software"], name="unique_cti_software")]
 
 
+class ContextAssessment(models.Model):
+    """Reviewable AI proposal; it never changes the finding lifecycle."""
+    vulnerability = models.ForeignKey(Vulnerability, on_delete=models.CASCADE, related_name="context_assessments")
+    host = models.ForeignKey(Host, on_delete=models.CASCADE, related_name="context_assessments")
+    created_by = models.ForeignKey("auth.User", null=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(default=timezone.now)
+    provider = models.CharField(max_length=32)
+    model_name = models.CharField(max_length=255, blank=True)
+    sources = models.JSONField(default=list)
+    proposal = models.JSONField(default=dict)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+
+class WazuhContextSnapshot(models.Model):
+    host = models.ForeignKey(Host, on_delete=models.CASCADE, related_name="wazuh_context_snapshots")
+    agent_id = models.CharField(max_length=64)
+    fetched_at = models.DateTimeField(default=timezone.now)
+    fetched_by = models.ForeignKey("auth.User", null=True, on_delete=models.SET_NULL)
+    ports = models.JSONField(default=list)
+    processes = models.JSONField(default=list)
+
+    class Meta:
+        ordering = ["-fetched_at", "-id"]
+
+
+class ContextAgent(models.Model):
+    host = models.OneToOneField(Host, on_delete=models.CASCADE, related_name="context_agent")
+    token_hash = models.CharField(max_length=64, unique=True)
+    enabled = models.BooleanField(default=True)
+    last_seen = models.DateTimeField(null=True, blank=True)
+    capabilities = models.JSONField(default=dict)
+    last_inventory_requested = models.DateTimeField(null=True, blank=True)
+
+
+class ContextJob(models.Model):
+    agent = models.ForeignKey(ContextAgent, on_delete=models.CASCADE, related_name="jobs")
+    assessment = models.ForeignKey(ContextAssessment, null=True, blank=True, on_delete=models.CASCADE, related_name="jobs")
+    kind = models.CharField(max_length=16, choices=(("query", "Query"), ("inventory", "Inventory")))
+    query = models.TextField(blank=True)
+    status = models.CharField(max_length=16, default="pending")
+    created_at = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField()
+    claimed_at = models.DateTimeField(null=True, blank=True)
+    lease_hash = models.CharField(max_length=64, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    approved_by = models.ForeignKey("auth.User", null=True, blank=True, on_delete=models.SET_NULL)
+    result = models.JSONField(default=dict, blank=True)
+    target_software = models.CharField(max_length=500, blank=True)
+    target_os = models.CharField(max_length=255, blank=True)
+    verdict = models.CharField(max_length=24, default="not_determined", choices=(("not_determined", "Not determined"), ("met", "Prerequisite met"), ("not_met", "Prerequisite not met")))
+    review_notes = models.TextField(blank=True)
+    reviewed_by = models.ForeignKey("auth.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="reviewed_context_jobs")
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    @property
+    def is_stale(self):
+        from datetime import timedelta
+        if self.assessment_id:
+            vuln = self.assessment.vulnerability
+            current_software = str(vuln.software or "")
+            if self.target_software != current_software or self.target_os != (self.agent.host.operating_system or ""):
+                return True
+        return bool(self.completed_at and self.completed_at < timezone.now() - timedelta(hours=24))
+
+
 class DebianTrackerSnapshot(models.Model):
     last_attempt = models.DateTimeField(null=True, blank=True)
     fetched_at = models.DateTimeField(null=True, blank=True)

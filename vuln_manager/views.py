@@ -32,7 +32,7 @@ from .models import (
     Software,
     Extension,
     SystemSettings,
-    CisaKevEntry, EpssEntry, FeedRun, CTIFeed, AITriageJob,
+    CisaKevEntry, EpssEntry, FeedRun, CTIFeed, AITriageJob, WazuhContextSnapshot, ContextAgent, ContextJob,
 )
 from .parser import nmap
 from .parser import nuclei
@@ -961,6 +961,8 @@ def host_detail(request, pk):
             "shodan_available": shodan_available,
             "ai_triage_active": Extension.objects.filter(name_id="ai_triage", is_active=True).exists(),
             "host_software_count": host.software_inventory.count(),
+            "pilot_agent": ContextAgent.objects.filter(host=host).first(),
+            "pilot_inventory_jobs": ContextJob.objects.filter(agent__host=host, kind="inventory")[:5],
         },
     )
 
@@ -1748,6 +1750,9 @@ def vuln_detail(request, pk):
             "related_findings": Vulnerability.objects.filter(cve_id__iexact=vuln.cve_id, host_id=vuln.host_id, software_id=vuln.software_id, port_id=vuln.port_id).exclude(pk=vuln.pk).select_related("scan") if (vuln.host_id or vuln.software_id) and vuln.cve_id.upper().startswith("CVE-") else [],
             "wrike_ready": wrike_ready,
             "affected_count": affected_count,
+            "context_hosts": [vuln.host] if vuln.host_id else list(affected.values()),
+            "context_assessments": vuln.context_assessments.select_related("host", "created_by").prefetch_related("jobs__approved_by", "jobs__reviewed_by")[:20],
+            "context_wazuh_snapshots": WazuhContextSnapshot.objects.filter(host_id__in=([vuln.host_id] if vuln.host_id else affected)).select_related("host", "fetched_by")[:10],
             "cluster_1": cluster_1,
             "cluster_2": cluster_2,
             "cluster_3": cluster_3,
