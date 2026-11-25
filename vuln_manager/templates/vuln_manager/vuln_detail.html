@@ -95,12 +95,7 @@
                 </details>
                 {% empty %}<p class="text-xs text-outline mt-2">No context proposals yet.</p>{% endfor %}
                 <details class="mt-4"><summary class="cursor-pointer text-sm font-semibold">Wazuh process and port observations</summary>
-                    <p class="text-xs text-outline">Enter the Wazuh agent ID only after verifying that it belongs to the selected host. Missing processes or ports do not establish that software is unused.</p>
-                    {% if request.user.is_staff and context_hosts %}<form action="{% url 'refresh_wazuh_context' vuln.id %}" method="post" class="space-y-2 mt-2">{% csrf_token %}
-                        <select name="host_id" class="search-input" aria-label="Target host">{% for host in context_hosts %}<option value="{{ host.pk }}">{{ host }} ({{ host.ip_address }})</option>{% endfor %}</select>
-                        <input name="agent_id" class="search-input" required pattern="[0-9]{1,12}" placeholder="Verified Wazuh agent ID">
-                        <button class="btn btn-subtle" type="submit">Fetch Wazuh snapshot</button>
-                    </form>{% endif %}
+                    <p class="text-xs text-outline">Snapshots are imported by the Wazuh module. Missing processes or ports do not establish that software is unused.</p>
                     {% for snapshot in context_wazuh_snapshots %}<details class="mt-2"><summary class="cursor-pointer text-xs">{{ snapshot.host }} · Wazuh agent {{ snapshot.agent_id }} · fetched {{ snapshot.fetched_at }}</summary>
                         <p class="text-xs">These are point-in-time observations, not proof of software usage or network exposure. Scan times are shown where provided by Wazuh.</p>
                         <p class="text-xs font-semibold mt-2">Ports</p><pre class="text-xs whitespace-pre-wrap break-all">{{ snapshot.ports|pprint }}</pre>

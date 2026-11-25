@@ -41,6 +41,11 @@
 {% endif %}
 
 {% if request.user.is_staff %}<p class="text-xs mb-4"><a href="{% url 'download_context_agent' %}">Download separate context-agent pilot package</a></p>{% endif %}
+{% if wazuh_snapshot %}<details class="card p-4 mb-4"><summary class="card-title cursor-pointer">Wazuh ports and software suggestions · {{ wazuh_snapshot.fetched_at }}</summary>
+    <p class="text-xs">Agent {{ wazuh_snapshot.agent_id }} · A name match is a suggestion, not proof that the package owns the process. Missing entries do not prove inactivity.</p>
+    {% for match in wazuh_snapshot.software_matches %}<p class="text-xs">{{ match.software_name }} · {{ match.process }} · {{ match.local.ip }}:{{ match.local.port }}/{{ match.protocol }} · {{ match.state }}</p>{% empty %}<p class="text-xs">No unambiguous name-based software suggestions.</p>{% endfor %}
+    <details><summary class="text-xs cursor-pointer">All observed ports</summary><pre class="text-xs whitespace-pre-wrap break-all">{{ wazuh_snapshot.ports|pprint }}</pre></details>
+</details>{% endif %}
 {% if pilot_agent %}
 <details class="card p-4 mb-4"><summary class="card-title cursor-pointer">Context agent (pilot)</summary>
     <p class="text-xs mt-2">{% if pilot_agent.enabled %}Enabled{% else %}Disabled{% endif %} · last contact {{ pilot_agent.last_seen|default:"Never" }}</p>

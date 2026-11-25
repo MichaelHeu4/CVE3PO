@@ -10,6 +10,7 @@ interval regardless of how many workers are alive.
 """
 
 import logging
+import os
 import threading
 import time
 
@@ -123,6 +124,14 @@ def run_full_enrichment():
             shodan_summary = shodan_ext.refresh_all_hosts()
         except Exception:
             logger.exception("Shodan refresh failed during scheduled enrichment")
+
+    if (Extension.objects.filter(name_id="wazuh", is_active=True).exists()
+            and all(os.environ.get(key) for key in ("WAZUH_CONTEXT_API_URL", "WAZUH_CONTEXT_API_USER", "WAZUH_CONTEXT_API_PASSWORD"))):
+        try:
+            from vuln_manager.utils.wazuh_sync import start_sync
+            start_sync()
+        except Exception:
+            logger.exception("Wazuh inventory refresh could not be started")
 
     logger.info(
         "Full enrichment cycle finished (%s/%s software enriched)",

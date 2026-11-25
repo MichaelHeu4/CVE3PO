@@ -11,12 +11,25 @@ from django.shortcuts import get_object_or_404, redirect
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .models import ContextAssessment, ContextAgent, ContextJob, Host, Vulnerability, WazuhContextSnapshot
+from .models import ContextAssessment, ContextAgent, ContextJob, Extension, Host, Vulnerability
 from .utils.context_assessment import generate_proposal
-from .utils.wazuh_context import fetch_wazuh_context
 from context_agent.policy import validate_query
 
 logger = logging.getLogger(__name__)
+
+
+@login_required
+@user_passes_test(lambda user: user.is_staff)
+@require_POST
+def sync_wazuh_inventory(request):
+    from .utils.wazuh_sync import start_sync
+    if not Extension.objects.filter(name_id="wazuh", is_active=True).exists():
+        messages.error(request, "Enable the Wazuh module first.")
+    elif start_sync():
+        messages.success(request, "Wazuh inventory sync started in the background.")
+    else:
+        messages.warning(request, "A Wazuh inventory sync is already running.")
+    return redirect("extensions")
 
 
 @login_required
@@ -63,28 +76,6 @@ def prepare_context(request, pk):
         messages.error(request, "Context proposal failed. Check AI configuration and server logs.")
     else:
         messages.success(request, "Context proposal created for review; no query has been executed.")
-    return redirect("vuln_detail", pk=pk)
-
-
-@login_required
-@user_passes_test(lambda user: user.is_staff)
-@require_POST
-def refresh_wazuh_context(request, pk):
-    vulnerability = get_object_or_404(Vulnerability.objects.select_related("host", "software"), pk=pk)
-    host = _target(vulnerability, request.POST.get("host_id"))
-    if host is None:
-        messages.error(request, "The selected host is not a target of this finding.")
-        return redirect("vuln_detail", pk=pk)
-    agent_id = request.POST.get("agent_id", "").strip()
-    try:
-        ports, processes = fetch_wazuh_context(agent_id)
-        WazuhContextSnapshot.objects.create(host=host, agent_id=agent_id, fetched_by=request.user,
-                                            ports=ports, processes=processes)
-    except Exception:
-        logger.exception("Could not retrieve Wazuh context for host %s", host.pk)
-        messages.error(request, "Wazuh context fetch failed; check configuration and server logs.")
-    else:
-        messages.success(request, "Wazuh snapshot saved using the specified agent ID. Verify the host mapping.")
     return redirect("vuln_detail", pk=pk)
 
 

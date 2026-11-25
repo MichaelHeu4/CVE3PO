@@ -32,7 +32,7 @@ from .models import (
     Software,
     Extension,
     SystemSettings,
-    CisaKevEntry, EpssEntry, FeedRun, CTIFeed, AITriageJob, WazuhContextSnapshot, ContextAgent, ContextJob,
+    CisaKevEntry, EpssEntry, FeedRun, CTIFeed, AITriageJob, WazuhContextSnapshot, WazuhInventorySync, ContextAgent, ContextJob,
 )
 from .parser import nmap
 from .parser import nuclei
@@ -963,6 +963,7 @@ def host_detail(request, pk):
             "host_software_count": host.software_inventory.count(),
             "pilot_agent": ContextAgent.objects.filter(host=host).first(),
             "pilot_inventory_jobs": ContextJob.objects.filter(agent__host=host, kind="inventory")[:5],
+            "wazuh_snapshot": WazuhContextSnapshot.objects.filter(host=host).first(),
         },
     )
 
@@ -1031,11 +1032,20 @@ def software_detail(request, pk):
         else:
             cluster_4.append(host)
 
+    wazuh_matches = []
+    for host in hosts:
+        snapshot = WazuhContextSnapshot.objects.filter(host=host).first()
+        if snapshot:
+            for match in snapshot.software_matches:
+                if match.get("software_id") == item.pk:
+                    wazuh_matches.append({"host": host, "snapshot": snapshot, "match": match})
+
     return render(
         request,
         "vuln_manager/software_detail.html",
         {
             "software": item,
+            "wazuh_matches": wazuh_matches,
             "hosts": hosts,
             "cluster_1": cluster_1,
             "cluster_2": cluster_2,
@@ -1929,7 +1939,7 @@ def extensions_view(request):
         },
         "wazuh": {
             "name": "Wazuh Connector",
-            "description": "Real-time vulnerability streaming via webhooks. Automatically creates hosts and manages vulnerability lifecycles.",
+            "description": "Receives vulnerability alerts and imports Wazuh process and port observations for matched hosts.",
             "icon": "webhook",
             "color": "primary",
         },
@@ -2032,6 +2042,7 @@ def extensions_view(request):
                 "shodan_configured": (
                     bool(ext.api_token) if mid == "shodan" else None
                 ),
+                "wazuh_inventory_sync": WazuhInventorySync.objects.first() if mid == "wazuh" and request.user.is_staff else None,
                 "netbox": (
                     {
                         "url": system_settings.netbox_url,

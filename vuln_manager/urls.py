@@ -9,6 +9,7 @@ from .extensions import wazuh, agent
 urlpatterns = [
     path("context-agent/pilot.zip", context_views.download_context_agent, name="download_context_agent"),
     path("api/context-agent/poll/", context_api.poll, name="context_agent_poll"),
+    path("modules/wazuh/inventory/sync/", context_views.sync_wazuh_inventory, name="sync_wazuh_inventory"),
     path("api/context-agent/jobs/<int:job_id>/result/", context_api.submit, name="context_agent_submit"),
     path("cti/", cti_views.inbox, name="cti_inbox"),
     path("cti/<int:pk>/", cti_views.detail, name="cti_detail"),
@@ -88,7 +89,6 @@ urlpatterns = [
     path("vulnerabilities/", views.vuln_list, name="vuln_list"),
     path("vulnerabilities/<int:pk>/", views.vuln_detail, name="vuln_detail"),
     path("vulnerabilities/<int:pk>/context/prepare/", context_views.prepare_context, name="prepare_context"),
-    path("vulnerabilities/<int:pk>/context/wazuh/", context_views.refresh_wazuh_context, name="refresh_wazuh_context"),
     path("vulnerabilities/<int:pk>/context/<int:assessment_id>/approve/", context_views.approve_context, name="approve_context"),
     path("vulnerabilities/<int:pk>/context/jobs/<int:job_id>/review/", context_views.review_context, name="review_context"),
     path(
