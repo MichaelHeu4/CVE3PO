@@ -29,6 +29,11 @@
     </div>
 </section>
 
+{% if wazuh_matches %}<section class="card p-4 mb-4"><h2 class="card-title">Wazuh process and port suggestions</h2>
+<p class="text-xs">Exact process-name matches are suggestions and do not confirm package ownership or external reachability.</p>
+{% for entry in wazuh_matches %}<p class="text-xs mt-2">{{ entry.host }} · {{ entry.match.process }} · {{ entry.match.local.ip }}:{{ entry.match.local.port }}/{{ entry.match.protocol }} · {{ entry.match.state }} · fetched {{ entry.snapshot.fetched_at }}</p>{% endfor %}
+</section>{% endif %}
+
 <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
     <!-- Left column -->
     <div class="lg:col-span-5 space-y-4">

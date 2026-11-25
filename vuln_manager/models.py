@@ -567,9 +567,22 @@ class WazuhContextSnapshot(models.Model):
     fetched_by = models.ForeignKey("auth.User", null=True, on_delete=models.SET_NULL)
     ports = models.JSONField(default=list)
     processes = models.JSONField(default=list)
+    software_matches = models.JSONField(default=list, blank=True)
 
     class Meta:
         ordering = ["-fetched_at", "-id"]
+
+
+class WazuhInventorySync(models.Model):
+    status = models.CharField(max_length=16, default="running")
+    started_at = models.DateTimeField(default=timezone.now)
+    heartbeat_at = models.DateTimeField(default=timezone.now)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    summary = models.JSONField(default=dict)
+
+    class Meta:
+        ordering = ["-started_at", "-id"]
+        constraints = [models.UniqueConstraint(fields=["status"], condition=models.Q(status="running"), name="one_running_wazuh_inventory_sync")]
 
 
 class ContextAgent(models.Model):

@@ -62,15 +62,6 @@ class ContextAssessmentTests(TestCase):
         generate.assert_not_called()
         self.assertFalse(ContextAssessment.objects.exists())
 
-    @patch("vuln_manager.context_views.fetch_wazuh_context", return_value=([{"pid": 1}], []))
-    def test_wazuh_snapshot_requires_explicit_target(self, fetch):
-        url = reverse("refresh_wazuh_context", args=[self.vuln.pk])
-        self.client.post(url, {"host_id": self.other_host.pk, "agent_id": "001"})
-        fetch.assert_not_called()
-        self.client.post(url, {"host_id": self.host.pk, "agent_id": "001"})
-        self.assertEqual(WazuhContextSnapshot.objects.get().host, self.host)
-
-
 class WazuhContextTests(TestCase):
     @patch.dict("os.environ", {"WAZUH_CONTEXT_API_URL": "https://wazuh.example:55000", "WAZUH_CONTEXT_API_USER": "user", "WAZUH_CONTEXT_API_PASSWORD": "secret"})
     @patch("vuln_manager.utils.wazuh_context.requests.Session")

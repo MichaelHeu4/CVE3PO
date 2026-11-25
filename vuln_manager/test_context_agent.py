@@ -28,6 +28,21 @@ class QueryPolicyTests(TestCase):
             with self.subTest(query=query), self.assertRaises(ValueError):
                 validate_query(query)
 
+    def test_expanded_policy_supports_constrained_configuration_and_runtime_queries(self):
+        for query in ["SELECT id, active_state FROM systemd_units WHERE id LIKE 'apache%' LIMIT 20",
+                      "SELECT pid, path FROM process_memory_map WHERE path LIKE '%libssl%' AND pid > 0 LIMIT 20",
+                      "SELECT name, current_value FROM system_controls WHERE name = 'net.ipv4.ip_forward' LIMIT 1",
+                      "SELECT path, mode FROM file WHERE path = '/etc/apache2/apache2.conf' LIMIT 1",
+                      r"SELECT name, data FROM registry WHERE key = 'HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Server' LIMIT 10"]:
+            with self.subTest(query=query):
+                self.assertEqual(validate_query(query), query)
+        for query in ["SELECT name, current_value FROM system_controls LIMIT 10",
+                      "SELECT path FROM file WHERE path LIKE '/etc/%' LIMIT 10",
+                      r"SELECT data FROM registry WHERE key = 'HKEY_LOCAL_MACHINE\SAM' LIMIT 10",
+                      "SELECT pid FROM processes WHERE name = 'x' OR 1=1 LIMIT 10"]:
+            with self.subTest(query=query), self.assertRaises(ValueError):
+                validate_query(query)
+
     def test_agent_executes_without_shell_and_inventory_is_dry_run(self):
         self.assertEqual(context_client.run_limited([sys.executable, "-c", "import json; print(json.dumps([{'pid': 1}]))"]), [{"pid": 1}])
         with patch("context_agent.agent.run_limited", return_value={"software": []}) as run:
