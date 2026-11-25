@@ -40,21 +40,6 @@
 <div class="mb-4" role="status">{% for message in messages %}<p class="card p-3 text-sm text-on-surface">{{ message }}</p>{% endfor %}</div>
 {% endif %}
 
-{% if request.user.is_staff %}<p class="text-xs mb-4"><a href="{% url 'download_context_agent' %}">Download separate context-agent pilot package</a></p>{% endif %}
-{% if wazuh_snapshot %}<details class="card p-4 mb-4"><summary class="card-title cursor-pointer">Wazuh ports and software suggestions · {{ wazuh_snapshot.fetched_at }}</summary>
-    <p class="text-xs">Agent {{ wazuh_snapshot.agent_id }} · A name match is a suggestion, not proof that the package owns the process. Missing entries do not prove inactivity.</p>
-    {% for match in wazuh_snapshot.software_matches %}<p class="text-xs">{{ match.software_name }} · {{ match.process }} · {{ match.local.ip }}:{{ match.local.port }}/{{ match.protocol }} · {{ match.state }}</p>{% empty %}<p class="text-xs">No unambiguous name-based software suggestions.</p>{% endfor %}
-    <details><summary class="text-xs cursor-pointer">All observed ports</summary><pre class="text-xs whitespace-pre-wrap break-all">{{ wazuh_snapshot.ports|pprint }}</pre></details>
-</details>{% endif %}
-{% if pilot_agent %}
-<details class="card p-4 mb-4"><summary class="card-title cursor-pointer">Context agent (pilot)</summary>
-    <p class="text-xs mt-2">{% if pilot_agent.enabled %}Enabled{% else %}Disabled{% endif %} · last contact {{ pilot_agent.last_seen|default:"Never" }}</p>
-    <p class="text-xs">Capabilities: {{ pilot_agent.capabilities|pprint }}</p>
-    <p class="text-xs">Pilot inventory snapshots are separate and never close or update existing findings.</p>
-    {% for job in pilot_inventory_jobs %}<details class="mt-2"><summary class="text-xs cursor-pointer">Inventory job {{ job.id }} · {{ job.status }} · {{ job.created_at }}</summary><pre class="text-xs whitespace-pre-wrap break-all">{{ job.result|pprint }}</pre></details>{% empty %}<p class="text-xs">No inventory jobs yet.</p>{% endfor %}
-</details>
-{% endif %}
-
 <!-- Tabs -->
 <div class="flex items-center gap-1 mb-4 p-1 rounded-md bg-surface-container border border-outline-variant w-fit">
     <a href="?tab=threats{% if show_mode %}&mode={{ show_mode }}{% endif %}{% if severity_filter %}&severity={{ severity_filter }}{% endif %}" class="chip border-0 {% if active_tab == 'threats' %}chip-on{% endif %}"><span class="material-symbols-outlined text-sm mr-1">gpp_maybe</span> Threats</a>
@@ -176,6 +161,16 @@
                 {% empty %}
                 <p class="text-outline text-xs py-8 text-center col-span-2">No active ports identified</p>
                 {% endfor %}
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-head"><h5 class="card-title">Wazuh ports and processes</h5></div>
+            <div class="p-4">
+                {% if wazuh_snapshot %}<p class="text-xs text-outline mb-3">Agent {{ wazuh_snapshot.agent_id }} · fetched {{ wazuh_snapshot.fetched_at }}. Software matches are suggestions; missing entries do not prove inactivity.</p>{% endif %}
+                {% for item in wazuh_ports %}<div class="p-3 mb-2 rounded-md border border-outline-variant text-sm">
+                    <p><strong>{{ item.address|default:"—" }}:{{ item.port|default_if_none:"—" }}/{{ item.protocol|default:"?" }}</strong> · {{ item.state|default:"unknown state" }}</p>
+                    <p class="text-xs text-outline">Process: {{ item.process|default:"unknown" }}{% if item.pid %} · PID {{ item.pid }}{% endif %} · Software: {% if item.software_id %}<a href="{% url 'software_detail' item.software_id %}">{{ item.software_name }}</a> (suggestion){% else %}unknown{% endif %}</p>
+                </div>{% empty %}<p class="text-xs text-outline">No Wazuh ports observed.</p>{% endfor %}
             </div>
         </div>
         {% endif %}

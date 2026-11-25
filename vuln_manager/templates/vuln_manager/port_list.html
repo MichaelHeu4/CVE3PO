@@ -43,4 +43,12 @@
     {% endfor %}
     {% if port_groups.paginator.count %}{% include 'vuln_manager/partials/_pagination.html' with page=port_groups %}{% endif %}
 </div>
+<section class="mt-6">
+    <h2 class="card-title mb-2">Wazuh ports and processes</h2>
+    <p class="text-xs text-outline mb-3">Latest Wazuh snapshot per host. Software associations are name-based suggestions; listening does not prove internet exposure.</p>
+    <div class="table-wrap"><table class="w-full text-sm"><thead><tr><th>Host</th><th>Local address</th><th>Protocol / state</th><th>Process</th><th>Software</th><th>Fetched</th></tr></thead><tbody>
+    {% for item in wazuh_ports %}<tr><td><a href="{% url 'host_detail' item.host.id %}?tab=infrastructure">{{ item.host }}</a></td><td>{{ item.address|default:"—" }}:{{ item.port|default_if_none:"—" }}</td><td>{{ item.protocol|default:"?" }} / {{ item.state|default:"unknown" }}</td><td>{{ item.process|default:"unknown" }}{% if item.pid %} ({{ item.pid }}){% endif %}</td><td>{% if item.software_id %}<a href="{% url 'software_detail' item.software_id %}">{{ item.software_name }}</a> (suggestion){% else %}unknown{% endif %}</td><td>{{ item.fetched_at }}</td></tr>
+    {% empty %}<tr><td colspan="6">No Wazuh ports observed.</td></tr>{% endfor %}</tbody></table></div>
+    {% if wazuh_ports.paginator.num_pages > 1 %}<div class="pagination"><span>Page {{ wazuh_ports.number }} of {{ wazuh_ports.paginator.num_pages }}</span><div class="flex gap-1.5">{% if wazuh_ports.has_previous %}<a class="page-btn" href="?wazuh_page={{ wazuh_ports.previous_page_number }}{% if query %}&amp;q={{ query|urlencode }}{% endif %}{% if port_groups.number %}&amp;page={{ port_groups.number }}{% endif %}">Previous</a>{% endif %}{% if wazuh_ports.has_next %}<a class="page-btn" href="?wazuh_page={{ wazuh_ports.next_page_number }}{% if query %}&amp;q={{ query|urlencode }}{% endif %}{% if port_groups.number %}&amp;page={{ port_groups.number }}{% endif %}">Next</a>{% endif %}</div></div>{% endif %}
+</section>
 {% endblock %}

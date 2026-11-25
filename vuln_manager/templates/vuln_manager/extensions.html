@@ -210,7 +210,17 @@
                         {% if mod.id == "wazuh" %}
                         <div class="mt-3 pt-3 border-t border-outline-variant space-y-2">
                             <p class="text-[10px] font-bold text-outline/50">Port and process inventory</p>
-                            <p class="text-[10px] text-outline">Matches agents by unique registered IP, or unique exact hostname when Wazuh has no fixed agent IP. Software links are suggestions based on exact process names. Configure WAZUH_CONTEXT_API_URL, WAZUH_CONTEXT_API_USER and WAZUH_CONTEXT_API_PASSWORD on the server.</p>
+                            <p class="text-[10px] text-outline">Matches agents by unique registered IP, or unique exact hostname when Wazuh has no fixed agent IP. Software links are suggestions based on exact process names.</p>
+                            {% if mod.wazuh_api.environment_configured %}<p class="text-[10px] text-outline">Currently using environment configuration. Enter the password to save these settings in the application.</p>{% endif %}
+                            <form action="{% url 'save_wazuh_api_config' %}" method="post" class="space-y-2">{% csrf_token %}
+                                <label class="text-[10px] text-outline" for="wazuh-api-url">Wazuh API HTTPS URL</label>
+                                <input id="wazuh-api-url" name="wazuh_api_url" value="{{ mod.wazuh_api.url }}" type="url" placeholder="https://wazuh.example:55000" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px]">
+                                <label class="text-[10px] text-outline" for="wazuh-api-user">API user</label>
+                                <input id="wazuh-api-user" name="wazuh_api_user" value="{{ mod.wazuh_api.user }}" autocomplete="off" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px]">
+                                <label class="text-[10px] text-outline" for="wazuh-api-password">API password</label>
+                                <input id="wazuh-api-password" name="wazuh_api_password" type="password" autocomplete="new-password" placeholder="{% if mod.wazuh_api.password_set %}Password set — leave empty to keep{% else %}API password{% endif %}" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px]">
+                                <button class="w-full rounded-lg px-3 py-2 border border-outline-variant text-[10px]">Save Wazuh API settings</button>
+                            </form>
                             {% if mod.is_active %}<form action="{% url 'sync_wazuh_inventory' %}" method="post">{% csrf_token %}<button class="w-full rounded-lg px-3 py-2 border border-primary/40 text-primary text-[10px]">Sync inventory for all hosts</button></form>{% endif %}
                             {% if mod.wazuh_inventory_sync %}<p class="text-[10px] text-outline">Last sync: {{ mod.wazuh_inventory_sync.status }} · {{ mod.wazuh_inventory_sync.started_at }} · {{ mod.wazuh_inventory_sync.summary }}</p>{% endif %}
                         </div>

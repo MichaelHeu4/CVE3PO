@@ -4,21 +4,40 @@ import re
 from urllib.parse import urlsplit
 
 import requests
-from vuln_manager.models import Host, HostAddress, WazuhContextSnapshot
+from vuln_manager.models import Host, HostAddress, SystemSettings, WazuhContextSnapshot
 
 MAX_ITEMS = 5000
 PAGE_SIZE = 500
 
 
+def wazuh_api_config():
+    settings = SystemSettings.objects.filter(pk=1).first()
+    if settings and any((settings.wazuh_api_url, settings.wazuh_api_user, settings.wazuh_api_password)):
+        base, username, password = settings.wazuh_api_url, settings.wazuh_api_user, settings.wazuh_api_password
+    else:
+        base, username, password = (os.environ.get("WAZUH_CONTEXT_API_URL", ""), os.environ.get("WAZUH_CONTEXT_API_USER", ""),
+                                    os.environ.get("WAZUH_CONTEXT_API_PASSWORD", ""))
+    base = base.strip().rstrip("/")
+    username = username.strip()
+    return base, username, password
+
+
+def validate_api_url(base):
+    try:
+        parsed = urlsplit(base)
+        return bool(parsed.scheme == "https" and parsed.hostname and not parsed.username and not parsed.password
+                    and not parsed.query and not parsed.fragment and parsed.port != 0)
+    except ValueError:
+        return False
+
+
 def fetch_wazuh_agents(heartbeat=None):
     """Read the complete Wazuh agent list; incomplete lists are not used for matching."""
-    base = os.environ.get("WAZUH_CONTEXT_API_URL", "").strip().rstrip("/")
-    username, password = os.environ.get("WAZUH_CONTEXT_API_USER", ""), os.environ.get("WAZUH_CONTEXT_API_PASSWORD", "")
-    parsed = urlsplit(base)
-    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment or not username or not password:
+    base, username, password = wazuh_api_config()
+    if not validate_api_url(base) or not username or not password:
         raise ValueError("Wazuh HTTPS API configuration is missing or invalid")
     with requests.Session() as session:
-        response = session.get(base + "/security/user/authenticate", auth=(username, password), timeout=(5, 20), allow_redirects=False)
+        response = session.post(base + "/security/user/authenticate", auth=(username, password), timeout=(5, 20), allow_redirects=False)
         response.raise_for_status()
         if response.status_code != 200:
             raise ValueError("Unexpected Wazuh authentication response")
@@ -95,6 +114,36 @@ def map_software(host, ports, processes):
     return matches
 
 
+def snapshot_port_rows(snapshot):
+    """Format every observation, including ports without a software match."""
+    if snapshot is None:
+        return []
+    def key(item):
+        local = item.get("local") or {}
+        return (str(item.get("pid") or ""), str(local.get("ip") or ""),
+                str(local.get("port") or ""), str(item.get("protocol") or "").lower())
+    matches = {key(item): item for item in snapshot.software_matches if isinstance(item, dict)}
+    processes = {}
+    for process in snapshot.processes:
+        if isinstance(process, dict) and process.get("pid") not in (None, "", 0, "0"):
+            processes.setdefault(str(process["pid"]), []).append(process.get("name") or "")
+    rows = []
+    for port in snapshot.ports:
+        if not isinstance(port, dict):
+            continue
+        local = port.get("local") or {}
+        if not isinstance(local, dict):
+            continue
+        match = matches.get(key(port), {})
+        pid_names = processes.get(str(port.get("pid")), [])
+        rows.append({"host": snapshot.host, "port": local.get("port"), "address": local.get("ip"),
+                     "protocol": port.get("protocol") or "", "state": port.get("state") or "",
+                     "pid": port.get("pid"), "process": port.get("process") or match.get("process") or (pid_names[0] if len(pid_names) == 1 else ""),
+                     "software_id": match.get("software_id"), "software_name": match.get("software_name"),
+                     "scan": port.get("scan") or {}, "fetched_at": snapshot.fetched_at, "agent_id": snapshot.agent_id})
+    return rows
+
+
 def refresh_all_hosts(heartbeat=None):
     mapping = match_hosts(fetch_wazuh_agents(heartbeat=heartbeat))
     all_hosts = list(Host.objects.all())
@@ -120,16 +169,13 @@ def refresh_all_hosts(heartbeat=None):
 def fetch_wazuh_context(agent_id):
     if not re.fullmatch(r"[0-9]{1,12}", agent_id):
         raise ValueError("Invalid Wazuh agent ID")
-    base = os.environ.get("WAZUH_CONTEXT_API_URL", "").strip().rstrip("/")
-    username = os.environ.get("WAZUH_CONTEXT_API_USER", "")
-    password = os.environ.get("WAZUH_CONTEXT_API_PASSWORD", "")
-    parsed = urlsplit(base)
-    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
+    base, username, password = wazuh_api_config()
+    if not validate_api_url(base):
         raise ValueError("Wazuh context API must be configured with an HTTPS URL")
     if not username or not password:
         raise ValueError("Wazuh context API credentials are missing")
     with requests.Session() as session:
-        auth = session.get(base + "/security/user/authenticate", auth=(username, password),
+        auth = session.post(base + "/security/user/authenticate", auth=(username, password),
                            timeout=(5, 20), allow_redirects=False)
         auth.raise_for_status()
         if auth.status_code != 200:

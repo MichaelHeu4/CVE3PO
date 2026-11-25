@@ -3,8 +3,8 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
-from vuln_manager.models import Extension, Host, HostAddress, Software, WazuhContextSnapshot
-from vuln_manager.utils.wazuh_context import fetch_wazuh_agents, match_hosts, map_software, refresh_all_hosts
+from vuln_manager.models import Extension, Host, HostAddress, Software, SystemSettings, WazuhContextSnapshot
+from vuln_manager.utils.wazuh_context import fetch_wazuh_agents, fetch_wazuh_context, match_hosts, map_software, refresh_all_hosts
 
 
 class WazuhInventoryTests(TestCase):
@@ -44,10 +44,28 @@ class WazuhInventoryTests(TestCase):
         self.client.force_login(user)
         ports = [{"process": "apache2", "pid": 42, "local": {"ip": "0.0.0.0", "port": 80}, "protocol": "tcp"}]
         WazuhContextSnapshot.objects.create(host=self.host, agent_id="001", ports=ports, software_matches=map_software(self.host, ports, []))
-        self.assertContains(self.client.get(reverse("host_detail", args=[self.host.pk])), "apache2")
+        host_response = self.client.get(reverse("host_detail", args=[self.host.pk]), {"tab": "infrastructure"})
+        self.assertContains(host_response, "Wazuh ports and processes")
+        self.assertContains(host_response, "apache2")
+        self.assertContains(host_response, "80/tcp")
+        self.assertContains(self.client.get(reverse("port_list")), "apache2")
         response = self.client.get(reverse("software_detail", args=[self.software.pk]))
         self.assertContains(response, "Wazuh process and port suggestions")
         self.assertContains(response, "80/tcp")
+
+    def test_port_page_uses_only_latest_snapshot_and_searches_unmapped_processes(self):
+        user = User.objects.create_user("port-reader")
+        self.client.force_login(user)
+        WazuhContextSnapshot.objects.create(host=self.host, agent_id="001", ports=[{"local": {"port": 111}, "process": "obsolete"}])
+        WazuhContextSnapshot.objects.create(host=self.host, agent_id="001", ports=[{"local": {"port": 8443, "ip": "127.0.0.1"}, "process": "unmapped-process", "protocol": "tcp"}])
+        response = self.client.get(reverse("port_list"), {"q": "unmapped-process"})
+        self.assertContains(response, "8443")
+        self.assertContains(response, "unmapped-process")
+        self.assertContains(response, "unknown")
+        self.assertNotContains(response, "obsolete")
+        response = self.client.get(reverse("host_detail", args=[self.host.pk]), {"tab": "infrastructure"})
+        self.assertContains(response, "unmapped-process")
+        self.assertNotContains(response, "obsolete")
 
     @patch("vuln_manager.utils.wazuh_context.fetch_wazuh_context")
     @patch("vuln_manager.utils.wazuh_context.fetch_wazuh_agents")
@@ -79,6 +97,52 @@ class WazuhInventoryTests(TestCase):
         page1, page2 = Mock(status_code=200), Mock(status_code=200)
         page1.json.return_value = {"data": {"total_affected_items": 2, "affected_items": [{"id": "001"}]}}
         page2.json.return_value = {"data": {"total_affected_items": 2, "affected_items": [{"id": "002"}]}}
-        session.get.side_effect = [auth, page1, page2]
+        session.post.return_value = auth
+        session.get.side_effect = [page1, page2]
         self.assertEqual([item["id"] for item in fetch_wazuh_agents()], ["001", "002"])
         self.assertEqual(session.get.call_args_list[-1].kwargs["params"]["offset"], 1)
+
+    @patch.dict("os.environ", {"WAZUH_CONTEXT_API_URL": "https://wazuh.example:55000", "WAZUH_CONTEXT_API_USER": "user", "WAZUH_CONTEXT_API_PASSWORD": "secret"})
+    @patch("vuln_manager.utils.wazuh_context.requests.Session")
+    def test_fetch_filters_sensitive_fields_and_rejects_partial_results(self, session_class):
+        session = session_class.return_value.__enter__.return_value
+        auth = Mock(status_code=200)
+        auth.json.return_value = {"data": {"token": "token"}}
+        ports = Mock(status_code=200)
+        ports.json.return_value = {"error": 0, "data": {"total_affected_items": 1, "affected_items": [{"pid": 42, "process": "apache", "scan": {"time": "now"}}]}}
+        processes = Mock(status_code=200)
+        processes.json.return_value = {"error": 0, "data": {"total_affected_items": 1, "affected_items": [{"pid": 42, "name": "apache", "argvs": "secret"}]}}
+        session.post.return_value = auth
+        session.get.side_effect = [ports, processes]
+        result = fetch_wazuh_context("001")
+        self.assertEqual(result[1], [{"pid": 42, "name": "apache"}])
+        self.assertFalse(any(call.kwargs.get("allow_redirects") for call in session.get.call_args_list))
+        ports.json.return_value["data"]["total_failed_items"] = 1
+        session.get.side_effect = [ports]
+        with self.assertRaises(ValueError):
+            fetch_wazuh_context("001")
+
+    def test_api_configuration_requires_staff_and_keeps_password_secret(self):
+        user = User.objects.create_user("api-admin", is_staff=True)
+        self.client.force_login(user)
+        url = reverse("save_wazuh_api_config")
+        self.assertEqual(self.client.post(url, {"wazuh_api_url": "http://bad", "wazuh_api_user": "a"}).status_code, 400)
+        self.client.post(url, {"wazuh_api_url": "https://wazuh.example:55000", "wazuh_api_user": "analyst", "wazuh_api_password": "s3cret"})
+        settings = SystemSettings.objects.get(pk=1)
+        self.assertEqual(settings.wazuh_api_password, "s3cret")
+        self.client.post(url, {"wazuh_api_url": "https://wazuh.example:55000", "wazuh_api_user": "analyst", "wazuh_api_password": ""})
+        settings.refresh_from_db()
+        self.assertEqual(settings.wazuh_api_password, "s3cret")
+        self.assertNotContains(self.client.get(reverse("extensions")), "s3cret")
+        user.is_staff = False
+        user.save()
+        self.client.post(url, {"wazuh_api_url": "https://wrong.example", "wazuh_api_user": "wrong"})
+        settings.refresh_from_db()
+        self.assertEqual(settings.wazuh_api_url, "https://wazuh.example:55000")
+
+    @patch.dict("os.environ", {"WAZUH_CONTEXT_API_URL": "https://env.example", "WAZUH_CONTEXT_API_USER": "env-user", "WAZUH_CONTEXT_API_PASSWORD": "env-secret"})
+    def test_environment_credentials_are_not_mixed_with_saved_api_settings(self):
+        from vuln_manager.utils.wazuh_context import wazuh_api_config
+        self.assertEqual(wazuh_api_config(), ("https://env.example", "env-user", "env-secret"))
+        SystemSettings.objects.create(pk=1, wazuh_api_url="https://saved.example", wazuh_api_user="saved-user")
+        self.assertEqual(wazuh_api_config(), ("https://saved.example", "saved-user", ""))

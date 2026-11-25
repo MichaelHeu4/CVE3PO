@@ -10,7 +10,6 @@ interval regardless of how many workers are alive.
 """
 
 import logging
-import os
 import threading
 import time
 
@@ -125,8 +124,8 @@ def run_full_enrichment():
         except Exception:
             logger.exception("Shodan refresh failed during scheduled enrichment")
 
-    if (Extension.objects.filter(name_id="wazuh", is_active=True).exists()
-            and all(os.environ.get(key) for key in ("WAZUH_CONTEXT_API_URL", "WAZUH_CONTEXT_API_USER", "WAZUH_CONTEXT_API_PASSWORD"))):
+    from vuln_manager.utils.wazuh_context import wazuh_api_config
+    if Extension.objects.filter(name_id="wazuh", is_active=True).exists() and all(wazuh_api_config()):
         try:
             from vuln_manager.utils.wazuh_sync import start_sync
             start_sync()
