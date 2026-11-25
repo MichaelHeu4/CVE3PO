@@ -597,7 +597,7 @@ class ContextAgent(models.Model):
 class ContextJob(models.Model):
     agent = models.ForeignKey(ContextAgent, on_delete=models.CASCADE, related_name="jobs")
     assessment = models.ForeignKey(ContextAssessment, null=True, blank=True, on_delete=models.CASCADE, related_name="jobs")
-    kind = models.CharField(max_length=16, choices=(("query", "Query"), ("inventory", "Inventory")))
+    kind = models.CharField(max_length=16, choices=(("query", "Query"), ("inventory", "Inventory"), ("apache", "Apache configuration")))
     query = models.TextField(blank=True)
     status = models.CharField(max_length=16, default="pending")
     created_at = models.DateTimeField(default=timezone.now)

@@ -14,9 +14,9 @@ import urllib.parse
 import urllib.request
 
 try:
-    from .policy import validate_query
+    from .policy import validate_local_query
 except ImportError:
-    from policy import validate_query
+    from policy import validate_local_query
 
 MAX_OUTPUT = 1_500_000
 LOG = logging.getLogger("cve3po-context-agent")
@@ -84,8 +84,14 @@ def run_limited(args, environment=None, timeout=60):
 
 def execute(job, config):
     try:
+        if job["kind"] == "apache":
+            try:
+                from .apache_check import collect
+            except ImportError:
+                from apache_check import collect
+            return collect(config, run_limited)
         if job["kind"] == "query":
-            query = validate_query(job["query"])
+            query = validate_local_query(job["query"], config)
             data = run_limited([config["osquery_path"], "--json", query])
             if not isinstance(data, list) or len(data) > 100:
                 raise ValueError("Invalid osquery result")
@@ -125,9 +131,12 @@ def run(config, stop):
         version = subprocess.run([config["osquery_path"], "--version"], capture_output=True, text=True, timeout=5, check=True).stdout.strip()[:100]
     except (OSError, subprocess.SubprocessError):
         version = "unavailable"
-    capabilities = {"agent": "cve3po-context-agent", "version": "0.1", "platform": platform.system(),
+    capabilities = {"agent": "cve3po-context-agent", "version": "0.2", "platform": platform.system(),
                     "osquery_available": os.path.isfile(config["osquery_path"]),
                     "osquery_version": version,
+                    "apache_check": bool(platform.system() == "Linux" and config.get("apache_config_path") and config.get("apache_server_root") and config.get("apache_allowed_roots")),
+                    "augeas_allowed_roots": config.get("augeas_allowed_roots", []),
+                    "augeas_allowed_labels": config.get("augeas_allowed_labels", []),
                     "inventory_available": os.path.isfile(config.get("legacy_agent_path", ""))}
     while not stop.is_set():
         try:

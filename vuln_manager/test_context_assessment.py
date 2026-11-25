@@ -42,6 +42,19 @@ class ContextAssessmentTests(TestCase):
         self.assertEqual(proposal["source_ids"], ["finding"])
         self.assertEqual(provider, "openrouter")
 
+    @patch("vuln_manager.utils.ai_triage._call_openrouter")
+    def test_partial_context_evidence_is_requested(self, call):
+        Extension.objects.create(name_id="ai_triage", is_active=True)
+        SystemSettings.objects.create(pk=1, ai_triage_provider="openrouter")
+        call.return_value = ContextProposal(prerequisite="mod_ssl configuration", source_ids=["finding"],
+            query="SELECT pid, path FROM process_memory_map WHERE path LIKE '%mod_ssl%' LIMIT 100",
+            positive_evidence="Module observed", negative_evidence="Unknown",
+            limitations="Partial check; cannot determine applicability")
+        _, proposal, _, _ = generate_proposal(self.vuln, self.host)
+        from context_agent.policy import validate_query
+        self.assertEqual(validate_query(proposal["query"]), proposal["query"])
+        self.assertIn("only a partial check", call.call_args.args[0][0]["content"])
+
     @patch("vuln_manager.context_views.generate_proposal")
     def test_proposal_is_scoped_to_host_and_does_not_change_finding(self, generate):
         generate.return_value = ([], {"prerequisite": "test"}, "openrouter", "model")

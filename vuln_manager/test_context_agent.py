@@ -148,6 +148,7 @@ class ContextAgentProtocolTests(TestCase):
         with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
             names = archive.namelist()
         self.assertIn("cve3po-context-agent/agent.py", names)
+        self.assertIn("cve3po-context-agent/apache_check.py", names)
         self.assertTrue(all(name.startswith("cve3po-context-agent/") for name in names))
 
     def test_changed_target_makes_review_stale(self):

@@ -1,5 +1,6 @@
 """Deliberately small osquery subset, enforced on server and agent."""
 import re
+import os
 
 TABLES = {
     "processes": {"pid", "name", "path", "state", "on_disk", "start_time", "parent"},
@@ -14,6 +15,7 @@ TABLES = {
     "system_controls": {"name", "current_value", "config_value", "type"},
     "registry": {"key", "path", "name", "type", "data", "mtime"},
     "file": {"path", "filename", "type", "mode", "uid", "gid", "size", "mtime", "product_version"},
+    "augeas": {"node", "label", "value", "path"},
 }
 _QUERY = re.compile(
     r"\A\s*select\s+(?P<columns>[a-z_,\s]+)\s+from\s+(?P<table>[a-z_]+)"
@@ -50,6 +52,36 @@ def validate_query(query):
         raise ValueError("System control checks require an allowed exact setting name")
     if table == "file" and not any(field == "path" and op == "=" and "%" not in value for field, op, value in conditions):
         raise ValueError("File checks require an exact path")
+    if table == "augeas":
+        paths = [value for field, op, value in conditions if field == "path" and op == "=" and value.startswith("/") and "%" not in value]
+        labels = [value for field, op, value in conditions if field == "label" and op == "=" and "%" not in value]
+        if len(paths) != 1 or len(labels) != 1:
+            raise ValueError("Augeas requires exactly one absolute file path and one exact label")
     if not 1 <= int(match.group("limit")) <= 100:
         raise ValueError("LIMIT must be between 1 and 100")
     return query.strip().rstrip(";")
+
+
+def validate_local_query(query, config):
+    """Augeas is additionally constrained by the endpoint administrator."""
+    query = validate_query(query)
+    match = _QUERY.fullmatch(query)
+    if match.group("table").lower() != "augeas":
+        return query
+    clauses = re.split(r"\s+and\s+", match.group("where"), flags=re.IGNORECASE)
+    conditions = [_CONDITION.fullmatch(clause) for clause in clauses]
+    path = next(c.group(3).strip("'") for c in conditions if c.group(1).lower() == "path" and c.group(2) == "=")
+    label = next(c.group(3).strip("'") for c in conditions if c.group(1).lower() == "label" and c.group(2) == "=")
+    roots, labels = config.get("augeas_allowed_roots", []), config.get("augeas_allowed_labels", [])
+    if not isinstance(roots, list) or not isinstance(labels, list) or not all(isinstance(r, str) and os.path.isabs(r) for r in roots):
+        raise ValueError("Invalid local Augeas policy")
+    if label not in labels:
+        raise ValueError("Augeas label is not permitted by local configuration")
+    resolved = os.path.realpath(path)
+    try:
+        allowed = any(os.path.commonpath([resolved, os.path.realpath(root)]) == os.path.realpath(root) for root in roots)
+    except ValueError:
+        allowed = False
+    if not allowed:
+        raise ValueError("Augeas path is not permitted by local configuration")
+    return query
