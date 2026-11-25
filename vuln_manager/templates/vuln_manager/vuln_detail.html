@@ -62,6 +62,52 @@
                 <p class="text-sm">CISA KEV: {% if kev %}<strong>Listed</strong>{% else %}Not listed in the local catalogue{% endif %}</p>
                 <p class="text-sm">EPSS: {% if epss %}{{ epss.score|floatformat:4 }} (percentile {{ epss.percentile|default_if_none:"—" }}) · updated {{ epss.last_updated|date:"d M Y H:i" }}{% else %}Not available{% endif %}</p>
             </div>
+            <section class="bg-surface-container-low rounded-md border border-outline-variant p-4 mb-5">
+                <h5 class="card-title mb-2">CVE context pilot</h5>
+                <p class="text-xs text-outline mb-2">AI proposals require explicit approval. Results do not change the finding status or SSVC score.</p>
+                {% if request.user.is_staff and context_hosts %}
+                <form action="{% url 'prepare_context' vuln.id %}" method="post" class="space-y-2">{% csrf_token %}
+                    <select name="host_id" class="search-input" aria-label="Target host">{% for host in context_hosts %}<option value="{{ host.pk }}">{{ host }} ({{ host.ip_address }})</option>{% endfor %}</select>
+                    <button class="btn btn-subtle" type="submit">Prepare AI proposal</button>
+                </form>
+                {% endif %}
+                {% for assessment in context_assessments %}
+                <details class="mt-3"><summary class="cursor-pointer text-sm">{{ assessment.host }} · {{ assessment.created_at }} · {{ assessment.provider }} / {{ assessment.model_name }}</summary>
+                    <p class="text-sm mt-2"><strong>Prerequisite:</strong> {{ assessment.proposal.prerequisite }}</p>
+                    <p class="text-sm"><strong>Positive evidence:</strong> {{ assessment.proposal.positive_evidence }}</p>
+                    <p class="text-sm"><strong>Negative evidence:</strong> {{ assessment.proposal.negative_evidence }}</p>
+                    <p class="text-sm"><strong>Limitations:</strong> {{ assessment.proposal.limitations }}</p>
+                    <p class="text-sm"><strong>Proposed query (validated when approved):</strong></p>
+                    <pre class="text-xs whitespace-pre-wrap break-all">{{ assessment.proposal.query|default:"No query proposed" }}</pre>
+                    <p class="text-sm"><strong>Sources cited by AI:</strong> {{ assessment.proposal.source_ids|join:", " }}</p>
+                    <ul class="text-xs">{% for source in assessment.sources %}<li>{{ source.id }}: {{ source.title }} {% if source.url %}<a href="{{ source.url }}" rel="noopener noreferrer">Source</a>{% endif %} {% if source.published_at %}({{ source.published_at }}){% endif %}</li>{% endfor %}</ul>
+                    {% if request.user.is_staff and assessment.proposal.query %}<form action="{% url 'approve_context' vuln.id assessment.id %}" method="post" class="mt-2">{% csrf_token %}<button type="submit" class="btn btn-subtle">Approve and queue this query</button></form>{% endif %}
+                    {% for job in assessment.jobs.all %}<div class="mt-3 border-t border-outline-variant pt-2 text-xs">
+                        <p>Job {{ job.id }} · {{ job.status }} · approved by {{ job.approved_by|default:"unknown" }} · {{ job.created_at }}</p>
+                        {% if job.completed_at %}<p>Completed {{ job.completed_at }} {% if job.is_stale %}· <strong>Stale: review again</strong>{% endif %}</p>{% endif %}
+                        {% if job.result %}<pre class="whitespace-pre-wrap break-all">{{ job.result|pprint }}</pre>{% endif %}
+                        <p>Assessment: {% if job.is_stale %}not determined (stale){% else %}{{ job.get_verdict_display }}{% endif %} · {{ job.review_notes }} {% if job.reviewed_by %}· {{ job.reviewed_by }} · {{ job.reviewed_at }}{% endif %}</p>
+                        {% if request.user.is_staff and job.status == 'completed' and not job.is_stale %}<form action="{% url 'review_context' vuln.id job.id %}" method="post" class="space-y-2 mt-2">{% csrf_token %}
+                            <select name="verdict" class="search-input"><option value="not_determined">Not determined</option><option value="met">Prerequisite met</option><option value="not_met">Prerequisite not met</option></select>
+                            <textarea name="notes" class="search-input" required maxlength="5000" placeholder="Reasoning and evidence"></textarea><button class="btn btn-subtle">Save review</button>
+                        </form>{% endif %}
+                    </div>{% endfor %}
+                </details>
+                {% empty %}<p class="text-xs text-outline mt-2">No context proposals yet.</p>{% endfor %}
+                <details class="mt-4"><summary class="cursor-pointer text-sm font-semibold">Wazuh process and port observations</summary>
+                    <p class="text-xs text-outline">Enter the Wazuh agent ID only after verifying that it belongs to the selected host. Missing processes or ports do not establish that software is unused.</p>
+                    {% if request.user.is_staff and context_hosts %}<form action="{% url 'refresh_wazuh_context' vuln.id %}" method="post" class="space-y-2 mt-2">{% csrf_token %}
+                        <select name="host_id" class="search-input" aria-label="Target host">{% for host in context_hosts %}<option value="{{ host.pk }}">{{ host }} ({{ host.ip_address }})</option>{% endfor %}</select>
+                        <input name="agent_id" class="search-input" required pattern="[0-9]{1,12}" placeholder="Verified Wazuh agent ID">
+                        <button class="btn btn-subtle" type="submit">Fetch Wazuh snapshot</button>
+                    </form>{% endif %}
+                    {% for snapshot in context_wazuh_snapshots %}<details class="mt-2"><summary class="cursor-pointer text-xs">{{ snapshot.host }} · Wazuh agent {{ snapshot.agent_id }} · fetched {{ snapshot.fetched_at }}</summary>
+                        <p class="text-xs">These are point-in-time observations, not proof of software usage or network exposure. Scan times are shown where provided by Wazuh.</p>
+                        <p class="text-xs font-semibold mt-2">Ports</p><pre class="text-xs whitespace-pre-wrap break-all">{{ snapshot.ports|pprint }}</pre>
+                        <p class="text-xs font-semibold mt-2">Processes</p><pre class="text-xs whitespace-pre-wrap break-all">{{ snapshot.processes|pprint }}</pre>
+                    </details>{% empty %}<p class="text-xs">No Wazuh snapshots.</p>{% endfor %}
+                </details>
+            </section>
             <details class="bg-surface-container-low rounded-md border border-outline-variant p-4 mb-5">
                 <summary class="card-title cursor-pointer">Ownership and remediation</summary>
                 <form action="{% url 'update_vulnerability_work' vuln.id %}" method="post" class="space-y-2 mt-3">{% csrf_token %}

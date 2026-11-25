@@ -1,0 +1,9 @@
+{
+  "server_url": "https://cve3po.example",
+  "token": "REPLACE_WITH_PER_HOST_TOKEN",
+  "osquery_path": "/usr/bin/osqueryi",
+  "legacy_agent_path": "/opt/cve3po-agent/cve3po-agent-linux-amd64",
+  "legacy_agent_config": "/etc/cve3po-agent/agent.env",
+  "poll_seconds": 60,
+  "windows_cpus": []
+}
