@@ -3,14 +3,12 @@ from django.urls import path
 from django.contrib.auth import views as auth_views
 from . import views
 from . import dashboard_views
-from . import cti_views, context_views, context_api
+from . import cti_views, wazuh_inventory_views
 from .extensions import wazuh, agent
 
 urlpatterns = [
-    path("context-agent/pilot.zip", context_views.download_context_agent, name="download_context_agent"),
-    path("api/context-agent/poll/", context_api.poll, name="context_agent_poll"),
-    path("modules/wazuh/inventory/sync/", context_views.sync_wazuh_inventory, name="sync_wazuh_inventory"),
-    path("api/context-agent/jobs/<int:job_id>/result/", context_api.submit, name="context_agent_submit"),
+    path("modules/wazuh/inventory/sync/", wazuh_inventory_views.sync_wazuh_inventory, name="sync_wazuh_inventory"),
+    path("modules/wazuh/inventory/config/", wazuh_inventory_views.save_wazuh_api_config, name="save_wazuh_api_config"),
     path("cti/", cti_views.inbox, name="cti_inbox"),
     path("cti/<int:pk>/", cti_views.detail, name="cti_detail"),
     path("cti/<int:pk>/status/", cti_views.set_status, name="cti_set_status"),
@@ -88,10 +86,6 @@ urlpatterns = [
     ),
     path("vulnerabilities/", views.vuln_list, name="vuln_list"),
     path("vulnerabilities/<int:pk>/", views.vuln_detail, name="vuln_detail"),
-    path("vulnerabilities/<int:pk>/context/prepare/", context_views.prepare_context, name="prepare_context"),
-    path("vulnerabilities/<int:pk>/context/<int:assessment_id>/approve/", context_views.approve_context, name="approve_context"),
-    path("vulnerabilities/<int:pk>/context/<int:assessment_id>/apache/", context_views.approve_apache_context, name="approve_apache_context"),
-    path("vulnerabilities/<int:pk>/context/jobs/<int:job_id>/review/", context_views.review_context, name="review_context"),
     path(
         "vulnerabilities/<int:pk>/delete/",
         views.delete_vulnerability,

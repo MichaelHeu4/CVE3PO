@@ -15,6 +15,7 @@ from django.db.models import (
     Avg,
     Exists,
     OuterRef,
+    Subquery,
     F,
     ExpressionWrapper,
     DurationField,
@@ -32,7 +33,7 @@ from .models import (
     Software,
     Extension,
     SystemSettings,
-    CisaKevEntry, EpssEntry, FeedRun, CTIFeed, AITriageJob, WazuhContextSnapshot, WazuhInventorySync, ContextAgent, ContextJob,
+    CisaKevEntry, EpssEntry, FeedRun, CTIFeed, AITriageJob, WazuhContextSnapshot, WazuhInventorySync,
 )
 from .parser import nmap
 from .parser import nuclei
@@ -51,6 +52,7 @@ from .extensions import wrike as wrike_ext
 from .extensions import shodan as shodan_ext
 from .extensions import netbox as netbox_ext
 from .utils import scheduler as scheduler_util
+from .utils.wazuh_context import snapshot_port_rows, wazuh_api_config
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import authenticate, login, logout
@@ -939,6 +941,8 @@ def host_detail(request, pk):
         name_id="shodan", is_active=True
     ).exclude(api_token__isnull=True).exclude(api_token="").exists()
 
+    wazuh_snapshot = WazuhContextSnapshot.objects.filter(host=host).select_related("host").first()
+
     return render(
         request,
         "vuln_manager/host_detail.html",
@@ -961,9 +965,8 @@ def host_detail(request, pk):
             "shodan_available": shodan_available,
             "ai_triage_active": Extension.objects.filter(name_id="ai_triage", is_active=True).exists(),
             "host_software_count": host.software_inventory.count(),
-            "pilot_agent": ContextAgent.objects.filter(host=host).first(),
-            "pilot_inventory_jobs": ContextJob.objects.filter(agent__host=host, kind="inventory")[:5],
-            "wazuh_snapshot": WazuhContextSnapshot.objects.filter(host=host).first(),
+            "wazuh_snapshot": wazuh_snapshot,
+            "wazuh_ports": snapshot_port_rows(wazuh_snapshot),
         },
     )
 
@@ -1330,10 +1333,20 @@ def port_list(request):
     paginator = Paginator(groups, 40)
     page_number = request.GET.get("page")
     port_groups = paginator.get_page(page_number)
+    latest_wazuh = WazuhContextSnapshot.objects.filter(host_id=OuterRef("host_id")).order_by("-fetched_at", "-id").values("id")[:1]
+    wazuh_rows = []
+    for snapshot in WazuhContextSnapshot.objects.filter(id=Subquery(latest_wazuh)).select_related("host"):
+        for row in snapshot_port_rows(snapshot):
+            searchable = [row["port"], row["address"], row["protocol"], row["state"], row["process"],
+                          row["software_name"], row["host"].ip_address, row["host"].hostname]
+            if not query or any(query.casefold() in str(value or "").casefold() for value in searchable):
+                wazuh_rows.append(row)
+    wazuh_rows.sort(key=lambda row: (row["host"].ip_address, str(row["port"] or ""), row["protocol"]))
+    wazuh_ports = Paginator(wazuh_rows, 40).get_page(request.GET.get("wazuh_page"))
     return render(
         request,
         "vuln_manager/port_list.html",
-        {"port_groups": port_groups, "query": query},
+        {"port_groups": port_groups, "wazuh_ports": wazuh_ports, "query": query},
     )
 
 
@@ -1760,9 +1773,7 @@ def vuln_detail(request, pk):
             "related_findings": Vulnerability.objects.filter(cve_id__iexact=vuln.cve_id, host_id=vuln.host_id, software_id=vuln.software_id, port_id=vuln.port_id).exclude(pk=vuln.pk).select_related("scan") if (vuln.host_id or vuln.software_id) and vuln.cve_id.upper().startswith("CVE-") else [],
             "wrike_ready": wrike_ready,
             "affected_count": affected_count,
-            "context_hosts": [vuln.host] if vuln.host_id else list(affected.values()),
-            "context_assessments": vuln.context_assessments.select_related("host", "created_by").prefetch_related("jobs__approved_by", "jobs__reviewed_by")[:20],
-            "context_wazuh_snapshots": WazuhContextSnapshot.objects.filter(host_id__in=([vuln.host_id] if vuln.host_id else affected)).select_related("host", "fetched_by")[:10],
+            "wazuh_snapshots": WazuhContextSnapshot.objects.filter(host_id__in=([vuln.host_id] if vuln.host_id else affected)).select_related("host", "fetched_by")[:10],
             "cluster_1": cluster_1,
             "cluster_2": cluster_2,
             "cluster_3": cluster_3,
@@ -1989,6 +2000,7 @@ def extensions_view(request):
 
     modules = []
     system_settings = get_system_settings()
+    wazuh_url, wazuh_user, wazuh_password = wazuh_api_config()
     for mid, meta in module_metadata.items():
         ext, _ = Extension.objects.get_or_create(name_id=mid)
         modules.append(
@@ -2043,6 +2055,9 @@ def extensions_view(request):
                     bool(ext.api_token) if mid == "shodan" else None
                 ),
                 "wazuh_inventory_sync": WazuhInventorySync.objects.first() if mid == "wazuh" and request.user.is_staff else None,
+                "wazuh_api": {"url": wazuh_url, "user": wazuh_user,
+                              "password_set": bool(system_settings.wazuh_api_password),
+                              "environment_configured": bool(wazuh_password and not any((system_settings.wazuh_api_url, system_settings.wazuh_api_user, system_settings.wazuh_api_password)))} if mid == "wazuh" and request.user.is_staff else None,
                 "netbox": (
                     {
                         "url": system_settings.netbox_url,
