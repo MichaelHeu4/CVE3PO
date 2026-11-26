@@ -52,7 +52,7 @@ from .extensions import wrike as wrike_ext
 from .extensions import shodan as shodan_ext
 from .extensions import netbox as netbox_ext
 from .utils import scheduler as scheduler_util
-from .utils.wazuh_context import snapshot_port_rows, wazuh_api_config
+from .utils.wazuh_context import map_software, snapshot_port_rows, wazuh_api_config
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import authenticate, login, logout
@@ -941,7 +941,8 @@ def host_detail(request, pk):
         name_id="shodan", is_active=True
     ).exclude(api_token__isnull=True).exclude(api_token="").exists()
 
-    wazuh_snapshot = WazuhContextSnapshot.objects.filter(host=host).select_related("host").first()
+    wazuh_snapshot = WazuhContextSnapshot.objects.filter(host=host).select_related("host").prefetch_related("host__software_inventory").first()
+    wazuh_rows = snapshot_port_rows(wazuh_snapshot)
 
     return render(
         request,
@@ -966,7 +967,10 @@ def host_detail(request, pk):
             "ai_triage_active": Extension.objects.filter(name_id="ai_triage", is_active=True).exists(),
             "host_software_count": host.software_inventory.count(),
             "wazuh_snapshot": wazuh_snapshot,
-            "wazuh_ports": snapshot_port_rows(wazuh_snapshot),
+            "wazuh_listening": [row for row in wazuh_rows if row["category"] == "listening"],
+            "wazuh_connections": [row for row in wazuh_rows if row["category"] == "connections"],
+            "wazuh_udp_unknown": [row for row in wazuh_rows if row["category"] == "udp_unknown"],
+            "wazuh_other": [row for row in wazuh_rows if row["category"] == "other"],
         },
     )
 
@@ -1039,7 +1043,7 @@ def software_detail(request, pk):
     for host in hosts:
         snapshot = WazuhContextSnapshot.objects.filter(host=host).first()
         if snapshot:
-            for match in snapshot.software_matches:
+            for match in map_software(host, snapshot.ports, snapshot.processes):
                 if match.get("software_id") == item.pk:
                     wazuh_matches.append({"host": host, "snapshot": snapshot, "match": match})
 
@@ -1335,18 +1339,21 @@ def port_list(request):
     port_groups = paginator.get_page(page_number)
     latest_wazuh = WazuhContextSnapshot.objects.filter(host_id=OuterRef("host_id")).order_by("-fetched_at", "-id").values("id")[:1]
     wazuh_rows = []
-    for snapshot in WazuhContextSnapshot.objects.filter(id=Subquery(latest_wazuh)).select_related("host"):
+    for snapshot in WazuhContextSnapshot.objects.filter(id=Subquery(latest_wazuh)).select_related("host").prefetch_related("host__software_inventory"):
         for row in snapshot_port_rows(snapshot):
             searchable = [row["port"], row["address"], row["protocol"], row["state"], row["process"],
                           row["software_name"], row["host"].ip_address, row["host"].hostname]
             if not query or any(query.casefold() in str(value or "").casefold() for value in searchable):
                 wazuh_rows.append(row)
     wazuh_rows.sort(key=lambda row: (row["host"].ip_address, str(row["port"] or ""), row["protocol"]))
-    wazuh_ports = Paginator(wazuh_rows, 40).get_page(request.GET.get("wazuh_page"))
+    categories = [("listening", "Listening ports", "listen_page"), ("connections", "Connections", "connections_page"),
+                  ("udp_unknown", "UDP sockets · state unavailable", "udp_page"), ("other", "Other / unclassified", "other_page")]
+    wazuh_sections = [{"title": title, "page_param": param, "page": Paginator([r for r in wazuh_rows if r["category"] == category], 40).get_page(request.GET.get(param))}
+                      for category, title, param in categories]
     return render(
         request,
         "vuln_manager/port_list.html",
-        {"port_groups": port_groups, "wazuh_ports": wazuh_ports, "query": query},
+        {"port_groups": port_groups, "wazuh_sections": wazuh_sections, "query": query},
     )
 
 

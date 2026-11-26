@@ -166,11 +166,12 @@
         <div class="card">
             <div class="card-head"><h5 class="card-title">Wazuh ports and processes</h5></div>
             <div class="p-4">
-                {% if wazuh_snapshot %}<p class="text-xs text-outline mb-3">Agent {{ wazuh_snapshot.agent_id }} · fetched {{ wazuh_snapshot.fetched_at }}. Software matches are suggestions; missing entries do not prove inactivity.</p>{% endif %}
-                {% for item in wazuh_ports %}<div class="p-3 mb-2 rounded-md border border-outline-variant text-sm">
-                    <p><strong>{{ item.address|default:"—" }}:{{ item.port|default_if_none:"—" }}/{{ item.protocol|default:"?" }}</strong> · {{ item.state|default:"unknown state" }}</p>
-                    <p class="text-xs text-outline">Process: {{ item.process|default:"unknown" }}{% if item.pid %} · PID {{ item.pid }}{% endif %} · Software: {% if item.software_id %}<a href="{% url 'software_detail' item.software_id %}">{{ item.software_name }}</a> (suggestion){% else %}unknown{% endif %}</p>
-                </div>{% empty %}<p class="text-xs text-outline">No Wazuh ports observed.</p>{% endfor %}
+                {% if wazuh_snapshot %}<p class="text-xs text-outline mb-3">Agent {{ wazuh_snapshot.agent_id }} · fetched {{ wazuh_snapshot.fetched_at }}. Software associations are unverified; missing entries do not prove inactivity.</p>{% endif %}
+                {% if wazuh_listening %}<h6 class="text-sm font-semibold mt-4 mb-2">Listening ports</h6>{% include 'vuln_manager/partials/_wazuh_ports.html' with rows=wazuh_listening %}{% endif %}
+                {% if wazuh_connections %}<h6 class="text-sm font-semibold mt-4 mb-2">Connections</h6>{% include 'vuln_manager/partials/_wazuh_ports.html' with rows=wazuh_connections %}{% endif %}
+                {% if wazuh_udp_unknown %}<h6 class="text-sm font-semibold mt-4 mb-2">UDP sockets · state unavailable</h6>{% include 'vuln_manager/partials/_wazuh_ports.html' with rows=wazuh_udp_unknown %}{% endif %}
+                {% if wazuh_other %}<h6 class="text-sm font-semibold mt-4 mb-2">Other / unclassified</h6>{% include 'vuln_manager/partials/_wazuh_ports.html' with rows=wazuh_other %}{% endif %}
+                {% if not wazuh_listening and not wazuh_connections and not wazuh_udp_unknown and not wazuh_other %}<p class="text-xs text-outline">No Wazuh ports observed.</p>{% endif %}
             </div>
         </div>
         {% endif %}

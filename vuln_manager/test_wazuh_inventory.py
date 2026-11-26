@@ -4,7 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from vuln_manager.models import Extension, Host, HostAddress, Software, SystemSettings, WazuhContextSnapshot
-from vuln_manager.utils.wazuh_context import fetch_wazuh_agents, fetch_wazuh_context, match_hosts, map_software, refresh_all_hosts
+from vuln_manager.utils.wazuh_context import fetch_wazuh_agents, fetch_wazuh_context, match_hosts, map_software, port_category, refresh_all_hosts
 
 
 class WazuhInventoryTests(TestCase):
@@ -47,7 +47,7 @@ class WazuhInventoryTests(TestCase):
         host_response = self.client.get(reverse("host_detail", args=[self.host.pk]), {"tab": "infrastructure"})
         self.assertContains(host_response, "Wazuh ports and processes")
         self.assertContains(host_response, "apache2")
-        self.assertContains(host_response, "80/tcp")
+        self.assertContains(host_response, ":80")
         self.assertContains(self.client.get(reverse("port_list")), "apache2")
         response = self.client.get(reverse("software_detail", args=[self.software.pk]))
         self.assertContains(response, "Wazuh process and port suggestions")
@@ -67,6 +67,69 @@ class WazuhInventoryTests(TestCase):
         self.assertContains(response, "unmapped-process")
         self.assertNotContains(response, "obsolete")
 
+    def test_known_process_package_hints_and_container_proxy(self):
+        for name in ("openssh-server", "samba", "postfix", "docker-proxy"):
+            software = Software.objects.create(name=name, version="1")
+            software.hosts.add(self.host)
+        ports = [{"process": "sshd", "pid": 1}, {"process": "nmbd", "pid": 2},
+                 {"process": "smbd", "pid": 3}, {"process": "master", "pid": 4},
+                 {"process": "docker-proxy", "pid": 5}]
+        processes = [{"name": "master", "pid": 4, "cmd": "/usr/lib/postfix/sbin/master"}]
+        results = {item["process"]: item for item in map_software(self.host, ports, processes)}
+        self.assertEqual(results["sshd"]["software_name"], "openssh-server")
+        self.assertEqual(results["smbd"]["software_name"], "samba")
+        self.assertEqual(results["nmbd"]["software_name"], "samba")
+        self.assertEqual(results["master"]["software_name"], "postfix")
+        self.assertNotIn("docker-proxy", results)
+        self.assertEqual(map_software(self.host, [{"process": "master", "pid": 4}], []), [])
+        path_only = map_software(self.host, [{"pid": 9}], [{"pid": 9, "cmd": "/usr/sbin/sshd"}])
+        self.assertEqual(path_only[0]["software_name"], "openssh-server")
+
+    def test_mapping_improves_for_existing_snapshots_without_sync(self):
+        software = Software.objects.create(name="openssh-server", version="1")
+        software.hosts.add(self.host)
+        snapshot = WazuhContextSnapshot.objects.create(host=self.host, agent_id="001", ports=[{"pid": 1, "process": "sshd", "state": "listening", "protocol": "tcp", "local": {"port": 22}}])
+        self.assertEqual(snapshot.software_matches, [])
+        self.client.force_login(User.objects.create_user("snapshot-reader"))
+        self.assertContains(self.client.get(reverse("port_list")), "openssh-server")
+
+    def test_ambiguous_alias_does_not_select_a_package(self):
+        for name in ("openssh", "openssh-server"):
+            Software.objects.create(name=name, version="1").hosts.add(self.host)
+        self.assertEqual(map_software(self.host, [{"process": "sshd"}], []), [])
+
+    def test_postfix_mapping_does_not_trust_mismatched_process_or_arguments(self):
+        Software.objects.create(name="postfix", version="1").hosts.add(self.host)
+        port = [{"pid": 4, "process": "master"}]
+        self.assertEqual(map_software(self.host, port, [{"pid": 4, "name": "other", "cmd": "/usr/lib/postfix/sbin/master"}]), [])
+        self.assertEqual(map_software(self.host, port, [{"pid": 4, "name": "master", "cmd": "/usr/lib/postfix/sbin/master --secret=abc"}]), [])
+
+    def test_port_categories_distinguish_listening_connections_and_udp_unknown(self):
+        self.assertEqual(port_category({"protocol": "tcp6", "state": "listening"}), "listening")
+        self.assertEqual(port_category({"protocol": "tcp", "state": "established"}), "connections")
+        self.assertEqual(port_category({"protocol": "udp", "state": ""}), "udp_unknown")
+        self.assertEqual(port_category({"protocol": "tcp", "state": ""}), "other")
+
+    def test_host_and_port_pages_separate_wazuh_categories(self):
+        self.client.force_login(User.objects.create_user("categorized-reader"))
+        ports = [{"process": "listener", "protocol": "tcp", "state": "listening", "local": {"port": 80}},
+                 {"process": "connection", "protocol": "tcp", "state": "established", "local": {"port": 40123}},
+                 {"process": "datagram", "protocol": "udp", "local": {"port": 137}},
+                 {"process": "docker-proxy", "protocol": "tcp", "state": "listening", "local": {"port": 8080}}]
+        WazuhContextSnapshot.objects.create(host=self.host, agent_id="001", ports=ports)
+        for url, params in [(reverse("port_list"), {}), (reverse("host_detail", args=[self.host.pk]), {"tab": "infrastructure"})]:
+            response = self.client.get(url, params)
+            for text in ("Listening ports", "Connections", "UDP sockets", "Container proxy", "listener", "connection", "datagram"):
+                self.assertContains(response, text)
+
+    def test_port_section_pagination_keeps_other_filters(self):
+        self.client.force_login(User.objects.create_user("paging-reader"))
+        ports = [{"process": "listener", "protocol": "tcp", "state": "listening", "local": {"port": 8000 + i}} for i in range(41)]
+        WazuhContextSnapshot.objects.create(host=self.host, agent_id="001", ports=ports)
+        response = self.client.get(reverse("port_list"), {"q": "listener", "udp_page": 2})
+        self.assertContains(response, "listen_page=2")
+        self.assertContains(response, "udp_page=2")
+        self.assertContains(response, "q=listener")
     @patch("vuln_manager.utils.wazuh_context.fetch_wazuh_context")
     @patch("vuln_manager.utils.wazuh_context.fetch_wazuh_agents")
     def test_bulk_sync_handles_each_host_without_closing_findings(self, agents, fetch):
@@ -111,11 +174,11 @@ class WazuhInventoryTests(TestCase):
         ports = Mock(status_code=200)
         ports.json.return_value = {"error": 0, "data": {"total_affected_items": 1, "affected_items": [{"pid": 42, "process": "apache", "scan": {"time": "now"}}]}}
         processes = Mock(status_code=200)
-        processes.json.return_value = {"error": 0, "data": {"total_affected_items": 1, "affected_items": [{"pid": 42, "name": "apache", "argvs": "secret"}]}}
+        processes.json.return_value = {"error": 0, "data": {"total_affected_items": 1, "affected_items": [{"pid": 42, "name": "apache", "cmd": "/usr/sbin/apache", "argvs": "secret"}]}}
         session.post.return_value = auth
         session.get.side_effect = [ports, processes]
         result = fetch_wazuh_context("001")
-        self.assertEqual(result[1], [{"pid": 42, "name": "apache"}])
+        self.assertEqual(result[1], [{"pid": 42, "name": "apache", "cmd": "/usr/sbin/apache"}])
         self.assertFalse(any(call.kwargs.get("allow_redirects") for call in session.get.call_args_list))
         ports.json.return_value["data"]["total_failed_items"] = 1
         session.get.side_effect = [ports]
