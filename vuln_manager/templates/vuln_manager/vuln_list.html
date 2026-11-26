@@ -82,6 +82,7 @@
                     {% include 'vuln_manager/partials/_sort_th.html' with label='Name' key='name' sort=sort.key dir=sort.dir %}
                     {% include 'vuln_manager/partials/_sort_th.html' with label='Target' key='target' sort=sort.key dir=sort.dir %}
                     {% include 'vuln_manager/partials/_sort_th.html' with label='Status' key='status' sort=sort.key dir=sort.dir %}
+                    <th>AI outcome</th>
                     <th>Owner / due</th><th class="text-right">Action</th>
                 </tr>
             </thead>
@@ -104,13 +105,14 @@
                     <td class="whitespace-nowrap">
                         <span class="status-dot"><span class="w-1.5 h-1.5 rounded-full {% if vuln.status == 'fixed' %}bg-primary{% elif vuln.status == 'in_progress' %}bg-tertiary{% else %}bg-outline{% endif %}"></span>{{ vuln.get_status_display }}</span>
                     </td>
+                    <td class="whitespace-nowrap">{% if vuln.ai_result and vuln.ai_result != 'tbd' %}<span class="badge-soft">{{ vuln.ai_result }}</span>{% else %}<span class="text-xs text-outline">Not triaged</span>{% endif %}</td>
                     <td>{{ vuln.assignee|default:"Unassigned" }}{% if vuln.owner_team %} · {{ vuln.owner_team }}{% endif %}<br>{{ vuln.due_date|date:"d M Y"|default:"No due date" }}</td>
                     <td class="text-right">
                         <a href="{% url 'vuln_detail' vuln.id %}" class="icon-btn" aria-label="Open"><span class="material-symbols-outlined text-base">chevron_right</span></a>
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="7">{% include 'vuln_manager/partials/_empty.html' with icon='verified' title='All systems clear' text='No vulnerabilities match the current filters.' %}</td></tr>
+                <tr><td colspan="8">{% include 'vuln_manager/partials/_empty.html' with icon='verified' title='All systems clear' text='No vulnerabilities match the current filters.' %}</td></tr>
                 {% endfor %}
             </tbody>
         </table>

@@ -2804,7 +2804,9 @@ def _finding_triage_ids():
 
 
 def run_triage_background(job_id):
-    _run_tracked_triage(job_id, _finding_triage_ids, Vulnerability, ai_triage.triage)
+    def triage_finding(vulnerability):
+        ai_triage.triage(vulnerability, should_cancel=lambda: not AITriageJob.objects.filter(pk=job_id, status="running").exists())
+    _run_tracked_triage(job_id, _finding_triage_ids, Vulnerability, triage_finding)
 
 
 def _start_triage_job(job, target, args):
@@ -2860,7 +2862,9 @@ def triage_single_vulnerability(request, pk):
 
 
 def run_host_software_triage(job_id, software_ids):
-    _run_tracked_triage(job_id, lambda: software_ids, Software, ai_triage.triage_software)
+    def triage_component(software):
+        ai_triage.triage_software(software, should_cancel=lambda: not AITriageJob.objects.filter(pk=job_id, status="running").exists())
+    _run_tracked_triage(job_id, lambda: software_ids, Software, triage_component)
 
 
 @login_required
@@ -2880,6 +2884,17 @@ def triage_host_software(request, pk):
     else:
         messages.info(request, "No software is assigned to this host.")
     return redirect(f"{reverse('host_detail', args=[host.pk])}?tab=inventory")
+
+
+@login_required
+@require_POST
+def cancel_triage_job(request, pk):
+    get_object_or_404(AITriageJob, pk=pk)
+    changed = AITriageJob.objects.filter(pk=pk, status="running").update(status="cancelled", finished_at=now(), current_item="")
+    if not changed:
+        return HttpResponse("Only running jobs can be cancelled", status=409)
+    messages.success(request, "Triage cancelled. An in-flight request may still finish.")
+    return redirect("ai_dashboard")
 
 
 @login_required

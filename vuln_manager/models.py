@@ -633,7 +633,7 @@ class AITriageJob(models.Model):
     """Progress for a host-initiated batch of software triage operations."""
     STATUS_CHOICES = (("running", "Running"), ("completed", "Completed"),
                       ("partial", "Completed with errors"), ("failed", "Failed"),
-                      ("interrupted", "Interrupted"))
+                      ("interrupted", "Interrupted"), ("cancelled", "Cancelled"))
     kind = models.CharField(max_length=16, choices=(("software", "Host software"), ("findings", "Finding triage")), default="software")
     heartbeat_at = models.DateTimeField(null=True, blank=True)
     dismissed = models.BooleanField(default=False)

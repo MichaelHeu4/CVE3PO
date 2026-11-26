@@ -1,4 +1,4 @@
-from unittest.mock import call, patch
+from unittest.mock import ANY, call, patch
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
@@ -41,7 +41,7 @@ class HostSoftwareTriageTests(TestCase):
         self.assertEqual((job.status, job.processed, job.succeeded, job.failed), ("partial", 3, 1, 2))
         self.assertEqual(job.progress_percent, 100)
         self.assertIsNotNone(job.finished_at)
-        self.assertEqual(triage.call_args_list, [call(self.first), call(self.second)])
+        self.assertEqual(triage.call_args_list, [call(self.first, should_cancel=ANY), call(self.second, should_cancel=ANY)])
 
     @patch("vuln_manager.views.threading.Thread")
     def test_disabled_or_empty_inventory_does_not_start_job(self, thread):
@@ -120,3 +120,19 @@ class HostSoftwareTriageTests(TestCase):
         run_host_software_triage(job.pk, [self.first.pk, self.second.pk])
         job.refresh_from_db()
         self.assertEqual(job.completed_software_ids, [self.first.pk, self.second.pk])
+
+    @patch("vuln_manager.utils.ai_triage.triage")
+    def test_software_triage_stops_between_findings(self, triage):
+        from .models import Scan, Vulnerability
+        from .utils.ai_triage import triage_software
+        scan = Scan.objects.create(scan_type="MANUAL")
+        for cve in ("CVE-2026-2001", "CVE-2026-2002"):
+            Vulnerability.objects.create(scan=scan, software=self.first, cve_id=cve, name="test", severity="high")
+        stopped = {"value": False}
+        def cancel(*args, **kwargs):
+            stopped["value"] = True
+        triage.side_effect = cancel
+        triage_software(self.first, should_cancel=lambda: stopped["value"])
+        self.assertEqual(triage.call_count, 1)
+        self.first.refresh_from_db()
+        self.assertIsNone(self.first.ai_triage_time)

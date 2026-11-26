@@ -288,14 +288,21 @@ def _call_azure_ai(messages, settings_obj, response_model=TriageErgebnis):
     return response_model.model_validate_json(text)
 
 
-def triage(vuln: Vulnerability):
+def triage(vuln: Vulnerability, should_cancel=None):
+    should_cancel = should_cancel or (lambda: False)
     extension, settings_obj, provider = _get_ai_config()
     if not extension.is_active:
         raise RuntimeError("ai_triage_disabled")
 
     # Enrichment: Daten von externen APIs holen
+    if should_cancel():
+        return
     epss_score = get_epss_score(vuln.cve_id)
+    if should_cancel():
+        return
     is_kev = is_cisa_kev(vuln.cve_id)
+    if should_cancel():
+        return
 
     # JIT Enrichment für fehlende CVSS oder Beschreibung
     current_cvss = vuln.cvss
@@ -309,6 +316,8 @@ def triage(vuln: Vulnerability):
         or "No description" in current_desc
     ):
         ext_cvss, ext_desc, severity = get_cve_enrichment(vuln.cve_id)
+        if should_cancel():
+            return
         if current_desc and len(current_desc) >= 20 and "No description" not in current_desc:
             ext_desc = None
         apply_cve_enrichment(
@@ -342,6 +351,8 @@ def triage(vuln: Vulnerability):
     custom_prompt = settings_obj.ai_cve_system_prompt or SYSTEM_PROMPT
     messages = _build_messages(aktueller_fund, system_prompt=custom_prompt)
 
+    if should_cancel():
+        return
     start_time = time.time()
     if provider == "azure":
         response = _call_azure_ai(messages, settings_obj)
@@ -351,6 +362,8 @@ def triage(vuln: Vulnerability):
         raise RuntimeError("ai_triage_invalid_provider")
     proc_time = (time.time() - start_time) * 1000  # In ms
 
+    if should_cancel():
+        return
     Vulnerability.objects.filter(pk=vuln.id).update(
         ai_reason=response.gedankengang_analyst,
         ai_result=response.ssvc_score,
@@ -360,7 +373,9 @@ def triage(vuln: Vulnerability):
     )
 
 
-def triage_software(software: Software):
+def triage_software(software: Software, should_cancel=None):
+    cancellable = should_cancel is not None
+    should_cancel = should_cancel or (lambda: False)
     extension, settings_obj, provider = _get_ai_config()
     if not extension.is_active:
         raise RuntimeError("ai_triage_disabled")
@@ -370,7 +385,15 @@ def triage_software(software: Software):
 
     # 1. Triage each vulnerability first
     for vuln in vulns:
-        triage(vuln)
+        if should_cancel():
+            return
+        if cancellable:
+            triage(vuln, should_cancel=should_cancel)
+        else:
+            triage(vuln)
+
+    if should_cancel():
+        return
 
     # If no vulnerabilities, default to Track
     if not vulns.exists():
@@ -386,7 +409,11 @@ def triage_software(software: Software):
     # Build the prompt payload
     vuln_details_list = []
     for v in vulns:
+        if should_cancel():
+            return
         is_kev = is_cisa_kev(v.cve_id)
+        if should_cancel():
+            return
         epss_score = get_epss_score(v.cve_id)
         vuln_details_list.append(
             f"- {v.cve_id}: CISA KEV: {is_kev}, EPSS: {epss_score}, CVSS Vector: {v.cvss or 'N/A'}. Beschreibung: {v.description}"
@@ -420,6 +447,8 @@ CVE-Details:
         },
     ]
 
+    if should_cancel():
+        return
     if provider == "azure":
         response = _call_azure_ai(messages, settings_obj, response_model=SoftwareTriageErgebnis)
     elif provider == "openrouter":
@@ -427,6 +456,8 @@ CVE-Details:
     else:
         raise RuntimeError("ai_triage_invalid_provider")
 
+    if should_cancel():
+        return
     c1_score = response.cluster_1_score
     c2_score = response.cluster_2_score
     c3_score = response.cluster_3_score

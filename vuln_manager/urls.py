@@ -139,6 +139,7 @@ urlpatterns = [
     ),
     path("ai/dashboard/", views.ki_dashboard, name="ai_dashboard"),
     path("ai/jobs/", views.ai_triage_jobs, name="ai_triage_jobs"),
+    path("ai/jobs/<int:pk>/cancel/", views.cancel_triage_job, name="cancel_triage_job"),
     path("ai/jobs/<int:pk>/dismiss/", views.dismiss_triage_job, name="dismiss_triage_job"),
     path("ai/jobs/<int:pk>/resume/", views.resume_triage_job, name="resume_triage_job"),
     path("ai/triage", views.do_triage, name="do_triage"),
