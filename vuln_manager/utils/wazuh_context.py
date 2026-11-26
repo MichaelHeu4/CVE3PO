@@ -31,13 +31,19 @@ def validate_api_url(base):
         return False
 
 
+def wazuh_verify_ssl():
+    settings = SystemSettings.objects.filter(pk=1).only("wazuh_verify_ssl").first()
+    return settings.wazuh_verify_ssl if settings else True
+
+
 def fetch_wazuh_agents(heartbeat=None):
     """Read the complete Wazuh agent list; incomplete lists are not used for matching."""
     base, username, password = wazuh_api_config()
     if not validate_api_url(base) or not username or not password:
         raise ValueError("Wazuh HTTPS API configuration is missing or invalid")
+    verify = wazuh_verify_ssl()
     with requests.Session() as session:
-        response = session.post(base + "/security/user/authenticate", auth=(username, password), timeout=(5, 20), allow_redirects=False)
+        response = session.post(base + "/security/user/authenticate", auth=(username, password), timeout=(5, 20), allow_redirects=False, verify=verify)
         response.raise_for_status()
         if response.status_code != 200:
             raise ValueError("Unexpected Wazuh authentication response")
@@ -46,7 +52,7 @@ def fetch_wazuh_agents(heartbeat=None):
         while True:
             if heartbeat:
                 heartbeat()
-            response = session.get(base + "/agents", headers=headers, params={"limit": PAGE_SIZE, "offset": len(agents)}, timeout=(5, 20), allow_redirects=False)
+            response = session.get(base + "/agents", headers=headers, params={"limit": PAGE_SIZE, "offset": len(agents)}, timeout=(5, 20), allow_redirects=False, verify=verify)
             response.raise_for_status()
             if response.status_code != 200:
                 raise ValueError("Unexpected Wazuh agents response")
@@ -174,9 +180,10 @@ def fetch_wazuh_context(agent_id):
         raise ValueError("Wazuh context API must be configured with an HTTPS URL")
     if not username or not password:
         raise ValueError("Wazuh context API credentials are missing")
+    verify = wazuh_verify_ssl()
     with requests.Session() as session:
         auth = session.post(base + "/security/user/authenticate", auth=(username, password),
-                           timeout=(5, 20), allow_redirects=False)
+                           timeout=(5, 20), allow_redirects=False, verify=verify)
         auth.raise_for_status()
         if auth.status_code != 200:
             raise ValueError("Unexpected Wazuh authentication response")
@@ -188,7 +195,7 @@ def fetch_wazuh_context(agent_id):
             while True:
                 response = session.get(f"{base}/syscollector/{agent_id}/{kind}", headers=headers,
                                        params={"limit": PAGE_SIZE, "offset": len(entries)},
-                                       timeout=(5, 20), allow_redirects=False)
+                                       timeout=(5, 20), allow_redirects=False, verify=verify)
                 response.raise_for_status()
                 if response.status_code != 200:
                     raise ValueError("Unexpected Wazuh response")

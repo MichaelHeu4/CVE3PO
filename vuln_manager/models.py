@@ -31,6 +31,7 @@ class SystemSettings(models.Model):
     wazuh_api_url = models.URLField(max_length=500, blank=True, default="")
     wazuh_api_user = models.CharField(max_length=255, blank=True, default="")
     wazuh_api_password = models.CharField(max_length=500, blank=True, default="")
+    wazuh_verify_ssl = models.BooleanField(default=True)
     sla_critical_days = models.PositiveIntegerField(default=7)
     sla_high_days = models.PositiveIntegerField(default=30)
     inventory_retention_days = models.PositiveIntegerField(default=90)

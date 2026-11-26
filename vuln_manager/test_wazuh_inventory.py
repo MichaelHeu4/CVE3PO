@@ -146,3 +146,38 @@ class WazuhInventoryTests(TestCase):
         self.assertEqual(wazuh_api_config(), ("https://env.example", "env-user", "env-secret"))
         SystemSettings.objects.create(pk=1, wazuh_api_url="https://saved.example", wazuh_api_user="saved-user")
         self.assertEqual(wazuh_api_config(), ("https://saved.example", "saved-user", ""))
+
+    @patch("vuln_manager.utils.wazuh_context.requests.Session")
+    def test_verify_option_applies_to_authentication_and_all_inventory_requests(self, session_class):
+        settings = SystemSettings.objects.create(pk=1, wazuh_api_url="https://wazuh.example:55000", wazuh_api_user="user", wazuh_api_password="secret")
+        session = session_class.return_value.__enter__.return_value
+        auth = Mock(status_code=200)
+        auth.json.return_value = {"data": {"token": "token"}}
+        empty = Mock(status_code=200)
+        empty.json.return_value = {"error": 0, "data": {"total_affected_items": 0, "affected_items": []}}
+        session.post.return_value = auth
+        session.get.return_value = empty
+        for verify in (True, False):
+            settings.wazuh_verify_ssl = verify
+            settings.save(update_fields=["wazuh_verify_ssl"])
+            session.reset_mock()
+            fetch_wazuh_agents()
+            fetch_wazuh_context("001")
+            self.assertEqual(session.post.call_count, 2)
+            self.assertEqual(session.get.call_count, 3)
+            for call in list(session.post.call_args_list) + list(session.get.call_args_list):
+                self.assertIs(call.kwargs["verify"], verify)
+
+    def test_staff_can_change_verify_checkbox(self):
+        user = User.objects.create_user("verify-admin", is_staff=True)
+        self.client.force_login(user)
+        url = reverse("save_wazuh_api_config")
+        data = {"wazuh_api_url": "https://wazuh.example:55000", "wazuh_api_user": "user", "wazuh_api_password": "secret"}
+        self.client.post(url, {**data, "wazuh_verify_ssl": "1"})
+        settings = SystemSettings.objects.get(pk=1)
+        self.assertTrue(settings.wazuh_verify_ssl)
+        self.assertContains(self.client.get(reverse("extensions")), 'name="wazuh_verify_ssl" value="1" checked')
+        self.client.post(url, data)
+        settings.refresh_from_db()
+        self.assertFalse(settings.wazuh_verify_ssl)
+        self.assertContains(self.client.get(reverse("extensions")), 'name="wazuh_verify_ssl" value="1" >')
