@@ -22,7 +22,8 @@ def save_wazuh_api_config(request):
         return HttpResponseBadRequest("Wazuh API password is required")
     settings.wazuh_api_url = url
     settings.wazuh_api_user = username
-    fields = ["wazuh_api_url", "wazuh_api_user"]
+    settings.wazuh_verify_ssl = request.POST.get("wazuh_verify_ssl") == "1"
+    fields = ["wazuh_api_url", "wazuh_api_user", "wazuh_verify_ssl"]
     if password:
         settings.wazuh_api_password = password
         fields.append("wazuh_api_password")

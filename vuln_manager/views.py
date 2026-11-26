@@ -2057,6 +2057,7 @@ def extensions_view(request):
                 "wazuh_inventory_sync": WazuhInventorySync.objects.first() if mid == "wazuh" and request.user.is_staff else None,
                 "wazuh_api": {"url": wazuh_url, "user": wazuh_user,
                               "password_set": bool(system_settings.wazuh_api_password),
+                              "verify_ssl": system_settings.wazuh_verify_ssl,
                               "environment_configured": bool(wazuh_password and not any((system_settings.wazuh_api_url, system_settings.wazuh_api_user, system_settings.wazuh_api_password)))} if mid == "wazuh" and request.user.is_staff else None,
                 "netbox": (
                     {

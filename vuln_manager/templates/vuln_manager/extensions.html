@@ -219,6 +219,7 @@
                                 <input id="wazuh-api-user" name="wazuh_api_user" value="{{ mod.wazuh_api.user }}" autocomplete="off" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px]">
                                 <label class="text-[10px] text-outline" for="wazuh-api-password">API password</label>
                                 <input id="wazuh-api-password" name="wazuh_api_password" type="password" autocomplete="new-password" placeholder="{% if mod.wazuh_api.password_set %}Password set — leave empty to keep{% else %}API password{% endif %}" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px]">
+                                <label class="flex items-center gap-2 text-[11px] text-on-surface-variant"><input type="checkbox" name="wazuh_verify_ssl" value="1" {% if mod.wazuh_api.verify_ssl %}checked{% endif %}> Verify TLS certificate</label>
                                 <button class="w-full rounded-lg px-3 py-2 border border-outline-variant text-[10px]">Save Wazuh API settings</button>
                             </form>
                             {% if mod.is_active %}<form action="{% url 'sync_wazuh_inventory' %}" method="post">{% csrf_token %}<button class="w-full rounded-lg px-3 py-2 border border-primary/40 text-primary text-[10px]">Sync inventory for all hosts</button></form>{% endif %}
