@@ -94,6 +94,14 @@
                                 <option value="openrouter" {% if mod.ai_triage_provider == "openrouter" %}selected{% endif %}>OpenRouter (OpenAI Client)</option>
                                 <option value="azure" {% if mod.ai_triage_provider == "azure" %}selected{% endif %}>Azure (OpenAI/Azure AI)</option>
                             </select>
+                            <label for="ai-reasoning-effort" class="text-[11px] font-bold tracking-wider text-outline/50 block">Reasoning effort</label>
+                            <select id="ai-reasoning-effort" name="ai_reasoning_effort" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px] text-on-surface">
+                                <option value="" {% if not mod.ai_reasoning_effort %}selected{% endif %}>Model default</option>
+                                <option value="low" {% if mod.ai_reasoning_effort == 'low' %}selected{% endif %}>Low</option>
+                                <option value="medium" {% if mod.ai_reasoning_effort == 'medium' %}selected{% endif %}>Medium</option>
+                                <option value="high" {% if mod.ai_reasoning_effort == 'high' %}selected{% endif %}>High</option>
+                            </select>
+                            <p class="text-[10px] text-outline/70">Requires a model and provider that support reasoning effort. Azure AI Inference supports the model default only.</p>
                             <input name="ai_openrouter_model" type="text" placeholder="OpenRouter Model (e.g. deepseek/deepseek-v4-flash)" value="{{ mod.ai_openrouter_model|default:'' }}" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px] text-on-surface"/>
                             <input name="ai_openrouter_api_key" type="password" placeholder="OpenRouter API Key (optional to update)" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px] text-on-surface"/>
                             <input name="ai_azure_endpoint" type="url" placeholder="Azure Endpoint (e.g. https://<resource>.openai.azure.com)" value="{{ mod.ai_azure_endpoint|default:'' }}" class="w-full rounded-lg bg-surface-container-highest border border-outline-variant px-3 py-2 text-[11px] text-on-surface"/>

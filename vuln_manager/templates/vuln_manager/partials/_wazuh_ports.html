@@ -1,3 +1,34 @@
-<div class="table-wrap"><table class="w-full text-sm"><thead><tr>{% if show_host %}<th>Host</th>{% endif %}<th>Local address</th><th>Protocol / state</th><th>Process</th><th>Software</th><th>Fetched</th></tr></thead><tbody>
-{% for item in rows %}<tr>{% if show_host %}<td><a href="{% url 'host_detail' item.host.id %}?tab=infrastructure">{{ item.host }}</a></td>{% endif %}<td>{{ item.address|default:"—" }}:{{ item.port|default_if_none:"—" }}</td><td>{{ item.protocol|default:"?" }} / {{ item.state|default:"not reported" }}</td><td>{{ item.process|default:"unknown" }}{% if item.pid %} ({{ item.pid }}){% endif %}{% if item.executable %}<div class="text-xs text-outline">{{ item.executable }}</div>{% endif %}</td><td>{% if item.is_container_proxy %}Container proxy · target unknown{% elif item.software_id %}<a href="{% url 'software_detail' item.software_id %}">{{ item.software_name }}</a><div class="text-xs text-outline">{{ item.mapping_basis }} · unverified</div>{% else %}unknown{% endif %}</td><td>{{ item.fetched_at }}</td></tr>
-{% empty %}<tr><td colspan="6">No observations.</td></tr>{% endfor %}</tbody></table></div>
+<div class="table-wrap">
+    <div class="overflow-x-auto">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    {% if show_host %}<th scope="col">Host</th>{% endif %}
+                    <th scope="col">Local address</th>
+                    <th scope="col">Protocol / state</th>
+                    <th scope="col">Process</th>
+                    <th scope="col">Software</th>
+                    <th scope="col">Fetched</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in rows %}
+                <tr>
+                    {% if show_host %}<td><a class="text-primary hover:underline" href="{% url 'host_detail' item.host.id %}?tab=infrastructure">{{ item.host }}</a></td>{% endif %}
+                    <td class="font-mono tabular-nums whitespace-nowrap">{{ item.address|default:"—" }}:{{ item.port|default_if_none:"—" }}</td>
+                    <td class="whitespace-nowrap"><span class="badge-soft">{{ item.protocol|default:"?" }}</span> <span class="text-xs text-outline">{{ item.state|default:"not reported" }}</span></td>
+                    <td><span class="font-medium">{{ item.process|default:"unknown" }}</span>{% if item.pid %} <span class="text-xs text-outline">PID {{ item.pid }}</span>{% endif %}{% if item.executable %}<div class="text-xs text-outline">{{ item.executable }}</div>{% endif %}</td>
+                    <td>
+                        {% if item.is_container_proxy %}<span class="text-on-surface-variant">Container proxy · target unknown</span>
+                        {% elif item.software_id %}<a class="text-primary hover:underline font-medium" href="{% url 'software_detail' item.software_id %}">{{ item.software_name }}</a><div class="text-xs text-outline">{{ item.mapping_basis }} · unverified</div>
+                        {% else %}<span class="text-outline">unknown</span>{% endif %}
+                    </td>
+                    <td class="text-xs text-outline whitespace-nowrap">{{ item.fetched_at }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="{% if show_host %}6{% else %}5{% endif %}" class="text-outline">No observations.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>

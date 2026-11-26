@@ -66,6 +66,7 @@ import io
 from django.http import (
     FileResponse,
     HttpResponse,
+    HttpResponseBadRequest,
     HttpResponseForbidden,
     HttpResponseNotFound,
     JsonResponse,
@@ -2029,6 +2030,9 @@ def extensions_view(request):
                 "ai_triage_provider": (
                     system_settings.ai_triage_provider if mid == "ai_triage" else None
                 ),
+                "ai_reasoning_effort": (
+                    system_settings.ai_reasoning_effort if mid == "ai_triage" else None
+                ),
                 "ai_openrouter_model": (
                     system_settings.ai_openrouter_model if mid == "ai_triage" else None
                 ),
@@ -2332,7 +2336,11 @@ def save_ai_triage_config(request):
     ai_software_system_prompt = (request.POST.get("ai_software_system_prompt") or "").strip() or None
 
     settings_obj = get_system_settings()
+    reasoning_effort = request.POST.get("ai_reasoning_effort", settings_obj.ai_reasoning_effort).strip().lower()
+    if reasoning_effort not in {"", "low", "medium", "high"}:
+        return HttpResponseBadRequest("invalid_reasoning_effort")
     settings_obj.ai_triage_provider = provider
+    settings_obj.ai_reasoning_effort = reasoning_effort
     settings_obj.ai_openrouter_model = openrouter_model
     settings_obj.ai_azure_endpoint = azure_endpoint
     settings_obj.ai_azure_model = azure_model
@@ -2346,6 +2354,7 @@ def save_ai_triage_config(request):
     settings_obj.save(
         update_fields=[
             "ai_triage_provider",
+            "ai_reasoning_effort",
             "ai_openrouter_model",
             "ai_azure_endpoint",
             "ai_azure_model",
