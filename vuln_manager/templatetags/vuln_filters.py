@@ -27,6 +27,11 @@ def qs_replace(context, **kwargs):
     return f"?{encoded}" if encoded else ""
 
 
+@register.simple_tag(takes_context=True)
+def qs_replace_one(context, key, value):
+    return qs_replace(context, **{str(key): value})
+
+
 @register.simple_tag
 def sort_dir(current_key, target_key, current_dir):
     """Direction a header link should request: toggle if active, else 'asc'."""

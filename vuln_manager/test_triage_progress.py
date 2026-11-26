@@ -76,3 +76,54 @@ class FindingTriageProgressTests(TestCase):
         self.assertContains(response, "—")
         self.assertNotContains(response, "Â·")
         self.assertNotContains(response, "â€")
+
+    def test_cancel_running_job_and_show_cancelled_status(self):
+        job = AITriageJob.objects.create(kind="findings", host_label="cancel me", heartbeat_at=timezone.now(), total=3)
+        self.assertContains(self.client.get(reverse("ai_triage_jobs")), "Cancel cancel me run")
+        self.assertEqual(self.client.get(reverse("cancel_triage_job", args=[job.pk])).status_code, 405)
+        self.assertRedirects(self.client.post(reverse("cancel_triage_job", args=[job.pk])), reverse("ai_dashboard"))
+        job.refresh_from_db()
+        self.assertEqual(job.status, "cancelled")
+        self.assertIsNotNone(job.finished_at)
+        self.assertContains(self.client.get(reverse("ai_triage_jobs")), "Cancelled")
+        self.assertEqual(self.client.post(reverse("cancel_triage_job", args=[job.pk])).status_code, 409)
+
+    @patch("vuln_manager.views.ai_triage.triage")
+    def test_cancel_during_finding_stops_before_next_finding(self, triage):
+        self.finding(cve_id="CVE-2026-5001")
+        self.finding(cve_id="CVE-2026-5002")
+        job = AITriageJob.objects.create(kind="findings", host_label="test", heartbeat_at=timezone.now())
+        def cancel(*args, **kwargs):
+            AITriageJob.objects.filter(pk=job.pk).update(status="cancelled", finished_at=timezone.now())
+        triage.side_effect = cancel
+        run_triage_background(job.pk)
+        job.refresh_from_db()
+        self.assertEqual(job.status, "cancelled")
+        self.assertEqual(triage.call_count, 1)
+
+    def test_vulnerability_list_shows_outcome_and_pending_state(self):
+        self.finding(cve_id="CVE-2026-5001", ai_result="Track*")
+        self.finding(cve_id="CVE-2026-5002", ai_result="Act")
+        self.finding(cve_id="CVE-2026-5003", ai_result="tbd")
+        response = self.client.get(reverse("vuln_list"))
+        for text in ("AI outcome", "Track*", "Act", "Not triaged"):
+            self.assertContains(response, text)
+
+    @patch("vuln_manager.utils.ai_triage.is_cisa_kev")
+    @patch("vuln_manager.utils.ai_triage.get_epss_score")
+    def test_cancel_between_external_requests_skips_following_requests(self, epss, kev):
+        from .utils.ai_triage import triage
+        stopped = {"value": False}
+        def cancel_after_epss(*args):
+            stopped["value"] = True
+            return 0.1
+        epss.side_effect = cancel_after_epss
+        triage(self.finding(), should_cancel=lambda: stopped["value"])
+        kev.assert_not_called()
+
+    def test_cancel_requires_login(self):
+        job = AITriageJob.objects.create(kind="findings", host_label="protected")
+        self.client.logout()
+        self.assertEqual(self.client.post(reverse("cancel_triage_job", args=[job.pk])).status_code, 302)
+        job.refresh_from_db()
+        self.assertEqual(job.status, "running")

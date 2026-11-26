@@ -9,6 +9,45 @@ from vuln_manager.models import Host, HostAddress, SystemSettings, WazuhContextS
 MAX_ITEMS = 5000
 PAGE_SIZE = 500
 
+# These are package-name hints, not proof of executable ownership.
+PROCESS_PACKAGE_HINTS = {
+    "sshd": {"openssh-server", "openssh"},
+    "smbd": {"samba", "samba-server"},
+    "nmbd": {"samba", "samba-server"},
+    "winbindd": {"winbind", "samba-winbind"},
+    "httpd": {"httpd", "apache2"},
+    "apache2": {"apache2", "httpd"},
+    "mysqld": {"mysql-server", "mariadb-server"},
+    "mariadbd": {"mariadb-server"},
+    "postgres": {"postgresql", "postgresql-server"},
+}
+CONTAINER_PROXIES = {"docker-proxy", "rootlesskit-docker-proxy"}
+
+
+def _process_name(value):
+    name = str(value or "").replace("\\", "/").rsplit("/", 1)[-1].casefold()
+    return name[:-4] if name.endswith(".exe") else name
+
+
+def _executable_path(value):
+    """Retain an absolute executable only, never command-line arguments."""
+    value = value if isinstance(value, str) else ""
+    if re.fullmatch(r"/[A-Za-z0-9_./+@-]{1,500}", value):
+        return value
+    return ""
+
+
+def port_category(port):
+    state = str(port.get("state") or "").strip().casefold().replace("-", "_")
+    protocol = str(port.get("protocol") or "").strip().casefold()
+    if state in {"listen", "listening"}:
+        return "listening"
+    if state in {"established", "syn_sent", "syn_recv", "syn_received", "fin_wait1", "fin_wait2", "fin_wait_1", "fin_wait_2", "close_wait", "closing", "last_ack", "time_wait"}:
+        return "connections"
+    if protocol.startswith("udp") and state in {"", "unknown", "none"}:
+        return "udp_unknown"
+    return "other"
+
 
 def wazuh_api_config():
     settings = SystemSettings.objects.filter(pk=1).first()
@@ -95,28 +134,46 @@ def match_hosts(agents):
 
 
 def map_software(host, ports, processes):
-    """Return suggestions based only on unambiguous exact process/package names."""
-    def normal(value):
-        name = str(value or "").replace("\\", "/").rsplit("/", 1)[-1].casefold()
-        return name[:-4] if name.endswith(".exe") else name
+    """Associate only unique inventory matches and record the evidence used."""
     names = {}
     for software in host.software_inventory.all():
-        names.setdefault(normal(software.name), []).append(software)
+        names.setdefault(_process_name(software.name), []).append(software)
     by_pid = {}
     for process in processes:
         if process.get("pid") not in (None, 0, "0", ""):
-            by_pid.setdefault(str(process["pid"]), []).append(process.get("name", ""))
+            by_pid.setdefault(str(process["pid"]), []).append(process)
     matches = []
-    for port in ports:
+    for index, port in enumerate(ports):
+        if not isinstance(port, dict):
+            continue
         process = port.get("process") or ""
-        if not process and len(by_pid.get(str(port.get("pid")), [])) == 1:
-            process = by_pid[str(port["pid"])][0]
-        candidates = names.get(normal(process), []) if process else []
+        pid_matches = by_pid.get(str(port.get("pid")), [])
+        detail = pid_matches[0] if len(pid_matches) == 1 else {}
+        if process and detail.get("name") and _process_name(process) != _process_name(detail["name"]):
+            detail = {}
+        if not process:
+            process = detail.get("name") or ""
+        executable = _executable_path(detail.get("cmd"))
+        if not process and executable:
+            process = _process_name(executable)
+        name = _process_name(process)
+        if name in CONTAINER_PROXIES:
+            continue
+        candidates = names.get(name, []) if name else []
+        basis = "Exact process and software name"
+        if not candidates and name in PROCESS_PACKAGE_HINTS:
+            candidates = [item for hint in PROCESS_PACKAGE_HINTS[name] for item in names.get(hint, [])]
+            basis = "Known process-to-package name"
+        # Postfix master is a generic name; require a distinctive executable path.
+        if not candidates and name == "master" and executable and "/postfix/" in executable.casefold():
+            candidates = names.get("postfix", [])
+            basis = "Postfix executable path"
         if len(candidates) == 1:
             matches.append({"software_id": candidates[0].pk, "software_name": candidates[0].name,
+                            "port_index": index, "executable": executable,
                             "process": process, "pid": port.get("pid"), "local": port.get("local"),
                             "protocol": port.get("protocol"), "state": port.get("state"), "scan": port.get("scan"),
-                            "basis": "exact process and software name; suggested mapping"})
+                            "basis": basis})
     return matches
 
 
@@ -124,28 +181,31 @@ def snapshot_port_rows(snapshot):
     """Format every observation, including ports without a software match."""
     if snapshot is None:
         return []
-    def key(item):
-        local = item.get("local") or {}
-        return (str(item.get("pid") or ""), str(local.get("ip") or ""),
-                str(local.get("port") or ""), str(item.get("protocol") or "").lower())
-    matches = {key(item): item for item in snapshot.software_matches if isinstance(item, dict)}
+    matches = {item["port_index"]: item for item in map_software(snapshot.host, snapshot.ports, snapshot.processes)}
     processes = {}
     for process in snapshot.processes:
         if isinstance(process, dict) and process.get("pid") not in (None, "", 0, "0"):
-            processes.setdefault(str(process["pid"]), []).append(process.get("name") or "")
+            processes.setdefault(str(process["pid"]), []).append(process)
     rows = []
-    for port in snapshot.ports:
+    for index, port in enumerate(snapshot.ports):
         if not isinstance(port, dict):
             continue
         local = port.get("local") or {}
         if not isinstance(local, dict):
             continue
-        match = matches.get(key(port), {})
-        pid_names = processes.get(str(port.get("pid")), [])
+        match = matches.get(index, {})
+        pid_records = processes.get(str(port.get("pid")), [])
+        detail = pid_records[0] if len(pid_records) == 1 else {}
+        process_name = port.get("process") or match.get("process") or detail.get("name") or ""
+        if port.get("process") and detail.get("name") and _process_name(port["process"]) != _process_name(detail["name"]):
+            detail = {}
+        is_proxy = _process_name(process_name) in CONTAINER_PROXIES
         rows.append({"host": snapshot.host, "port": local.get("port"), "address": local.get("ip"),
                      "protocol": port.get("protocol") or "", "state": port.get("state") or "",
-                     "pid": port.get("pid"), "process": port.get("process") or match.get("process") or (pid_names[0] if len(pid_names) == 1 else ""),
+                     "pid": port.get("pid"), "process": process_name,
                      "software_id": match.get("software_id"), "software_name": match.get("software_name"),
+                     "mapping_basis": match.get("basis", ""), "executable": match.get("executable") or _executable_path(detail.get("cmd")),
+                     "is_container_proxy": is_proxy, "category": port_category(port),
                      "scan": port.get("scan") or {}, "fetched_at": snapshot.fetched_at, "agent_id": snapshot.agent_id})
     return rows
 
@@ -215,5 +275,11 @@ def fetch_wazuh_context(agent_id):
             # Avoid collecting command lines or process arguments, which may contain secrets.
             keys = ({"local", "protocol", "state", "pid", "process", "scan"} if kind == "ports" else
                     {"pid", "name", "start_time", "scan"})
-            results.append([{key: item[key] for key in keys if key in item} for item in entries])
+            sanitized = [{key: item[key] for key in keys if key in item} for item in entries]
+            if kind == "processes":
+                for original, record in zip(entries, sanitized):
+                    executable = _executable_path(original.get("cmd"))
+                    if executable:
+                        record["cmd"] = executable
+            results.append(sanitized)
         return results
