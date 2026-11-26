@@ -8,40 +8,44 @@ import time
 import instructor
 from django.conf import settings
 from django.utils import timezone
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from openai import AzureOpenAI, OpenAI
 
 
 # ==========================================
 # 1. DATEN-SCHEMA (PYDANTIC)
 # ==========================================
-class TriageErgebnis(BaseModel):
+class TriageBase(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, str_min_length=1)
+
+
+class TriageErgebnis(TriageBase):
     gedankengang_analyst: str = Field(
-        description="Schritt-für-Schritt Analyse nach dem SSVC-Framework."
+        description="Nachvollziehbare Begründung der Bewertung anhand der maßgeblichen Faktoren und möglicher Unsicherheiten."
     )
     ssvc_score: str = Field(
-        description="Das finale Ergebnis. Erlaubte Werte: Track, Track*, Attend, Act."
+        description="Das finale Ergebnis gemäß dem Systemprompt."
     )
     patching_vorschlag: str = Field(
         description="Konkrete Handlungsempfehlung für das IT-Team basierend auf dem SSVC-Score und der CVE."
     )
 
 
-class SoftwareTriageErgebnis(BaseModel):
+class SoftwareTriageErgebnis(TriageBase):
     gedankengang_analyst: str = Field(
-        description="Schritt-für-Schritt Analyse nach dem SSVC-Software-Schema (Exploitation, Chaining & Utility, und getrennte Bewertung für Cluster 1, 2, 3 und 4)."
+        description="Nachvollziehbare Begründung der Bewertung und der einzelnen Cluster anhand der maßgeblichen Faktoren und möglicher Unsicherheiten."
     )
     cluster_1_score: str = Field(
-        description="SSVC-Score für Cluster 1 (Open + High). Erlaubte Werte: Track, Attend, Act."
+        description="Bewertung für Cluster 1 gemäß dem Systemprompt."
     )
     cluster_2_score: str = Field(
-        description="SSVC-Score für Cluster 2 (Open + Low). Erlaubte Werte: Track, Attend, Act."
+        description="Bewertung für Cluster 2 gemäß dem Systemprompt."
     )
     cluster_3_score: str = Field(
-        description="SSVC-Score für Cluster 3 (Controlled + High). Erlaubte Werte: Track, Attend, Act."
+        description="Bewertung für Cluster 3 gemäß dem Systemprompt."
     )
     cluster_4_score: str = Field(
-        description="SSVC-Score für Cluster 4 (Controlled + Low). Erlaubte Werte: Track, Attend, Act."
+        description="Bewertung für Cluster 4 gemäß dem Systemprompt."
     )
 
 
@@ -231,8 +235,15 @@ def _call_openrouter(messages, settings_obj, response_model=TriageErgebnis):
         model=model,
         response_model=response_model,
         messages=messages,
-        temperature=0.0,
+        **_reasoning_kwargs(settings_obj),
     )
+
+
+def _reasoning_kwargs(settings_obj):
+    effort = (settings_obj.ai_reasoning_effort or "").strip().lower()
+    if effort not in {"", "low", "medium", "high"}:
+        raise ValueError("Invalid AI reasoning effort")
+    return {"reasoning_effort": effort} if effort else {}
 
 
 def _call_azure_ai(messages, settings_obj, response_model=TriageErgebnis):
@@ -255,8 +266,11 @@ def _call_azure_ai(messages, settings_obj, response_model=TriageErgebnis):
             model=deployment,
             response_model=response_model,
             messages=messages,
-            temperature=0.0,
+            **_reasoning_kwargs(settings_obj),
         )
+
+    if _reasoning_kwargs(settings_obj):
+        raise ValueError("Reasoning effort is not supported by the Azure AI Inference integration; select model default.")
 
     from azure.ai.inference import ChatCompletionsClient
     from azure.ai.inference.models import AssistantMessage, SystemMessage, UserMessage
@@ -278,8 +292,7 @@ def _call_azure_ai(messages, settings_obj, response_model=TriageErgebnis):
         else:
             azure_messages.append(UserMessage(msg["content"]))
 
-    response = client.complete(
-        messages=azure_messages, model=deployment, temperature=0)
+    response = client.complete(messages=azure_messages, model=deployment)
     content = response.choices[0].message.content
     if isinstance(content, list):
         text = "".join(part.text for part in content if hasattr(part, "text"))
